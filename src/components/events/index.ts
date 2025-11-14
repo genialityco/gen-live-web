@@ -4,7 +4,6 @@ export { default as CreateEventForOrg } from './CreateEventForOrg';
 export { default as EventStatusSwitcher } from './EventStatusSwitcher';
 export { default as EventStreamForm } from './EventStreamForm';
 export { default as OrgEventsTable } from './OrgEventsTable';
-export { default as EventAttendeesModal } from './EventAttendeesModal';
 
 // Event Admin components
 export { default as EventAdminLayout } from './EventAdminLayout';
