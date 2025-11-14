@@ -1,0 +1,164 @@
+import { lazy } from "react";
+import AdminRoute from "../auth/guards/AdminRoute";
+import PublicAnonGate from "../auth/guards/PublicAnonGate";
+import Layout from "../components/common/Layout";
+
+// Lazy imports
+const Home = lazy(() => import("../pages/home/Home"));
+const EventPublic = lazy(() => import("../pages/events/EventPublic"));
+const AdminAuth = lazy(() => import("../pages/auth/AdminAuth"));
+const OrganizationsList = lazy(() => import("../pages/organizations/OrganizationsList"));
+const OrganizationLanding = lazy(() => import("../pages/organizations/OrganizationLanding"));
+const OrganizationAdmin = lazy(() => import("../pages/organizations/OrganizationAdmin"));
+const EventAdmin = lazy(() => import("../pages/events/EventAdmin"));
+const EventLanding = lazy(() => import("../pages/events/EventLanding"));
+const EventRegistration = lazy(() => import("../pages/events/EventRegistration"));
+const EventAttend = lazy(() => import("../pages/events/EventAttend"));
+
+export const routes = [
+  {
+    path: "/",
+    element: (
+      <Layout>
+        <PublicAnonGate>
+          <Home />
+        </PublicAnonGate>
+      </Layout>
+    ),
+  },
+  {
+    path: "/organizations",
+    element: (
+      <Layout>
+        <OrganizationsList />
+      </Layout>
+    ),
+  },
+  {
+    path: "/org/:slug",
+    element: <OrganizationLanding />,
+  },
+  {
+    path: "/org/:slug/event/:eventSlug",
+    element: <EventLanding />,
+  },
+  {
+    path: "/org/:slug/event/:eventSlug/register",
+    element: <EventRegistration />,
+  },
+  {
+    path: "/org/:slug/event/:eventSlug/attend",
+    element: <EventAttend />,
+  },
+  {
+    path: "/e/:slug", // Mantener compatibilidad con eventos existentes
+    element: (
+      <Layout>
+        <PublicAnonGate>
+          <EventPublic />
+        </PublicAnonGate>
+      </Layout>
+    ),
+  },
+  { 
+    path: "/admin-auth", 
+    element: (
+      <Layout>
+        <AdminAuth />
+      </Layout>
+    ) 
+  },
+  {
+    element: <AdminRoute />, // protege todo lo interno
+    children: [
+      {
+        path: "/org/admin", // Ruta para crear organización
+        element: (
+          <Layout>
+            <OrganizationAdmin />
+          </Layout>
+        )
+      },
+      {
+        path: "/org/:slug/admin",
+        element: (
+          <Layout>
+            <OrganizationAdmin />
+          </Layout>
+        )
+      },
+      {
+        path: "/org/:slug/admin/events",
+        element: (
+          <Layout>
+            <OrganizationAdmin />
+          </Layout>
+        )
+      },
+      {
+        path: "/org/:slug/admin/attendees",
+        element: (
+          <Layout>
+            <OrganizationAdmin />
+          </Layout>
+        )
+      },
+      {
+        path: "/org/:slug/admin/registration-form",
+        element: (
+          <Layout>
+            <OrganizationAdmin />
+          </Layout>
+        )
+      },
+      {
+        path: "/org/:slug/admin/settings",
+        element: (
+          <Layout>
+            <OrganizationAdmin />
+          </Layout>
+        )
+      },
+      {
+        path: "/org/:slug/event/:eventSlug/admin",
+        element: (
+          <Layout>
+            <EventAdmin />
+          </Layout>
+        )
+      },
+      {
+        path: "/org/:slug/event/:eventSlug/admin/control",
+        element: (
+          <Layout>
+            <EventAdmin />
+          </Layout>
+        )
+      },
+      {
+        path: "/org/:slug/event/:eventSlug/admin/attendees",
+        element: (
+          <Layout>
+            <EventAdmin />
+          </Layout>
+        )
+      },
+      {
+        path: "/org/:slug/event/:eventSlug/admin/settings",
+        element: (
+          <Layout>
+            <EventAdmin />
+          </Layout>
+        )
+      },
+      {
+        path: "/org/:slug/event/:eventSlug/admin/metrics",
+        element: (
+          <Layout>
+            <EventAdmin />
+          </Layout>
+        )
+      }
+    ],
+  },
+];

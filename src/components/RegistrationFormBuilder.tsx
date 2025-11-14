@@ -1,0 +1,1197 @@
+import { useState } from "react";
+import {
+  Stack,
+  Title,
+  Card,
+  Group,
+  Text,
+  Button,
+  TextInput,
+  Select,
+  Switch,
+  NumberInput,
+  Textarea,
+  ActionIcon,
+  Divider,
+  Alert,
+  Modal,
+  Badge,
+  Paper,
+} from "@mantine/core";
+import { notifications } from "@mantine/notifications";
+import { IconTrash, IconPlus } from "@tabler/icons-react";
+import {
+  type Org,
+  type RegistrationForm,
+  type FormField,
+  type FormFieldType,
+  updateRegistrationForm,
+} from "../api/orgs";
+
+interface RegistrationFormBuilderProps {
+  org: Org;
+  onUpdate: () => void;
+}
+
+const FIELD_TYPES: { value: FormFieldType; label: string }[] = [
+  { value: "text", label: "Texto" },
+  { value: "email", label: "Email" },
+  { value: "tel", label: "Teléfono" },
+  { value: "number", label: "Número" },
+  { value: "select", label: "Selector" },
+  { value: "checkbox", label: "Casilla de verificación" },
+  { value: "textarea", label: "Área de texto" },
+];
+
+// Campo obligatorio del sistema (siempre debe existir)
+const EMAIL_FIELD: FormField = {
+  id: 'email_system',
+  type: 'email',
+  label: 'Correo electrónico',
+  placeholder: 'tu@email.com',
+  required: true,
+  order: 0,
+  isIdentifier: false, // Puede ser marcado como identificador por el admin
+};
+
+const DEFAULT_FIELDS: Partial<FormField>[] = [
+  { type: "text", label: "Nombre", required: true },
+  { type: "text", label: "Apellidos", required: true },
+  { type: "text", label: "País", required: false },
+  { type: "text", label: "Cédula/DNI", required: false },
+  { type: "text", label: "Especialidad", required: false },
+  {
+    type: "checkbox",
+    label: "Acepto el tratamiento de datos personales",
+    required: true,
+  },
+];
+
+export default function RegistrationFormBuilder({
+  org,
+  onUpdate,
+}: RegistrationFormBuilderProps) {
+  const [loading, setLoading] = useState(false);
+  const [form, setForm] = useState<RegistrationForm>(
+    org.registrationForm || {
+      enabled: false,
+      title: "Registro al evento",
+      description: "Por favor completa los siguientes datos para registrarte",
+      fields: [],
+      submitButtonText: "Registrarme",
+      successMessage: "¡Registro exitoso! Gracias por inscribirte.",
+    }
+  );
+
+  const [editingField, setEditingField] = useState<FormField | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+
+  const handleSave = async () => {
+    try {
+      setLoading(true);
+      await updateRegistrationForm(org.domainSlug, form);
+      notifications.show({
+        title: "Éxito",
+        message: "Formulario de registro actualizado",
+        color: "green",
+      });
+      onUpdate();
+    } catch (error) {
+      console.error(error);
+      notifications.show({
+        title: "Error",
+        message: "No se pudo actualizar el formulario",
+        color: "red",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const addField = (fieldTemplate?: Partial<FormField>) => {
+    const newField: FormField = {
+      id: `field_${Date.now()}`,
+      type: fieldTemplate?.type || "text",
+      label: fieldTemplate?.label || "Nuevo campo",
+      required: fieldTemplate?.required ?? false,
+      options: fieldTemplate?.options,
+      order: form.fields.length,
+      helpText: fieldTemplate?.helpText,
+      defaultValue: fieldTemplate?.defaultValue,
+      hidden: fieldTemplate?.hidden,
+      dependsOn: fieldTemplate?.dependsOn,
+      conditionalLogic: fieldTemplate?.conditionalLogic,
+      validation: fieldTemplate?.validation,
+    };
+    setEditingField(newField);
+    setIsModalOpen(true);
+  };
+
+  // Agregar campo directamente sin abrir modal (para campos pre-configurados)
+  const addFieldDirectly = (fieldTemplate: Partial<FormField>) => {
+    setForm((prevForm) => {
+      const newField: FormField = {
+        id: fieldTemplate.id || `field_${Date.now()}`,
+        type: fieldTemplate.type || "text",
+        label: fieldTemplate.label || "Nuevo campo",
+        placeholder: fieldTemplate.placeholder,
+        required: fieldTemplate.required ?? false,
+        options: fieldTemplate.options,
+        order: prevForm.fields.length,
+        helpText: fieldTemplate.helpText,
+        defaultValue: fieldTemplate.defaultValue,
+        hidden: fieldTemplate.hidden,
+        autoCalculated: fieldTemplate.autoCalculated,
+        dependsOn: fieldTemplate.dependsOn,
+        conditionalLogic: fieldTemplate.conditionalLogic,
+        validation: fieldTemplate.validation,
+      };
+      return { ...prevForm, fields: [...prevForm.fields, newField] };
+    });
+  };
+
+  const addPrePopulatedField = async (fieldType: 'pais' | 'estado' | 'ciudad' | 'pais-telefono', countryCode?: string) => {
+    // Importar dinámicamente la librería
+    const { getAllCountries, getStatesByCountry, getCitiesByCountry } = await import('../data/form-catalogs');
+    
+    if (fieldType === 'pais') {
+      const countries = getAllCountries();
+      const template: Partial<FormField> = {
+        id: `pais_${Date.now()}`,
+        type: "select",
+        label: "País",
+        placeholder: "Seleccione su país",
+        required: true,
+        helpText: "Seleccione el país de residencia",
+        options: countries
+          .sort((a, b) => a.name.localeCompare(b.name))
+          .map((country) => ({
+            value: country.isoCode,
+            label: country.name,
+          })),
+      };
+      addFieldDirectly(template);
+      
+      notifications.show({
+        title: 'Campo agregado',
+        message: `Se agregó el campo País con ${countries.length} países`,
+        color: 'green',
+      });
+    } else if (fieldType === 'pais-telefono') {
+      // Agregar campo País + Código País + Teléfono relacionados
+      const countries = getAllCountries();
+      const timestamp = Date.now();
+      
+      // 1. Campo País
+      const paisField: Partial<FormField> = {
+        id: `pais_${timestamp}`,
+        type: "select",
+        label: "País",
+        placeholder: "Seleccione su país",
+        required: true,
+        helpText: "Seleccione el país de residencia",
+        options: countries
+          .sort((a, b) => a.name.localeCompare(b.name))
+          .map((country) => ({
+            value: country.isoCode,
+            label: country.name,
+          })),
+      };
+      
+      // 2. Campo Código de País (auto-calculado)
+      const codigoField: Partial<FormField> = {
+        id: `codigo_pais_${timestamp}`,
+        type: "text",
+        label: "Código de país",
+        placeholder: "+57",
+        required: true,
+        helpText: "Se asigna automáticamente según el país",
+        autoCalculated: true,
+        dependsOn: `pais_${timestamp}`,
+        validation: {
+          pattern: "^\\+\\d{1,4}$",
+        },
+      };
+      
+      // 3. Campo Teléfono
+      const telefonoField: Partial<FormField> = {
+        id: `telefono_${timestamp}`,
+        type: "tel",
+        label: "Número de teléfono",
+        placeholder: "3001234567",
+        required: true,
+        helpText: "Ingrese su número de teléfono sin código de país",
+        validation: {
+          minLength: 7,
+          maxLength: 15,
+        },
+      };
+      
+      // Agregar los tres campos en una sola operación
+      setForm((prevForm) => {
+        const baseOrder = prevForm.fields.length;
+        
+        const newFields: FormField[] = [
+          {
+            ...paisField,
+            id: paisField.id!,
+            type: paisField.type!,
+            label: paisField.label!,
+            placeholder: paisField.placeholder,
+            required: paisField.required!,
+            options: paisField.options,
+            order: baseOrder,
+            helpText: paisField.helpText,
+          },
+          {
+            ...codigoField,
+            id: codigoField.id!,
+            type: codigoField.type!,
+            label: codigoField.label!,
+            placeholder: codigoField.placeholder,
+            required: codigoField.required!,
+            order: baseOrder + 1,
+            helpText: codigoField.helpText,
+            autoCalculated: codigoField.autoCalculated,
+            dependsOn: codigoField.dependsOn,
+            validation: codigoField.validation,
+          },
+          {
+            ...telefonoField,
+            id: telefonoField.id!,
+            type: telefonoField.type!,
+            label: telefonoField.label!,
+            placeholder: telefonoField.placeholder,
+            required: telefonoField.required!,
+            order: baseOrder + 2,
+            helpText: telefonoField.helpText,
+            validation: telefonoField.validation,
+          },
+        ];
+        
+        return { ...prevForm, fields: [...prevForm.fields, ...newFields] };
+      });
+      
+      notifications.show({
+        title: 'Campos agregados',
+        message: 'Se agregaron los campos País, Código de país y Teléfono relacionados',
+        color: 'green',
+      });
+    } else if (fieldType === 'estado') {
+      // Necesitamos saber de qué país
+      if (!countryCode) {
+        countryCode = 'CO'; // Por defecto Colombia
+      }
+      
+      const states = getStatesByCountry(countryCode);
+      const template: Partial<FormField> = {
+        id: `estado_${Date.now()}`,
+        type: "select",
+        label: "Estado/Departamento",
+        placeholder: "Seleccione su estado",
+        required: true,
+        helpText: "Seleccione el estado o departamento",
+        options: states
+          .sort((a, b) => a.name.localeCompare(b.name))
+          .map((state) => ({
+            value: state.name,
+            label: state.name,
+          })),
+      };
+      addFieldDirectly(template);
+      
+      notifications.show({
+        title: 'Campo agregado',
+        message: `Se agregó el campo Estado/Departamento con ${states.length} opciones`,
+        color: 'green',
+      });
+    } else if (fieldType === 'ciudad') {
+      if (!countryCode) {
+        countryCode = 'CO'; // Por defecto Colombia
+      }
+      
+      const cities = getCitiesByCountry(countryCode);
+      const states = getStatesByCountry(countryCode);
+      
+      // Crear opciones con parentValue para cascada
+      // Usar ciudad|estado como value único para evitar duplicados
+      const cityOptions = cities
+        .sort((a, b) => a.name.localeCompare(b.name))
+        .map((city) => {
+          // Encontrar el nombre del estado
+          const state = states.find(s => s.isoCode === city.stateCode);
+          const stateName = state?.name || 'Desconocido';
+          return {
+            value: `${city.name}|${stateName}`, // Value único: ciudad|departamento
+            label: `${city.name} (${stateName})`, // Label descriptivo
+            parentValue: stateName, // Enlazar con el estado
+          };
+        });
+      
+      const template: Partial<FormField> = {
+        id: `ciudad_${Date.now()}`,
+        type: "select",
+        label: "Ciudad",
+        placeholder: "Seleccione su ciudad",
+        required: true,
+        helpText: "Seleccione la ciudad",
+        options: cityOptions,
+      };
+      addFieldDirectly(template);
+      
+      notifications.show({
+        title: 'Campo agregado',
+        message: `Se agregó el campo Ciudad con ${cities.length} opciones`,
+        color: 'green',
+      });
+    }
+  };
+
+  const editField = (field: FormField) => {
+    setEditingField({ ...field });
+    setIsModalOpen(true);
+  };
+
+  const saveField = () => {
+    if (!editingField) return;
+
+    const existingIndex = form.fields.findIndex(
+      (f) => f.id === editingField.id
+    );
+
+    if (existingIndex >= 0) {
+      // Actualizar campo existente
+      const updatedFields = [...form.fields];
+      updatedFields[existingIndex] = editingField;
+      setForm({ ...form, fields: updatedFields });
+    } else {
+      // Agregar nuevo campo
+      setForm({ ...form, fields: [...form.fields, editingField] });
+    }
+
+    setIsModalOpen(false);
+    setEditingField(null);
+  };
+
+  const deleteField = (fieldId: string) => {
+    // No permitir eliminar el campo de email (obligatorio del sistema)
+    if (fieldId === EMAIL_FIELD.id) {
+      notifications.show({
+        title: 'No permitido',
+        message: 'El campo de email es obligatorio y no se puede eliminar',
+        color: 'red',
+      });
+      return;
+    }
+    
+    setForm({
+      ...form,
+      fields: form.fields.filter((f) => f.id !== fieldId),
+    });
+  };
+
+  const moveField = (index: number, direction: "up" | "down") => {
+    const newFields = [...form.fields];
+    const targetIndex = direction === "up" ? index - 1 : index + 1;
+
+    if (targetIndex < 0 || targetIndex >= newFields.length) return;
+
+    [newFields[index], newFields[targetIndex]] = [
+      newFields[targetIndex],
+      newFields[index],
+    ];
+
+    // Actualizar el orden
+    newFields.forEach((field, idx) => {
+      field.order = idx;
+    });
+
+    setForm({ ...form, fields: newFields });
+  };
+
+  const loadDefaultFields = () => {
+    // Email siempre es el primer campo (obligatorio del sistema)
+    const emailField = { ...EMAIL_FIELD };
+    
+    // Resto de campos por defecto
+    const otherFields: FormField[] = DEFAULT_FIELDS.map((template, index) => ({
+      id: `field_${Date.now()}_${index}`,
+      type: template.type!,
+      label: template.label!,
+      required: template.required!,
+      options: template.options,
+      order: index + 1, // Empezar desde 1 porque email es 0
+    }));
+    
+    setForm({ ...form, fields: [emailField, ...otherFields] });
+  };
+
+  return (
+    <Stack gap="lg">
+      <Group justify="space-between">
+        <Title order={2}>Formulario de Registro</Title>
+        <Button onClick={handleSave} loading={loading} size="lg">
+          💾 Guardar cambios
+        </Button>
+      </Group>
+
+      <Alert variant="light" color="blue">
+        Crea un formulario personalizado que los asistentes deberán completar
+        antes de acceder a los eventos de esta organización.
+      </Alert>
+
+      {/* Configuración general */}
+      <Card withBorder>
+        <Stack gap="md">
+          <Group justify="space-between">
+            <Text fw={600}>Configuración general</Text>
+            <Switch
+              label="Habilitar formulario"
+              checked={form.enabled}
+              onChange={(e) =>
+                setForm({ ...form, enabled: e.currentTarget.checked })
+              }
+            />
+          </Group>
+
+          {form.enabled && (
+            <>
+              <Divider />
+              <TextInput
+                label="Título del formulario"
+                value={form.title || ""}
+                onChange={(e) =>
+                  setForm({ ...form, title: e.currentTarget.value })
+                }
+                placeholder="Registro al evento"
+              />
+
+              <Textarea
+                label="Descripción"
+                value={form.description || ""}
+                onChange={(e) =>
+                  setForm({ ...form, description: e.currentTarget.value })
+                }
+                placeholder="Por favor completa los siguientes datos..."
+                rows={3}
+              />
+
+              <TextInput
+                label="Texto del botón"
+                value={form.submitButtonText || ""}
+                onChange={(e) =>
+                  setForm({ ...form, submitButtonText: e.currentTarget.value })
+                }
+                placeholder="Registrarme"
+              />
+
+              <TextInput
+                label="Mensaje de éxito"
+                value={form.successMessage || ""}
+                onChange={(e) =>
+                  setForm({ ...form, successMessage: e.currentTarget.value })
+                }
+                placeholder="¡Registro exitoso!"
+              />
+            </>
+          )}
+        </Stack>
+      </Card>
+
+      {/* Campos del formulario */}
+      {form.enabled && (
+        <Card withBorder>
+          <Stack gap="md">
+            <Group justify="space-between">
+              <Text fw={600}>Campos del formulario</Text>
+              <Group>
+                {form.fields.length === 0 && (
+                  <Button
+                    variant="light"
+                    size="sm"
+                    onClick={loadDefaultFields}
+                  >
+                    📋 Cargar campos predeterminados
+                  </Button>
+                )}
+                <Button
+                  variant="filled"
+                  size="sm"
+                  onClick={() => addField()}
+                  leftSection="➕"
+                >
+                  Agregar campo
+                </Button>
+              </Group>
+            </Group>
+
+            {/* Campos especiales pre-poblados */}
+            {form.fields.length > 0 && (
+              <Alert color="blue" variant="light">
+                <Text size="sm" fw={600} mb="xs">Agregar campos especiales pre-poblados:</Text>
+                <Group gap="xs">
+                  <Button
+                    size="xs"
+                    variant="light"
+                    color="blue"
+                    onClick={() => addPrePopulatedField('pais')}
+                  >
+                    🌎 País
+                  </Button>
+                  <Button
+                    size="xs"
+                    variant="light"
+                    color="cyan"
+                    onClick={() => addPrePopulatedField('estado', 'CO')}
+                  >
+                    📍 Estado/Depto CO
+                  </Button>
+                  <Button
+                    size="xs"
+                    variant="light"
+                    color="teal"
+                    onClick={() => addPrePopulatedField('ciudad', 'CO')}
+                  >
+                    🏙️ Ciudad CO
+                  </Button>
+                  <Button
+                    size="xs"
+                    variant="light"
+                    color="violet"
+                    onClick={() => addPrePopulatedField('pais-telefono')}
+                  >
+                    📞 País + Teléfono
+                  </Button>
+                </Group>
+              </Alert>
+            )}
+
+            <Group justify="space-between">
+            </Group>
+
+            {form.fields.length === 0 ? (
+              <Alert color="gray">
+                No hay campos agregados. Agrega campos personalizados o carga
+                los predeterminados.
+              </Alert>
+            ) : (
+              <Stack gap="sm">
+                {form.fields.map((field, index) => (
+                  <Card key={field.id} withBorder p="sm" bg="gray.0">
+                    <Group justify="space-between" wrap="nowrap">
+                      <Group gap="xs" style={{ flex: 1 }}>
+                        <Badge
+                          color={
+                            field.type === "checkbox"
+                              ? "grape"
+                              : field.type === "select"
+                              ? "cyan"
+                              : "blue"
+                          }
+                          size="sm"
+                        >
+                          {
+                            FIELD_TYPES.find((t) => t.value === field.type)
+                              ?.label
+                          }
+                        </Badge>
+                        <Text fw={500} size="sm">
+                          {field.label}
+                        </Text>
+                        {field.id === EMAIL_FIELD.id && (
+                          <Badge color="orange" size="xs">
+                            Campo del sistema
+                          </Badge>
+                        )}
+                        {field.required && (
+                          <Badge color="red" size="xs">
+                            Requerido
+                          </Badge>
+                        )}
+                        {field.isIdentifier && (
+                          <Badge color="violet" size="xs">
+                            🔍 Identificador
+                          </Badge>
+                        )}
+                      </Group>
+
+                      <Group gap="xs" wrap="nowrap">
+                        <ActionIcon
+                          variant="subtle"
+                          size="sm"
+                          onClick={() => moveField(index, "up")}
+                          disabled={index === 0}
+                        >
+                          ⬆️
+                        </ActionIcon>
+                        <ActionIcon
+                          variant="subtle"
+                          size="sm"
+                          onClick={() => moveField(index, "down")}
+                          disabled={index === form.fields.length - 1}
+                        >
+                          ⬇️
+                        </ActionIcon>
+                        <ActionIcon
+                          variant="subtle"
+                          color="blue"
+                          size="sm"
+                          onClick={() => editField(field)}
+                          title={field.id === EMAIL_FIELD.id ? 'Solo puedes editar si es identificador' : 'Editar campo'}
+                        >
+                          ✏️
+                        </ActionIcon>
+                        <ActionIcon
+                          variant="subtle"
+                          color="red"
+                          size="sm"
+                          onClick={() => deleteField(field.id)}
+                          disabled={field.id === EMAIL_FIELD.id}
+                          title={field.id === EMAIL_FIELD.id ? 'El email del sistema no se puede eliminar' : 'Eliminar campo'}
+                        >
+                          🗑️
+                        </ActionIcon>
+                      </Group>
+                    </Group>
+                  </Card>
+                ))}
+              </Stack>
+            )}
+          </Stack>
+        </Card>
+      )}
+
+      {/* Modal para editar campo */}
+      <Modal
+        opened={isModalOpen}
+        onClose={() => {
+          setIsModalOpen(false);
+          setEditingField(null);
+        }}
+        title={
+          <Text fw={600}>
+            {editingField && form.fields.find((f) => f.id === editingField.id)
+              ? "Editar campo"
+              : "Nuevo campo"}
+          </Text>
+        }
+        size="lg"
+      >
+        {editingField && (
+          <Stack gap="md">
+            {/* SI ES EMAIL_SYSTEM, SOLO PERMITIR EDITAR isIdentifier */}
+            {editingField.id === EMAIL_FIELD.id ? (
+              <>
+                <Alert color="blue" variant="light">
+                  El campo de <strong>email del sistema</strong> es obligatorio y no se pueden modificar sus propiedades básicas.
+                  Solo puedes configurarlo como campo identificador.
+                </Alert>
+                
+                <Paper p="md" withBorder>
+                  <Stack gap="sm">
+                    <Group>
+                      <Text fw={500}>Correo electrónico</Text>
+                      <Badge color="orange" size="xs">Campo del sistema</Badge>
+                    </Group>
+                    <Text size="sm" c="dimmed">Tipo: Email | Requerido: Sí</Text>
+                  </Stack>
+                </Paper>
+
+                <Divider />
+
+                <Switch
+                  label="Campo identificador"
+                  description="Usar para búsqueda de registros existentes. Si está activado, los usuarios podrán ingresar su email para verificar si ya están registrados."
+                  checked={editingField.isIdentifier || false}
+                  onChange={(e) =>
+                    setEditingField({
+                      ...editingField,
+                      isIdentifier: e.currentTarget.checked,
+                    })
+                  }
+                />
+
+                <Alert color="violet" variant="light">
+                  <Text size="sm">
+                    <strong>Recomendación:</strong> Activa esta opción si quieres que el email sea usado para verificar registros previos.
+                    Los usuarios podrán ingresar su email para verificar si ya están registrados en la organización o evento.
+                  </Text>
+                </Alert>
+              </>
+            ) : (
+              <>
+            {/* Configuración Básica */}
+            <Divider label="Configuración Básica" labelPosition="center" />
+            
+            <Select
+              label="Tipo de campo"
+              value={editingField.type}
+              onChange={(value) =>
+                setEditingField({
+                  ...editingField,
+                  type: value as FormFieldType,
+                })
+              }
+              data={FIELD_TYPES}
+              required
+            />
+
+            <TextInput
+              label="Etiqueta"
+              value={editingField.label}
+              onChange={(e) =>
+                setEditingField({
+                  ...editingField,
+                  label: e.currentTarget.value,
+                })
+              }
+              placeholder="Nombre del campo"
+              required
+            />
+
+            {editingField.type !== "checkbox" && (
+              <TextInput
+                label="Placeholder"
+                value={editingField.placeholder || ""}
+                onChange={(e) =>
+                  setEditingField({
+                    ...editingField,
+                    placeholder: e.currentTarget.value,
+                  })
+                }
+                placeholder="Texto de ayuda dentro del campo"
+              />
+            )}
+
+            <Textarea
+              label="Texto de ayuda"
+              description="Mensaje que aparece debajo del campo para guiar al usuario"
+              value={editingField.helpText || ""}
+              onChange={(e) =>
+                setEditingField({
+                  ...editingField,
+                  helpText: e.currentTarget.value,
+                })
+              }
+              placeholder="Ej: Si su cédula contiene letras, ingrese solo los números"
+              rows={2}
+            />
+
+            <Group grow>
+              <Switch
+                label="Campo requerido"
+                checked={editingField.required}
+                onChange={(e) =>
+                  setEditingField({
+                    ...editingField,
+                    required: e.currentTarget.checked,
+                  })
+                }
+              />
+              <Switch
+                label="Campo oculto"
+                description="No visible para el usuario"
+                checked={editingField.hidden || false}
+                onChange={(e) =>
+                  setEditingField({
+                    ...editingField,
+                    hidden: e.currentTarget.checked,
+                  })
+                }
+              />
+            </Group>
+
+            <Switch
+              label="Campo identificador"
+              description="Usar para búsqueda de registros existentes (ej: email, número de ID)"
+              checked={editingField.isIdentifier || false}
+              onChange={(e) =>
+                setEditingField({
+                  ...editingField,
+                  isIdentifier: e.currentTarget.checked,
+                })
+              }
+            />
+
+            {editingField.type !== "checkbox" && (
+              <TextInput
+                label="Valor por defecto"
+                description="Valor que se asigna automáticamente"
+                value={editingField.defaultValue as string || ""}
+                onChange={(e) =>
+                  setEditingField({
+                    ...editingField,
+                    defaultValue: e.currentTarget.value,
+                  })
+                }
+                placeholder="Ej: No aplica"
+              />
+            )}
+
+            {/* Opciones para Select */}
+            {editingField.type === "select" && (
+              <>
+                <Divider label="Opciones del Selector" labelPosition="center" />
+                
+                <Textarea
+                  label="Opciones"
+                  description="Formato: valor|etiqueta|valorPadre (uno por línea). El valorPadre es opcional para opciones en cascada."
+                  value={
+                    editingField.options
+                      ?.map((o) => `${o.value}|${o.label}${o.parentValue ? '|' + o.parentValue : ''}`)
+                      .join("\n") || ""
+                  }
+                  onChange={(e) => {
+                    const lines = e.currentTarget.value.split("\n");
+                    const options = lines
+                      .filter((line) => line.trim())
+                      .map((line) => {
+                        const parts = line.split("|");
+                        return {
+                          value: parts[0]?.trim() || "",
+                          label: parts[1]?.trim() || parts[0]?.trim() || "",
+                          parentValue: parts[2]?.trim() || undefined,
+                        };
+                      });
+                    setEditingField({ ...editingField, options });
+                  }}
+                  placeholder="colombia|Colombia&#10;endocrinologia|Endocrinología|medicina-interna"
+                  rows={6}
+                />
+
+                <Select
+                  label="Depende de (campo padre)"
+                  description="Si seleccionas un campo padre, este selector mostrará solo las opciones filtradas"
+                  value={editingField.dependsOn || ""}
+                  onChange={(value) =>
+                    setEditingField({
+                      ...editingField,
+                      dependsOn: value || undefined,
+                    })
+                  }
+                  data={[
+                    { value: "", label: "-- Ninguno --" },
+                    ...form.fields
+                      .filter((f) => f.id !== editingField.id && f.type === "select")
+                      .map((f) => ({ value: f.id, label: f.label })),
+                  ]}
+                  clearable
+                />
+              </>
+            )}
+
+            {/* Validaciones */}
+            <Divider label="Validaciones" labelPosition="center" />
+
+            {(editingField.type === "text" || editingField.type === "email" || editingField.type === "tel") && (
+              <>
+                <TextInput
+                  label="Patrón RegEx"
+                  description="Expresión regular para validar el formato (ej: ^[0-9]+$ para solo números)"
+                  value={editingField.validation?.pattern || ""}
+                  onChange={(e) =>
+                    setEditingField({
+                      ...editingField,
+                      validation: {
+                        ...editingField.validation,
+                        pattern: e.currentTarget.value,
+                      },
+                    })
+                  }
+                  placeholder="^[a-zA-Z]+$"
+                />
+
+                <Group grow>
+                  <NumberInput
+                    label="Longitud mínima"
+                    value={editingField.validation?.minLength}
+                    onChange={(value) =>
+                      setEditingField({
+                        ...editingField,
+                        validation: {
+                          ...editingField.validation,
+                          minLength: value as number,
+                        },
+                      })
+                    }
+                    min={0}
+                  />
+                  <NumberInput
+                    label="Longitud máxima"
+                    value={editingField.validation?.maxLength}
+                    onChange={(value) =>
+                      setEditingField({
+                        ...editingField,
+                        validation: {
+                          ...editingField.validation,
+                          maxLength: value as number,
+                        },
+                      })
+                    }
+                    min={0}
+                  />
+                </Group>
+              </>
+            )}
+
+            {editingField.type === "number" && (
+              <Group grow>
+                <NumberInput
+                  label="Valor mínimo"
+                  value={editingField.validation?.min}
+                  onChange={(value) =>
+                    setEditingField({
+                      ...editingField,
+                      validation: {
+                        ...editingField.validation,
+                        min: value as number,
+                      },
+                    })
+                  }
+                />
+                <NumberInput
+                  label="Valor máximo"
+                  value={editingField.validation?.max}
+                  onChange={(value) =>
+                    setEditingField({
+                      ...editingField,
+                      validation: {
+                        ...editingField.validation,
+                        max: value as number,
+                      },
+                    })
+                  }
+                />
+              </Group>
+            )}
+
+            {/* Lógica Condicional */}
+            <Divider label="Lógica Condicional (Avanzado)" labelPosition="center" />
+            
+            <Alert color="blue" variant="light">
+              <Text size="sm">
+                <strong>Mostrar/ocultar dinámicamente:</strong> Configura cuándo debe aparecer este campo según el valor de otros campos.
+              </Text>
+            </Alert>
+
+            <Select
+              label="Acción condicional"
+              description="¿Qué hacer cuando se cumplan las condiciones?"
+              value={editingField.conditionalLogic?.[0]?.action || ""}
+              onChange={(value) => {
+                if (!value) {
+                  setEditingField({
+                    ...editingField,
+                    conditionalLogic: undefined,
+                  });
+                  return;
+                }
+                
+                const existingConditions = editingField.conditionalLogic?.[0]?.conditions || [];
+                const existingLogic = editingField.conditionalLogic?.[0]?.logic || 'and';
+                
+                setEditingField({
+                  ...editingField,
+                  conditionalLogic: [{
+                    action: value as 'show' | 'hide',
+                    conditions: existingConditions.length > 0 ? existingConditions : [{
+                      field: '',
+                      operator: 'equals' as const,
+                      value: '',
+                    }],
+                    logic: existingLogic,
+                  }],
+                });
+              }}
+              data={[
+                { value: "", label: "-- Sin lógica condicional --" },
+                { value: "show", label: "Mostrar cuando..." },
+                { value: "hide", label: "Ocultar cuando..." },
+              ]}
+              clearable
+            />
+
+            {editingField.conditionalLogic && editingField.conditionalLogic.length > 0 && (
+              <>
+                <Select
+                  label="Lógica de condiciones"
+                  description="¿Cómo evaluar múltiples condiciones?"
+                  value={editingField.conditionalLogic[0]?.logic || "and"}
+                  onChange={(value) => {
+                    if (!editingField.conditionalLogic) return;
+                    
+                    setEditingField({
+                      ...editingField,
+                      conditionalLogic: [{
+                        ...editingField.conditionalLogic[0],
+                        logic: value as 'and' | 'or',
+                      }],
+                    });
+                  }}
+                  data={[
+                    { value: "and", label: "Y (todas las condiciones deben cumplirse)" },
+                    { value: "or", label: "O (al menos una condición debe cumplirse)" },
+                  ]}
+                />
+
+                <Stack gap="xs">
+                  {editingField.conditionalLogic[0]?.conditions.map((condition, index) => (
+                    <Paper key={index} p="md" withBorder>
+                      <Stack gap="xs">
+                        <Group justify="space-between">
+                          <Text size="sm" fw={500}>Condición {index + 1}</Text>
+                          {editingField.conditionalLogic![0].conditions.length > 1 && (
+                            <ActionIcon
+                              color="red"
+                              variant="subtle"
+                              onClick={() => {
+                                if (!editingField.conditionalLogic) return;
+                                const newConditions = [...editingField.conditionalLogic[0].conditions];
+                                newConditions.splice(index, 1);
+                                setEditingField({
+                                  ...editingField,
+                                  conditionalLogic: [{
+                                    ...editingField.conditionalLogic[0],
+                                    conditions: newConditions,
+                                  }],
+                                });
+                              }}
+                            >
+                              <IconTrash size={16} />
+                            </ActionIcon>
+                          )}
+                        </Group>
+
+                        <Select
+                          label="Campo a evaluar"
+                          description="¿Qué campo quieres comprobar?"
+                          value={condition.field || ""}
+                          onChange={(value) => {
+                            if (!value || !editingField.conditionalLogic) return;
+                            const newConditions = [...editingField.conditionalLogic[0].conditions];
+                            newConditions[index] = { ...condition, field: value };
+                            setEditingField({
+                              ...editingField,
+                              conditionalLogic: [{
+                                ...editingField.conditionalLogic[0],
+                                conditions: newConditions,
+                              }],
+                            });
+                          }}
+                          data={form.fields
+                            .filter((f) => f.id !== editingField.id)
+                            .map((f) => ({ value: f.id, label: f.label }))}
+                        />
+
+                        <Group grow>
+                          <Select
+                            label="Operador"
+                            value={condition.operator || "equals"}
+                            onChange={(value) => {
+                              if (!editingField.conditionalLogic) return;
+                              const newConditions = [...editingField.conditionalLogic[0].conditions];
+                              newConditions[index] = { 
+                                ...condition, 
+                                operator: value as 'equals' | 'notEquals' 
+                              };
+                              setEditingField({
+                                ...editingField,
+                                conditionalLogic: [{
+                                  ...editingField.conditionalLogic[0],
+                                  conditions: newConditions,
+                                }],
+                              });
+                            }}
+                            data={[
+                              { value: "equals", label: "Es igual a" },
+                              { value: "notEquals", label: "Es diferente de" },
+                            ]}
+                          />
+
+                          <TextInput
+                            label="Valor"
+                            description="Valor a comparar"
+                            value={condition.value as string || ""}
+                            onChange={(e) => {
+                              if (!editingField.conditionalLogic) return;
+                              const newValue = e.currentTarget.value;
+                              const newConditions = [...editingField.conditionalLogic[0].conditions];
+                              newConditions[index] = { 
+                                ...condition, 
+                                value: newValue
+                              };
+                              setEditingField({
+                                ...editingField,
+                                conditionalLogic: [{
+                                  ...editingField.conditionalLogic[0],
+                                  conditions: newConditions,
+                                }],
+                              });
+                            }}
+                            placeholder="Ej: CO, medico_especialista"
+                          />
+                        </Group>
+                      </Stack>
+                    </Paper>
+                  ))}
+
+                  <Button
+                    variant="light"
+                    leftSection={<IconPlus size={16} />}
+                    onClick={() => {
+                      if (!editingField.conditionalLogic) return;
+                      setEditingField({
+                        ...editingField,
+                        conditionalLogic: [{
+                          ...editingField.conditionalLogic[0],
+                          conditions: [
+                            ...editingField.conditionalLogic[0].conditions,
+                            {
+                              field: '',
+                              operator: 'equals' as const,
+                              value: '',
+                            },
+                          ],
+                        }],
+                      });
+                    }}
+                  >
+                    Agregar condición
+                  </Button>
+                </Stack>
+
+                <Alert color="cyan" variant="light">
+                  <Text size="xs">
+                    <strong>Ejemplo:</strong> Mostrar "Área de especialidad" cuando "Perfil" es igual a "medico_especialista" O "residente"
+                  </Text>
+                </Alert>
+              </>
+            )}
+            </>
+            )}
+
+            {/* Botones siempre visibles (fuera del condicional) */}
+            <Group justify="flex-end" mt="md">
+              <Button
+                variant="subtle"
+                onClick={() => {
+                  setIsModalOpen(false);
+                  setEditingField(null);
+                }}
+              >
+                Cancelar
+              </Button>
+              <Button onClick={saveField}>Guardar campo</Button>
+            </Group>
+          </Stack>
+        )}
+      </Modal>
+
+      <Group justify="flex-end">
+        <Button onClick={handleSave} loading={loading} size="lg">
+          💾 Guardar todos los cambios
+        </Button>
+      </Group>
+    </Stack>
+  );
+}
