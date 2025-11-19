@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useEffect, useMemo } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useNavigate } from "react-router-dom";
 import {
   Stack,
   Title,
@@ -261,13 +261,14 @@ function EventBanner({
 function Hero({
   org,
   nextEvent,
-}: // orgSlug,
+  orgSlug
+}: 
 {
   org: Org;
   nextEvent: EventItem | null;
   orgSlug: string;
 }) {
-  // const navigate = useNavigate();
+  const navigate = useNavigate();
   const isMobile = useMediaQuery("(max-width: 768px)");
 
   const heroImg = org.branding?.header?.backgroundImageUrl || undefined;
@@ -331,15 +332,15 @@ function Hero({
               {nextEvent ? (
                 <Button
                   size="md"
-                  // onClick={() =>
-                  //   navigate(
-                  //     `/org/${orgSlug}/event/${nextEvent.slug || nextEvent._id}`
-                  //   )
-                  // }
                   onClick={() =>
-                    (window.location.href =
-                      "https://liveevents.geniality.com.co/68fcf6db6d9f9db64809e042")
+                    navigate(
+                      `/org/${orgSlug}/event/${nextEvent.slug || nextEvent._id}`
+                    )
                   }
+                  // onClick={() =>
+                  //   (window.location.href =
+                  //     "https://liveevents.geniality.com.co/68fcf6db6d9f9db64809e042")
+                  // }
                   rightSection={<IconArrowRight size={18} />}
                   variant="gradient"
                   gradient={{ from: "brand.7", to: "accent.6", deg: 135 }}
@@ -387,12 +388,13 @@ function InfoRow({ date }: { date?: string | null }) {
 
 function NextEventSection({
   event,
-}: // orgSlug,
+  orgSlug
+}: 
 {
   event: EventItem;
   orgSlug: string;
 }) {
-  // const navigate = useNavigate();
+  const navigate = useNavigate();
   const [timeLeft, setTimeLeft] = useState<string>("");
   const isLive = event.status === "live";
 
@@ -430,13 +432,13 @@ function NextEventSection({
       p={0}
       radius="lg"
       style={{ overflow: "hidden", cursor: "pointer" }}
-      // onClick={() =>
-      //   navigate(`/org/${orgSlug}/event/${event.slug || event._id}`)
-      // }
       onClick={() =>
-        (window.location.href =
-          "https://liveevents.geniality.com.co/68fcf6db6d9f9db64809e042")
+        navigate(`/org/${orgSlug}/event/${event.slug || event._id}`)
       }
+      // onClick={() =>
+      //   (window.location.href =
+      //     "https://liveevents.geniality.com.co/68fcf6db6d9f9db64809e042")
+      // }
     >
       {/* Imagen + badge visible */}
       <EventBanner
@@ -521,12 +523,13 @@ function NextEventSection({
 
 function PastEventCard({
   event,
-}: // orgSlug,
+  orgSlug
+}:
 {
   event: EventItem;
   orgSlug: string;
 }) {
-  // const navigate = useNavigate();
+  const navigate = useNavigate();
   const isMobile = useMediaQuery("(max-width: 768px)");
   const bannerHeight = isMobile ? 300 : 240; // más alto en mobile
 
@@ -544,10 +547,10 @@ function PastEventCard({
         (e.currentTarget.style.transform = "translateY(-2px)")
       }
       onMouseLeave={(e) => (e.currentTarget.style.transform = "")}
-      // onClick={() =>
-      //   navigate(`/org/${orgSlug}/event/${event.slug || event._id}`)
-      // }
-      onClick={() => (window.location.href = event.stream?.url as string)}
+      onClick={() =>
+        navigate(`/org/${orgSlug}/event/${event.slug || event._id}`)
+      }
+      // onClick={() => (window.location.href = event.stream?.url as string)}
     >
       <EventBanner
         imageUrl={event.branding?.header?.backgroundImageMobileUrl}
@@ -597,12 +600,13 @@ function PastEventCard({
 // Item de "Próximos" (forzado a imagen mobile)
 function UpcomingEventCard({
   event,
-}: // orgSlug,
+  orgSlug
+}:
 {
   event: EventItem;
   orgSlug: string;
 }) {
-  // const navigate = useNavigate();
+  const navigate = useNavigate();
   const isMobile = useMediaQuery("(max-width: 768px)");
   const bannerHeight = isMobile ? 310 : 250; // más alto en mobile
 
@@ -620,10 +624,10 @@ function UpcomingEventCard({
         (e.currentTarget.style.transform = "translateY(-2px)")
       }
       onMouseLeave={(e) => (e.currentTarget.style.transform = "")}
-      // onClick={() =>
-      //   navigate(`/org/${orgSlug}/event/${event.slug || event._id}`)
-      // }
-      onClick={() => (window.location.href = event.stream?.url as string)}
+      onClick={() =>
+        navigate(`/org/${orgSlug}/event/${event.slug || event._id}`)
+      }
+      // onClick={() => (window.location.href = event.stream?.url as string)}
     >
       <Box style={{ position: "relative" }}>
         <EventBanner

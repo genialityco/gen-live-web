@@ -250,18 +250,11 @@ export function RegistrationVerificationForm({
       <form onSubmit={form.onSubmit(handleVerify)}>
         <Stack gap="lg">
           <div>
-            <Title order={3}>Verificar registro</Title>
+            <Title order={3}>Ingresar</Title>
             <Text size="sm" c="dimmed" mt="xs">
               Ingresa tus datos para verificar si ya estás registrado
             </Text>
           </div>
-
-          <Alert color="blue" variant="light">
-            <Text size="sm">
-              Ingresa los siguientes datos para verificar tu registro. 
-              Si ya estás registrado, accederás directamente al evento.
-            </Text>
-          </Alert>
 
           {identifierFields.map((field) => (
             <TextInput
@@ -281,7 +274,7 @@ export function RegistrationVerificationForm({
               loading={loading}
               fullWidth
             >
-              Verificar Registro
+              Ingresar
             </Button>
 
             {onNewRegistration && (

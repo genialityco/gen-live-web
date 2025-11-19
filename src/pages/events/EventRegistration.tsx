@@ -212,7 +212,7 @@ export default function EventRegistration() {
         </Group>
 
         {/* Header de la página */}
-        <Card shadow="sm" padding="xl" radius="lg" withBorder>
+        {/* <Card shadow="sm" padding="xl" radius="lg" withBorder>
           <Stack gap="md">
             <Group justify="space-between" align="flex-start" wrap="nowrap">
               <Stack gap="sm" style={{ flex: 1 }}>
@@ -238,7 +238,7 @@ export default function EventRegistration() {
               </Button>
             </Group>
           </Stack>
-        </Card>
+        </Card> */}
 
         {/* Contenido del flujo */}
         <Box>

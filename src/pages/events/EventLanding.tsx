@@ -316,9 +316,6 @@ export default function EventLanding() {
               <Title order={1} size="2.5rem" fw={700} lh={1.2} mb="sm">
                 {event.title}
               </Title>
-              <Text size="lg" c="dimmed" fw={500}>
-                Evento exclusivo
-              </Text>
             </Box>
 
             {/* Fecha y tiempo */}
@@ -350,14 +347,14 @@ export default function EventLanding() {
             )}
 
             {/* Descripción del evento */}
-            {eventData?.description && (
+            {/* {eventData?.description && (
               <>
                 <Divider w="100%" />
                 <Text size="lg" lh={1.8} ta="center" maw={600}>
                   {eventData.description}
                 </Text>
               </>
-            )}
+            )} */}
 
             {/* Botón principal de acción */}
             <Button 
@@ -405,7 +402,7 @@ export default function EventLanding() {
             {status === 'replay' && (
               <Alert color="orange" variant="light" w="100%">
                 <Text size="sm" ta="center">
-                  ▶️ La repetición está disponible. Regístrate para acceder al contenido grabado.
+                  ▶️ La repetición está disponible. Regístrate o ingresaa para acceder al contenido grabado.
                 </Text>
               </Alert>
             )}
