@@ -208,9 +208,9 @@ export default function ImportAttendeesModal({
     return undefined;
   };
 
-  const identifierFields = registrationForm.fields.filter(
-    (f) => f.isIdentifier
-  );
+//   const identifierFields = registrationForm.fields.filter(
+//     (f) => f.isIdentifier
+//   );
 
   return (
     <Modal
