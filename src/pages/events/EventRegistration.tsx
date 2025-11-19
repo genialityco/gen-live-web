@@ -3,10 +3,8 @@ import { useParams, useNavigate, Link } from "react-router-dom";
 import {
   Container,
   Stack,
-  Title,
   Text,
   Button,
-  Card,
   Group,
   Loader,
   Center,
