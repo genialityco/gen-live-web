@@ -18,9 +18,6 @@ const OrganizationAdmin = lazy(
 );
 const EventAdmin = lazy(() => import("../pages/events/EventAdmin"));
 const EventLanding = lazy(() => import("../pages/events/EventLanding"));
-// const EventRegistration = lazy(
-//   () => import("../pages/events/EventRegistration")
-// );
 const EventAttend = lazy(() => import("../pages/events/EventAttend"));
 
 export const routes = [
@@ -56,10 +53,6 @@ export const routes = [
     path: "/org/:slug/event/:eventSlug",
     element: <EventLanding />,
   },
-  // {
-  //   path: "/org/:slug/event/:eventSlug/register",
-  //   element: <EventRegistration />,
-  // },
   {
     path: "/org/:slug/event/:eventSlug/attend",
     element: <EventAttend />,

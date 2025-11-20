@@ -117,7 +117,22 @@ export default function EventLanding() {
 
   // Manejar el click en el botón principal
   const handleMainAction = async () => {
-    // Si ya sabemos que está registrado → ir directo al attend
+    // 🟡 1) Si NO hay sesión → ir siempre al flujo centralizado /access
+    if (!user) {
+      if (!slug) {
+        console.error("No slug found when trying to go to access");
+        return;
+      }
+
+      const base = `/org/${slug}/access`;
+      const url = eventSlug ? `${base}?eventSlug=${eventSlug}` : base;
+
+      console.log("🎟️ EventLanding: No session, going to access:", url);
+      navigate(url);
+      return;
+    }
+
+    // 🟢 2) Si ya sabemos que está registrado → ir directo al attend
     if (isRegisteredForEvent && slug && eventSlug) {
       console.log(
         "✅ User already registered (prefetched), redirecting to /attend"
@@ -126,25 +141,24 @@ export default function EventLanding() {
       return;
     }
 
-    // VALIDACIÓN PREVIA: Si el usuario tiene sesión, verificar/auto-registrar
-    let userEmail = user?.email;
+    // 🟢 3) Usuario con sesión: intentar auto-registro usando email + OrgAttendee
+    let userEmail = user.email || undefined;
 
-    if (!userEmail && user?.uid) {
-      userEmail = localStorage.getItem(`uid-${user.uid}-email`) || undefined;
-    }
-    if (!userEmail) {
-      userEmail = localStorage.getItem("user-email") || undefined;
+    if (!userEmail && user.uid) {
+      userEmail =
+        localStorage.getItem(`uid-${user.uid}-email`) ||
+        localStorage.getItem("user-email") ||
+        undefined;
     }
 
-    // Si hay email, UID y contexto de evento/orga, intentamos auto-registro
-    if (userEmail && user?.uid && eventData?._id && org?._id) {
+    if (userEmail && user.uid && eventData?._id && org?._id) {
       console.log(
         "🔍 EventLanding: Validating existing session before redirecting",
         {
           userEmail,
           eventId: eventData._id,
           orgId: org._id,
-          hasUID: !!user?.uid,
+          hasUID: !!user.uid,
         }
       );
 
@@ -192,8 +206,10 @@ export default function EventLanding() {
       }
     }
 
-    // FLUJO NORMAL: ir al flujo centralizado de verificación/registro
-    console.log("🎟️ EventLanding: Redirecting to registration flow");
+    // 🔵 4) Usuario logueado pero sin OrgAttendee/EventUser → ir al flujo de registro del evento
+    console.log(
+      "🎟️ EventLanding: Logged user but no registration, going to /register"
+    );
     navigate(`/org/${slug}/event/${eventSlug}/register`);
   };
 
@@ -337,21 +353,31 @@ export default function EventLanding() {
 
   const primaryColor = eventBranding?.colors?.primary || "#228BE6";
   // MantineColorsTuple must be an array of exactly 10 color strings
-  const brandColors: [string, string, string, string, string, string, string, string, string, string] =
-    Array(10)
-      .fill(primaryColor)
-      .map((c, i) => i === 5 ? eventBranding?.colors?.accent || c : c) as [
-        string,
-        string,
-        string,
-        string,
-        string,
-        string,
-        string,
-        string,
-        string,
-        string
-      ];
+  const brandColors: [
+    string,
+    string,
+    string,
+    string,
+    string,
+    string,
+    string,
+    string,
+    string,
+    string
+  ] = Array(10)
+    .fill(primaryColor)
+    .map((c, i) => (i === 5 ? eventBranding?.colors?.accent || c : c)) as [
+    string,
+    string,
+    string,
+    string,
+    string,
+    string,
+    string,
+    string,
+    string,
+    string
+  ];
 
   const customTheme = eventBranding?.colors?.primary
     ? {
