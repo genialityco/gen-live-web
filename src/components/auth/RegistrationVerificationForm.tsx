@@ -10,11 +10,11 @@ import {
 } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { useState, useEffect } from "react";
-import { fetchRegistrationForm } from "../api/orgs";
-import { checkRegistrationByIdentifiers } from "../api/events";
-import type { RegistrationForm } from "../types";
+import { fetchRegistrationForm } from "../../api/orgs";
+import { checkRegistrationByIdentifiers } from "../../api/events";
+import type { RegistrationForm } from "../../types";
 import { notifications } from "@mantine/notifications";
-import { useAuth } from "../auth/AuthProvider";
+import { useAuth } from "../../auth/AuthProvider";
 
 interface RegistrationVerificationFormProps {
   orgSlug: string;

@@ -19,7 +19,7 @@ import { fetchOrgBySlug, type Org } from "../../api/orgs";
 import { fetchEventsByOrg, checkIfRegistered, checkIfRegisteredByUID, associateFirebaseUID, type EventItem } from "../../api/events";
 import { useAuth } from "../../auth/AuthProvider";
 import { useEventRealtime } from "../../hooks/useEventRealtime";
-import UserSession from "../../components/UserSession";
+import UserSession from "../../components/auth/UserSession";
 
 export default function EventAttend() {
   const { slug, eventSlug } = useParams<{ slug: string; eventSlug: string }>();

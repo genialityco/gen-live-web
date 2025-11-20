@@ -26,7 +26,7 @@ import {
   updateOrgBranding,
   uploadBrandingImage,
   updateOrganization,
-} from "../api/orgs";
+} from "../../api/orgs";
 
 interface BrandingSettingsProps {
   org: Org;

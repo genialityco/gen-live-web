@@ -9,9 +9,9 @@ import {
   Badge,
 } from "@mantine/core";
 import { IconCheck, IconEdit, IconArrowRight } from "@tabler/icons-react";
-import type { RegistrationForm } from "../types";
-import type { FoundRegistration } from "../api/events";
-import { transformRegistrationDataToLabels } from "../utils/formDataTransform";
+import type { RegistrationForm } from "../../types";
+import type { FoundRegistration } from "../../api/events";
+import { transformRegistrationDataToLabels } from "../../utils/formDataTransform";
 
 interface RegistrationSummaryProps {
   opened: boolean;

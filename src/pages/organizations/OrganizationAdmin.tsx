@@ -14,8 +14,8 @@ import { CreateOrganizationForm } from "../../components/organizations";
 import AdminDashboardView from "./AdminDashboardView";
 import AdminEventsView from "./AdminEventsView";
 import AdminAttendeesView from "./AdminAttendeesView";
-import BrandingSettings from "../../components/BrandingSettings";
-import RegistrationFormBuilder from "../../components/RegistrationFormBuilder";
+import BrandingSettings from "../../components/organizations/BrandingSettings";
+import RegistrationFormBuilder from "../../components/organizations/RegistrationFormBuilder";
 
 export default function OrganizationAdmin() {
   const { slug } = useParams<{ slug: string }>();

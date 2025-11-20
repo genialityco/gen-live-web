@@ -2,17 +2,25 @@ import { lazy } from "react";
 import AdminRoute from "../auth/guards/AdminRoute";
 import PublicAnonGate from "../auth/guards/PublicAnonGate";
 import Layout from "../components/common/Layout";
+import OrgAccess from "../pages/organizations/OrgAccess";
 
 // Lazy imports
 const Home = lazy(() => import("../pages/home/Home"));
-const EventPublic = lazy(() => import("../pages/events/EventPublic"));
 const AdminAuth = lazy(() => import("../pages/auth/AdminAuth"));
-const OrganizationsList = lazy(() => import("../pages/organizations/OrganizationsList"));
-const OrganizationLanding = lazy(() => import("../pages/organizations/OrganizationLanding"));
-const OrganizationAdmin = lazy(() => import("../pages/organizations/OrganizationAdmin"));
+const OrganizationsList = lazy(
+  () => import("../pages/organizations/OrganizationsList")
+);
+const OrganizationLanding = lazy(
+  () => import("../pages/organizations/OrganizationLanding")
+);
+const OrganizationAdmin = lazy(
+  () => import("../pages/organizations/OrganizationAdmin")
+);
 const EventAdmin = lazy(() => import("../pages/events/EventAdmin"));
 const EventLanding = lazy(() => import("../pages/events/EventLanding"));
-const EventRegistration = lazy(() => import("../pages/events/EventRegistration"));
+// const EventRegistration = lazy(
+//   () => import("../pages/events/EventRegistration")
+// );
 const EventAttend = lazy(() => import("../pages/events/EventAttend"));
 
 export const routes = [
@@ -39,34 +47,30 @@ export const routes = [
     element: <OrganizationLanding />,
   },
   {
+    path: "/org/:slug/access",
+    element: (
+        <OrgAccess />
+    ),
+  },
+  {
     path: "/org/:slug/event/:eventSlug",
     element: <EventLanding />,
   },
-  {
-    path: "/org/:slug/event/:eventSlug/register",
-    element: <EventRegistration />,
-  },
+  // {
+  //   path: "/org/:slug/event/:eventSlug/register",
+  //   element: <EventRegistration />,
+  // },
   {
     path: "/org/:slug/event/:eventSlug/attend",
     element: <EventAttend />,
   },
   {
-    path: "/e/:slug", // Mantener compatibilidad con eventos existentes
-    element: (
-      <Layout>
-        <PublicAnonGate>
-          <EventPublic />
-        </PublicAnonGate>
-      </Layout>
-    ),
-  },
-  { 
-    path: "/admin-auth", 
+    path: "/admin-auth",
     element: (
       <Layout>
         <AdminAuth />
       </Layout>
-    ) 
+    ),
   },
   {
     element: <AdminRoute />, // protege todo lo interno
@@ -77,7 +81,7 @@ export const routes = [
           <Layout>
             <OrganizationAdmin />
           </Layout>
-        )
+        ),
       },
       {
         path: "/org/:slug/admin",
@@ -85,7 +89,7 @@ export const routes = [
           <Layout>
             <OrganizationAdmin />
           </Layout>
-        )
+        ),
       },
       {
         path: "/org/:slug/admin/events",
@@ -93,7 +97,7 @@ export const routes = [
           <Layout>
             <OrganizationAdmin />
           </Layout>
-        )
+        ),
       },
       {
         path: "/org/:slug/admin/attendees",
@@ -101,7 +105,7 @@ export const routes = [
           <Layout>
             <OrganizationAdmin />
           </Layout>
-        )
+        ),
       },
       {
         path: "/org/:slug/admin/registration-form",
@@ -109,7 +113,7 @@ export const routes = [
           <Layout>
             <OrganizationAdmin />
           </Layout>
-        )
+        ),
       },
       {
         path: "/org/:slug/admin/settings",
@@ -117,7 +121,7 @@ export const routes = [
           <Layout>
             <OrganizationAdmin />
           </Layout>
-        )
+        ),
       },
       {
         path: "/org/:slug/event/:eventSlug/admin",
@@ -125,7 +129,7 @@ export const routes = [
           <Layout>
             <EventAdmin />
           </Layout>
-        )
+        ),
       },
       {
         path: "/org/:slug/event/:eventSlug/admin/control",
@@ -133,7 +137,7 @@ export const routes = [
           <Layout>
             <EventAdmin />
           </Layout>
-        )
+        ),
       },
       {
         path: "/org/:slug/event/:eventSlug/admin/attendees",
@@ -141,7 +145,7 @@ export const routes = [
           <Layout>
             <EventAdmin />
           </Layout>
-        )
+        ),
       },
       {
         path: "/org/:slug/event/:eventSlug/admin/settings",
@@ -149,7 +153,7 @@ export const routes = [
           <Layout>
             <EventAdmin />
           </Layout>
-        )
+        ),
       },
       {
         path: "/org/:slug/event/:eventSlug/admin/metrics",
@@ -157,8 +161,8 @@ export const routes = [
           <Layout>
             <EventAdmin />
           </Layout>
-        )
-      }
+        ),
+      },
     ],
   },
 ];

@@ -28,10 +28,9 @@ import {
 } from "@tabler/icons-react";
 import { fetchOrgBySlug, type Org } from "../../api/orgs";
 import { fetchEventsByOrg, type EventItem } from "../../api/events";
-// import { useAuth } from "../../auth/AuthProvider";
+import { useAuth } from "../../auth/AuthProvider";
 import { BrandedFooter } from "../../components/branding";
-import { useAnonymousAuth } from "../../hooks/useAnonymousAuth";
-// import UserSession from "../../components/UserSession";
+import UserSession from "../../components/auth/UserSession";
 import { useMediaQuery } from "@mantine/hooks";
 
 // --------------------------------------------------------------
@@ -668,15 +667,14 @@ function UpcomingEventCard({
 // --------------------------------------------------------------
 export default function OrganizationLanding() {
   const { slug } = useParams<{ slug: string }>();
-  // const { user } = useAuth();
-  useAnonymousAuth();
+  const { user } = useAuth();
 
   const [org, setOrg] = useState<Org | null>(null);
   const [events, setEvents] = useState<EventItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // const isOwner = user && org && org.ownerUid === user.uid;
+  const isOwner = user && org && org.ownerUid === user.uid;
 
   const brand = resolveBrandingColors(org);
   const theme = useMemo(() => makeTheme(brand), [brand]);
@@ -798,8 +796,8 @@ export default function OrganizationLanding() {
                   </Title>
                 )}
               </Group>
-              {/* <Group gap="sm">
-                <UserSession orgId={org._id} showLoginButton={false} />
+              <Group gap="sm">
+                <UserSession orgId={org._id} showLoginButton={true} />
                 {isOwner && (
                   <Button
                     component={Link}
@@ -810,7 +808,7 @@ export default function OrganizationLanding() {
                     ⚙️ Admin
                   </Button>
                 )}
-              </Group> */}
+              </Group>
             </Group>
           </Container>
         </Box>

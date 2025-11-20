@@ -12,11 +12,14 @@ import {
 import { useState } from "react";
 import { IconCheck, IconEdit, IconArrowRight } from "@tabler/icons-react";
 import { notifications } from "@mantine/notifications";
-import { useAuth } from "../auth/AuthProvider";
-import type { RegistrationForm } from "../types";
-import type { FoundRegistration } from "../api/events";
-import { associateFirebaseUID, registerToEventWithFirebase } from "../api/events";
-import { transformRegistrationDataToLabels } from "../utils/formDataTransform";
+import { useAuth } from "../../auth/AuthProvider";
+import type { RegistrationForm } from "../../types";
+import type { FoundRegistration } from "../../api/events";
+import {
+  associateFirebaseUID,
+  registerToEventWithFirebase,
+} from "../../api/events";
+import { transformRegistrationDataToLabels } from "../../utils/formDataTransform";
 
 interface RegistrationSummaryCardProps {
   eventId: string;
@@ -41,26 +44,73 @@ export function RegistrationSummaryCard({
 
   if (!attendee) return null;
 
+  const resolveAttendeeEmail = (): string | null => {
+    if (!attendee) return null;
+
+    if (attendee.email && typeof attendee.email === "string") {
+      return attendee.email;
+    }
+
+    const data = attendee.registrationData || {};
+
+    if (data.email_system && typeof data.email_system === "string") {
+      return data.email_system;
+    }
+
+    if (data.email && typeof data.email === "string") {
+      return data.email;
+    }
+
+    for (const value of Object.values(data)) {
+      if (typeof value === "string" && value.includes("@")) {
+        return value;
+      }
+    }
+
+    return null;
+  };
+
   // Función para manejar "Continuar al evento"
   const handleContinueToEvent = async () => {
     try {
       setLoading(true);
 
+      const attendeeEmail = resolveAttendeeEmail();
+
+      if (!attendeeEmail) {
+        console.error("❌ No email resolved for attendee in summary card");
+        notifications.show({
+          title: "Error",
+          message:
+            "No se pudo identificar tu correo electrónico. Por favor contacta al administrador.",
+          color: "red",
+        });
+        setLoading(false);
+        return;
+      }
+
       // Crear sesión anónima primero
-      const userUID = await createAnonymousSession(attendee.email);
-      console.log("🔐 Created anonymous session with UID:", userUID, "for attendee:", attendee.email);
+      const userUID = await createAnonymousSession(attendeeEmail);
+      console.log(
+        "🔐 Created anonymous session with UID:",
+        userUID,
+        "for attendee:",
+        attendeeEmail
+      );
+
+      localStorage.setItem("user-email", attendeeEmail);
+      localStorage.setItem(`uid-${userUID}-email`, attendeeEmail);
 
       // Si no está registrado en este evento específico, crear EventUser con Firebase UID
       if (!isRegistered) {
-        // Usar el nuevo endpoint que crea EventUser con Firebase UID directamente
         await registerToEventWithFirebase(eventId, {
-          email: attendee.email,
+          email: attendeeEmail,
           formData: attendee.registrationData,
           firebaseUID: userUID,
         });
-        
+
         console.log("✅ Created EventUser with Firebase UID directly");
-        
+
         notifications.show({
           title: "¡Listo!",
           message: "Te hemos registrado automáticamente en este evento",
@@ -69,15 +119,14 @@ export function RegistrationSummaryCard({
       } else {
         // Si ya está registrado, solo asociar Firebase UID
         try {
-          await associateFirebaseUID(eventId, attendee.email, userUID);
+          await associateFirebaseUID(eventId, attendeeEmail, userUID);
           console.log("🔗 Associated Firebase UID with existing EventUser");
         } catch (error) {
           console.error("⚠️ Failed to associate Firebase UID:", error);
-          // No fallar aquí, el usuario ya está registrado
+          // No fallamos aquí, el usuario ya está registrado
         }
       }
 
-      // Continuar al evento
       onContinueToEvent();
     } catch (error) {
       console.error("Error in continue to event flow:", error);
@@ -104,12 +153,14 @@ export function RegistrationSummaryCard({
     <Card shadow="md" padding="xl" radius="lg" withBorder>
       <Stack gap="lg">
         <Stack gap="sm" ta="center">
-          <Title order={2}>
-            Tu información de registro
-          </Title>
-          
+          <Title order={2}>Tu información de registro</Title>
+
           {isRegistered ? (
-            <Badge color="green" size="lg" leftSection={<IconCheck size={16} />}>
+            <Badge
+              color="green"
+              size="lg"
+              leftSection={<IconCheck size={16} />}
+            >
               Ya estás registrado en este evento
             </Badge>
           ) : (
@@ -129,16 +180,21 @@ export function RegistrationSummaryCard({
             {sortedFields.map((field) => {
               const originalValue = attendee.registrationData[field.id];
               const displayValue = readableData[field.id];
-              
+
               // No mostrar campos ocultos o auto-calculados en el resumen
               if (field.hidden || !originalValue) return null;
 
               return (
                 <Group key={field.id} justify="space-between" wrap="nowrap">
-                  <Text size="sm" fw={500} c="dimmed" style={{ flex: '0 0 40%' }}>
+                  <Text
+                    size="sm"
+                    fw={500}
+                    c="dimmed"
+                    style={{ flex: "0 0 40%" }}
+                  >
                     {field.label}:
                   </Text>
-                  <Text size="sm" style={{ flex: 1, textAlign: 'right' }}>
+                  <Text size="sm" style={{ flex: 1, textAlign: "right" }}>
                     {displayValue}
                   </Text>
                 </Group>

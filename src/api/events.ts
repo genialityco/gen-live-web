@@ -56,7 +56,9 @@ export async function fetchEventsByOrg(orgId: string): Promise<EventItem[]> {
   return data;
 }
 
-export async function fetchEventsByOrgPrivate(orgId: string): Promise<EventItem[]> {
+export async function fetchEventsByOrgPrivate(
+  orgId: string
+): Promise<EventItem[]> {
   const { data } = await api.get(`/events/by-org/${orgId}`);
   return data;
 }
@@ -108,28 +110,40 @@ export interface RegisterToEventData {
   firebaseUID?: string; // Firebase UID para sesión anónima
 }
 
-export async function registerToEvent(eventId: string, data: RegisterToEventData) {
-  const { data: response } = await api.post(`/events/${eventId}/register`, data);
+export async function registerToEvent(
+  eventId: string,
+  data: RegisterToEventData
+) {
+  const { data: response } = await api.post(
+    `/events/${eventId}/register`,
+    data
+  );
   return response;
 }
 
-export async function registerToEventWithFirebase(eventId: string, data: RegisterToEventData) {
+export async function registerToEventWithFirebase(
+  eventId: string,
+  data: RegisterToEventData
+) {
   if (!data.firebaseUID) {
-    throw new Error('Firebase UID is required for this function');
+    throw new Error("Firebase UID is required for this function");
   }
-  const { data: response } = await api.post(`/events/${eventId}/register-with-firebase`, data);
+  const { data: response } = await api.post(
+    `/events/${eventId}/register-with-firebase`,
+    data
+  );
   return response;
 }
 
 export async function checkIfRegistered(eventId: string, email: string) {
   console.log("🌐 API: Checking if registered", { eventId, email });
-  
+
   const { data } = await api.get(`/events/${eventId}/is-registered`, {
     params: { email },
   });
-  
+
   console.log("📡 API: Registration check response", data);
-  return data as { 
+  return data as {
     isRegistered: boolean;
     orgAttendee?: {
       _id: string;
@@ -142,39 +156,89 @@ export async function checkIfRegistered(eventId: string, email: string) {
   };
 }
 
-export async function checkIfRegisteredByUID(eventId: string, firebaseUID: string) {
-  console.log("🌐 API: Checking if registered by UID", { eventId, firebaseUID });
-  
+export async function checkIfRegisteredByUID(
+  eventId: string,
+  firebaseUID: string
+) {
+  console.log("🌐 API: Checking if registered by UID", {
+    eventId,
+    firebaseUID,
+  });
+
   const { data } = await api.get(`/events/${eventId}/is-registered-by-uid`, {
     params: { firebaseUID },
   });
-  
+
   console.log("📡 API: Registration check by UID response", data);
   return data as { isRegistered: boolean };
 }
 
-export async function associateFirebaseUID(eventId: string, email: string, firebaseUID: string) {
-  console.log("🌐 API: Associating Firebase UID", { eventId, email, firebaseUID });
-  
+export async function associateFirebaseUID(
+  eventId: string,
+  email: string,
+  firebaseUID: string
+) {
+  console.log("🌐 API: Associating Firebase UID", {
+    eventId,
+    email,
+    firebaseUID,
+  });
+
   const { data } = await api.post(`/events/${eventId}/associate-firebase-uid`, {
     email,
     firebaseUID,
   });
-  
+
   console.log("📡 API: Associate UID response", data);
   return data;
 }
 
-export async function checkRegistrationByIdentifiers(
-  eventId: string, 
+export async function checkOrgRegistrationByIdentifiers(
+  orgId: string,
   identifierFields: Record<string, any>
 ) {
-  console.log("🌐 API: Checking registration by identifiers", { eventId, identifierFields });
-  
-  const { data } = await api.post(`/events/${eventId}/check-registration-by-identifiers`, {
+  console.log("🌐 API: Checking ORG registration by identifiers", {
+    orgId,
     identifierFields,
   });
-  
+
+  const { data } = await api.post(
+    `/events/org/${orgId}/check-registration-by-identifiers`,
+    {
+      identifierFields,
+    }
+  );
+
+  console.log("📡 API: ORG registration check by identifiers response", data);
+  return data as {
+    found: boolean;
+    orgAttendee?: {
+      _id: string;
+      organizationId: string;
+      email: string;
+      name?: string;
+      registrationData?: Record<string, any>;
+    };
+    message?: string;
+  };
+}
+
+export async function checkRegistrationByIdentifiers(
+  eventId: string,
+  identifierFields: Record<string, any>
+) {
+  console.log("🌐 API: Checking registration by identifiers", {
+    eventId,
+    identifierFields,
+  });
+
+  const { data } = await api.post(
+    `/events/${eventId}/check-registration-by-identifiers`,
+    {
+      identifierFields,
+    }
+  );
+
   console.log("📡 API: Registration check by identifiers response", data);
   return data as {
     isRegistered: boolean;
@@ -211,8 +275,10 @@ export interface FoundRegistration {
   isRegistered?: boolean;
 }
 
-export async function findRegistration(data: FindRegistrationData): Promise<FoundRegistration> {
-  const { data: response } = await api.post('/events/find-registration', data);
+export async function findRegistration(
+  data: FindRegistrationData
+): Promise<FoundRegistration> {
+  const { data: response } = await api.post("/events/find-registration", data);
   return response;
 }
 
@@ -224,28 +290,47 @@ export interface UpdateRegistrationData {
 }
 
 export async function updateRegistration(data: UpdateRegistrationData) {
-  const { data: response } = await api.patch('/events/update-registration', data);
+  const { data: response } = await api.patch(
+    "/events/update-registration",
+    data
+  );
   return response;
 }
 
 // Crear EventUser para attendee existente
-export async function createEventUserForAttendee(eventId: string, attendeeId: string) {
-  const { data } = await api.post(`/events/${eventId}/create-event-user/${attendeeId}`);
+export async function createEventUserForAttendee(
+  eventId: string,
+  attendeeId: string
+) {
+  const { data } = await api.post(
+    `/events/${eventId}/create-event-user/${attendeeId}`
+  );
   return data;
 }
 
 // Crear EventUser automáticamente para usuario con sesión (busca OrgAttendee existente)
-export async function createEventUserForSession(eventId: string, firebaseUID: string, userEmail: string) {
-  console.log("🔍 API: Creating EventUser for session", { eventId, firebaseUID, userEmail });
-  
+export async function createEventUserForSession(
+  eventId: string,
+  firebaseUID: string,
+  userEmail: string
+) {
+  console.log("🔍 API: Creating EventUser for session", {
+    eventId,
+    firebaseUID,
+    userEmail,
+  });
+
   try {
     // Intentar crear/actualizar usando el endpoint con Firebase UID incluido
-    const { data } = await api.post(`/events/${eventId}/register-with-firebase`, {
-      email: userEmail,
-      firebaseUID: firebaseUID,
-      formData: { auto_created_from_session: true },
-    });
-    
+    const { data } = await api.post(
+      `/events/${eventId}/register-with-firebase`,
+      {
+        email: userEmail,
+        firebaseUID: firebaseUID,
+        formData: { auto_created_from_session: true },
+      }
+    );
+
     console.log("✅ API: EventUser created/updated for session");
     return data;
   } catch (error) {
@@ -255,25 +340,32 @@ export async function createEventUserForSession(eventId: string, firebaseUID: st
 }
 
 // Actualizar branding del evento
-export async function updateEventBranding(eventId: string, branding: EventBrandingConfig) {
+export async function updateEventBranding(
+  eventId: string,
+  branding: EventBrandingConfig
+) {
   const { data } = await api.patch(`/events/${eventId}/branding`, branding);
   return data;
 }
 
 // Subir imagen para branding del evento
 export async function uploadEventImage(
-  eventId: string, 
-  folder: 'headers' | 'covers' | 'footers', 
+  eventId: string,
+  folder: "headers" | "covers" | "footers",
   file: File
 ): Promise<{ url: string }> {
   const formData = new FormData();
-  formData.append('file', file);
-  
-  const { data } = await api.post(`/events/${eventId}/upload/${folder}`, formData, {
-    headers: {
-      'Content-Type': 'multipart/form-data',
-    },
-  });
-  
+  formData.append("file", file);
+
+  const { data } = await api.post(
+    `/events/${eventId}/upload/${folder}`,
+    formData,
+    {
+      headers: {
+        "Content-Type": "multipart/form-data",
+      },
+    }
+  );
+
   return data;
 }

@@ -65,7 +65,7 @@ export function useEventRealtime(slug: string) {
         await set(pRef, { on: true, ts: serverTimestamp() }).catch(() => {});
       };
 
-      // Escribimos "online" inicialmente
+      // online inicial
       console.log("✍️ Writing initial presence for event:", evId, "UID:", uid);
       await writePresence();
       console.log("✅ Initial presence written");
@@ -74,7 +74,7 @@ export function useEventRealtime(slug: string) {
       try {
         await onDisconnect(pRef).remove();
       } catch {
-        // Algunos entornos bloquean onDisconnect; ignorar
+        // Algunos entornos bloquean onDisconnect, se ignora
       }
 
       // Actualizar presencia cada 15 segundos para mantenerla activa

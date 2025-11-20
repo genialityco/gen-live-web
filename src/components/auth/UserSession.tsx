@@ -9,16 +9,17 @@ import {
   Loader,
   Card,
 } from "@mantine/core";
-import { useAuth } from "../auth/AuthProvider";
-import { signInAnonymously, signOut } from "firebase/auth";
-import { auth } from "../core/firebase";
+import { useAuth } from "../../auth/AuthProvider";
+import { signOut } from "firebase/auth";
+import { auth } from "../../core/firebase";
 import { notifications } from "@mantine/notifications";
+import { useNavigate, useParams } from "react-router-dom";
 
 interface UserSessionProps {
   compact?: boolean; // Para versión compacta en móviles
-  eventId?: string; // Para verificar registro en evento específico
-  orgId?: string; // Para verificar attendee en organización
-  showLoginButton?: boolean; // Si mostrar botón de login cuando no hay sesión (default: true)
+  eventId?: string; // (opcional, ya no imprescindible para el login)
+  orgId?: string; // Para cargar OrgAttendee y mostrar email
+  showLoginButton?: boolean; // Si mostrar botón de login cuando no hay sesión
 }
 
 interface OrgAttendee {
@@ -29,32 +30,38 @@ interface OrgAttendee {
   createdAt: Date;
 }
 
-export default function UserSession({ 
-  compact = false, 
-  eventId, 
+export default function UserSession({
+  compact = false,
+  eventId,
   orgId,
-  showLoginButton = true 
+  showLoginButton = true,
 }: UserSessionProps) {
   const { user, loading } = useAuth();
-  const [signingIn, setSigningIn] = useState(false);
-  
-  // Datos del sistema de referencias
   const [orgAttendee, setOrgAttendee] = useState<OrgAttendee | null>(null);
+  const navigate = useNavigate();
+  const { slug, eventSlug } = useParams<{
+    slug?: string;
+    eventSlug?: string;
+  }>();
 
-  // Cargar datos del usuario desde el backend
+  // Cargar datos del usuario desde el backend (solo lectura)
   const loadUserData = async () => {
-    if (!user?.uid) return;
-    
+    if (!user?.uid || !orgId) return;
+
     try {
-      // Obtener email del usuario desde localStorage
       let userEmail = user.email;
       if (!userEmail) {
-        userEmail = localStorage.getItem(`uid-${user.uid}-email`) || localStorage.getItem('user-email');
+        userEmail =
+          localStorage.getItem(`uid-${user.uid}-email`) ||
+          localStorage.getItem("user-email");
       }
-      
-      // Si hay orgId y email, buscar OrgAttendee
-      if (orgId && userEmail) {
-        const attendeeResponse = await fetch(`/api/org-attendees/by-email/${encodeURIComponent(userEmail)}/org/${orgId}`);
+
+      if (userEmail) {
+        const attendeeResponse = await fetch(
+          `/api/org-attendees/by-email/${encodeURIComponent(
+            userEmail
+          )}/org/${orgId}`
+        );
         if (attendeeResponse.ok) {
           const attendeeData = await attendeeResponse.json();
           setOrgAttendee(attendeeData);
@@ -65,54 +72,17 @@ export default function UserSession({
     }
   };
 
-  // Crear sesión anónima
-  const handleAnonymousSignIn = async () => {
-    try {
-      setSigningIn(true);
-      await signInAnonymously(auth);
-      
-      // Crear UserAccount en el backend
-      const response = await fetch('/api/user-accounts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          firebaseUid: auth.currentUser?.uid,
-          displayName: 'Usuario Anónimo',
-        }),
-      });
-      
-      if (response.ok) {
-        notifications.show({
-          title: "Sesión iniciada",
-          message: "Has iniciado sesión como usuario anónimo",
-          color: "green",
-        });
-        loadUserData();
-      }
-    } catch (error) {
-      console.error("Error signing in anonymously:", error);
-      notifications.show({
-        title: "Error",
-        message: "No se pudo iniciar sesión",
-        color: "red",
-      });
-    } finally {
-      setSigningIn(false);
-    }
-  };
-
   // Cerrar sesión
   const handleSignOut = async () => {
     try {
       await signOut(auth);
       setOrgAttendee(null);
-      
-      // Limpiar localStorage
-      localStorage.removeItem('user-email');
+
+      localStorage.removeItem("user-email");
       if (user?.uid) {
         localStorage.removeItem(`uid-${user.uid}-email`);
       }
-      
+
       notifications.show({
         title: "Sesión cerrada",
         message: "Has cerrado sesión correctamente",
@@ -128,14 +98,34 @@ export default function UserSession({
     }
   };
 
+  // Redirigir al flujo central de acceso
+  const goToAccess = () => {
+    if (!slug) {
+      notifications.show({
+        title: "Error",
+        message: "No se pudo determinar la organización.",
+        color: "red",
+      });
+      return;
+    }
+
+    // Si estamos en contexto de evento, o tenemos eventId, pasamos el eventSlug como query
+    const eventSlugToUse = eventSlug || eventId;
+    const base = `/org/${slug}/access`;
+    const url = eventSlugToUse ? `${base}?eventSlug=${eventSlugToUse}` : base;
+
+    navigate(url);
+  };
+
   // Cargar datos cuando cambie el usuario
   useEffect(() => {
     if (user?.uid) {
       loadUserData();
     }
-  }, [user?.uid, eventId, orgId]); // eslint-disable-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.uid, eventId, orgId]);
 
-  // Si está cargando
+  // Si está cargando auth
   if (loading) {
     return (
       <ActionIcon variant="subtle" size="lg">
@@ -144,62 +134,57 @@ export default function UserSession({
     );
   }
 
-  // Si no hay usuario
+  // Si no hay usuario → mostrar acceso centralizado
   if (!user) {
-    // Si no debe mostrar botón de login, no mostrar nada
-    if (!showLoginButton) {
-      return null;
-    }
-    
-    // Mostrar botón de login anónimo
+    if (!showLoginButton) return null;
+
     return (
-      <Button
-        variant="light"
-        size={compact ? "sm" : "md"}
-        leftSection="👤"
-        onClick={handleAnonymousSignIn}
-        loading={signingIn}
+      <Stack
+        gap="xs"
+        style={{
+          minWidth: compact ? 120 : 200,
+          display: "flex",
+          flexDirection: "row",
+        }}
       >
-        {compact ? "Ingresar" : "Iniciar sesión"}
-      </Button>
+        <Button
+          size={compact ? "xs" : "sm"}
+          variant="outline"
+          leftSection="👤"
+          onClick={goToAccess}
+        >
+          Ingresar o Registrarse
+        </Button>
+      </Stack>
     );
   }
 
   // Obtener email del usuario (desde múltiples fuentes)
   const getUserEmail = () => {
-    // 1. Email de orgAttendee (más confiable)
     if (orgAttendee?.email) return orgAttendee.email;
-    
-    // 2. Email de Firebase user
     if (user?.email) return user.email;
-    
-    // 3. Email de localStorage
+
     if (user?.uid) {
       const storedEmail = localStorage.getItem(`uid-${user.uid}-email`);
       if (storedEmail) return storedEmail;
     }
-    
-    // 4. Email genérico de localStorage
-    const genericEmail = localStorage.getItem('user-email');
+
+    const genericEmail = localStorage.getItem("user-email");
     if (genericEmail) return genericEmail;
-    
+
     return null;
   };
 
   const userEmail = getUserEmail();
 
-  // Usuario autenticado - mostrar menú simple
+  // Usuario autenticado - menú simple
   return (
     <Menu shadow="md" width={280} position="bottom-end">
       <Menu.Target>
         <Button
           variant="subtle"
           leftSection={
-            <Avatar
-              size="sm"
-              radius="xl"
-              color="blue"
-            >
+            <Avatar size="sm" radius="xl" color="blue">
               {userEmail ? userEmail[0]?.toUpperCase() : "U"}
             </Avatar>
           }
@@ -208,13 +193,13 @@ export default function UserSession({
             section: { marginInlineStart: 0 },
           }}
         >
-          {compact ? "" : (userEmail || "Usuario")}
+          {compact ? "" : userEmail || "Usuario"}
         </Button>
       </Menu.Target>
 
       <Menu.Dropdown>
         <Menu.Label>Sesión activa</Menu.Label>
-        
+
         <Card p="sm" mb="xs" withBorder>
           <Stack gap="xs">
             {userEmail ? (
@@ -231,11 +216,7 @@ export default function UserSession({
 
         <Menu.Divider />
 
-        <Menu.Item
-          leftSection="🚪"
-          color="red"
-          onClick={handleSignOut}
-        >
+        <Menu.Item leftSection="🚪" color="red" onClick={handleSignOut}>
           Cerrar sesión
         </Menu.Item>
       </Menu.Dropdown>
