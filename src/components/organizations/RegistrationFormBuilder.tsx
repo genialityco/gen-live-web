@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState } from "react";
 import {
   Stack,
@@ -26,7 +27,7 @@ import {
   type FormField,
   type FormFieldType,
   updateRegistrationForm,
-} from "../api/orgs";
+} from "../../api/orgs";
 
 interface RegistrationFormBuilderProps {
   org: Org;
@@ -129,7 +130,7 @@ export default function RegistrationFormBuilder({
 
   // Agregar campo directamente sin abrir modal (para campos pre-configurados)
   const addFieldDirectly = (fieldTemplate: Partial<FormField>) => {
-    setForm((prevForm) => {
+    setForm((prevForm: RegistrationForm) => {
       const newField: FormField = {
         id: fieldTemplate.id || `field_${Date.now()}`,
         type: fieldTemplate.type || "text",
@@ -152,7 +153,7 @@ export default function RegistrationFormBuilder({
 
   const addPrePopulatedField = async (fieldType: 'pais' | 'estado' | 'ciudad' | 'pais-telefono', countryCode?: string) => {
     // Importar dinámicamente la librería
-    const { getAllCountries, getStatesByCountry, getCitiesByCountry } = await import('../data/form-catalogs');
+    const { getAllCountries, getStatesByCountry, getCitiesByCountry } = await import('../../data/form-catalogs');
     
     if (fieldType === 'pais') {
       const countries = getAllCountries();
@@ -164,8 +165,8 @@ export default function RegistrationFormBuilder({
         required: true,
         helpText: "Seleccione el país de residencia",
         options: countries
-          .sort((a, b) => a.name.localeCompare(b.name))
-          .map((country) => ({
+          .sort((a: { name: string; }, b: { name: any; }) => a.name.localeCompare(b.name))
+          .map((country: { isoCode: any; name: any; }) => ({
             value: country.isoCode,
             label: country.name,
           })),
@@ -191,8 +192,8 @@ export default function RegistrationFormBuilder({
         required: true,
         helpText: "Seleccione el país de residencia",
         options: countries
-          .sort((a, b) => a.name.localeCompare(b.name))
-          .map((country) => ({
+          .sort((a: { name: string; }, b: { name: any; }) => a.name.localeCompare(b.name))
+          .map((country: { isoCode: any; name: any; }) => ({
             value: country.isoCode,
             label: country.name,
           })),
@@ -228,7 +229,7 @@ export default function RegistrationFormBuilder({
       };
       
       // Agregar los tres campos en una sola operación
-      setForm((prevForm) => {
+      setForm((prevForm: RegistrationForm) => {
         const baseOrder = prevForm.fields.length;
         
         const newFields: FormField[] = [
@@ -292,8 +293,8 @@ export default function RegistrationFormBuilder({
         required: true,
         helpText: "Seleccione el estado o departamento",
         options: states
-          .sort((a, b) => a.name.localeCompare(b.name))
-          .map((state) => ({
+          .sort((a: { name: string; }, b: { name: any; }) => a.name.localeCompare(b.name))
+          .map((state: { name: any; }) => ({
             value: state.name,
             label: state.name,
           })),
@@ -316,10 +317,10 @@ export default function RegistrationFormBuilder({
       // Crear opciones con parentValue para cascada
       // Usar ciudad|estado como value único para evitar duplicados
       const cityOptions = cities
-        .sort((a, b) => a.name.localeCompare(b.name))
-        .map((city) => {
+        .sort((a: { name: string; }, b: { name: any; }) => a.name.localeCompare(b.name))
+        .map((city: { stateCode: any; name: any; }) => {
           // Encontrar el nombre del estado
-          const state = states.find(s => s.isoCode === city.stateCode);
+          const state = states.find((s: { isoCode: any; }) => s.isoCode === city.stateCode);
           const stateName = state?.name || 'Desconocido';
           return {
             value: `${city.name}|${stateName}`, // Value único: ciudad|departamento
@@ -356,7 +357,7 @@ export default function RegistrationFormBuilder({
     if (!editingField) return;
 
     const existingIndex = form.fields.findIndex(
-      (f) => f.id === editingField.id
+      (f: { id: any; }) => f.id === editingField.id
     );
 
     if (existingIndex >= 0) {
@@ -386,7 +387,7 @@ export default function RegistrationFormBuilder({
     
     setForm({
       ...form,
-      fields: form.fields.filter((f) => f.id !== fieldId),
+      fields: form.fields.filter((f: { id: string; }) => f.id !== fieldId),
     });
   };
 
@@ -576,7 +577,7 @@ export default function RegistrationFormBuilder({
               </Alert>
             ) : (
               <Stack gap="sm">
-                {form.fields.map((field, index) => (
+                {form.fields.map((field: FormField, index: number) => (
                   <Card key={field.id} withBorder p="sm" bg="gray.0">
                     <Group justify="space-between" wrap="nowrap">
                       <Group gap="xs" style={{ flex: 1 }}>
@@ -645,7 +646,7 @@ export default function RegistrationFormBuilder({
                           variant="subtle"
                           color="red"
                           size="sm"
-                          onClick={() => deleteField(field.id)}
+                          onClick={() => deleteField(String(field.id))}
                           disabled={field.id === EMAIL_FIELD.id}
                           title={field.id === EMAIL_FIELD.id ? 'El email del sistema no se puede eliminar' : 'Eliminar campo'}
                         >
@@ -670,7 +671,7 @@ export default function RegistrationFormBuilder({
         }}
         title={
           <Text fw={600}>
-            {editingField && form.fields.find((f) => f.id === editingField.id)
+            {editingField && form.fields.find((f: { id: any; }) => f.id === editingField.id)
               ? "Editar campo"
               : "Nuevo campo"}
           </Text>
@@ -838,7 +839,7 @@ export default function RegistrationFormBuilder({
                   description="Formato: valor|etiqueta|valorPadre (uno por línea). El valorPadre es opcional para opciones en cascada."
                   value={
                     editingField.options
-                      ?.map((o) => `${o.value}|${o.label}${o.parentValue ? '|' + o.parentValue : ''}`)
+                      ?.map((o: { value: any; label: any; parentValue?: string; }) => `${o.value}|${o.label}${o.parentValue ? '|' + o.parentValue : ''}`)
                       .join("\n") || ""
                   }
                   onChange={(e) => {
@@ -872,8 +873,8 @@ export default function RegistrationFormBuilder({
                   data={[
                     { value: "", label: "-- Ninguno --" },
                     ...form.fields
-                      .filter((f) => f.id !== editingField.id && f.type === "select")
-                      .map((f) => ({ value: f.id, label: f.label })),
+                      .filter((f: { id: any; type: string; }) => f.id !== editingField.id && f.type === "select")
+                      .map((f: { id: any; label: any; }) => ({ value: f.id, label: f.label })),
                   ]}
                   clearable
                 />
@@ -1035,7 +1036,7 @@ export default function RegistrationFormBuilder({
                 />
 
                 <Stack gap="xs">
-                  {editingField.conditionalLogic[0]?.conditions.map((condition, index) => (
+                  {editingField.conditionalLogic[0]?.conditions.map((condition, index: number) => (
                     <Paper key={index} p="md" withBorder>
                       <Stack gap="xs">
                         <Group justify="space-between">
@@ -1061,7 +1062,7 @@ export default function RegistrationFormBuilder({
                             </ActionIcon>
                           )}
                         </Group>
-
+                  
                         <Select
                           label="Campo a evaluar"
                           description="¿Qué campo quieres comprobar?"
@@ -1079,10 +1080,10 @@ export default function RegistrationFormBuilder({
                             });
                           }}
                           data={form.fields
-                            .filter((f) => f.id !== editingField.id)
-                            .map((f) => ({ value: f.id, label: f.label }))}
+                            .filter((f: { id: any; }) => f.id !== editingField.id)
+                            .map((f: { id: any; label: any; }) => ({ value: f.id, label: f.label }))}
                         />
-
+                  
                         <Group grow>
                           <Select
                             label="Operador"
@@ -1107,11 +1108,11 @@ export default function RegistrationFormBuilder({
                               { value: "notEquals", label: "Es diferente de" },
                             ]}
                           />
-
+                  
                           <TextInput
                             label="Valor"
                             description="Valor a comparar"
-                            value={condition.value as string || ""}
+                            value={typeof condition.value === "string" ? condition.value : String(condition.value ?? "")}
                             onChange={(e) => {
                               if (!editingField.conditionalLogic) return;
                               const newValue = e.currentTarget.value;
