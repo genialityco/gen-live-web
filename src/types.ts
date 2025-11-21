@@ -2,13 +2,13 @@ export type EventStatus = "upcoming" | "live" | "ended" | "replay";
 
 // Form field types
 export type FormFieldType =
-  | 'text'
-  | 'email'
-  | 'tel'
-  | 'number'
-  | 'select'
-  | 'checkbox'
-  | 'textarea';
+  | "text"
+  | "email"
+  | "tel"
+  | "number"
+  | "select"
+  | "checkbox"
+  | "textarea";
 
 export interface FormFieldOption {
   label: string;
@@ -17,15 +17,15 @@ export interface FormFieldOption {
 }
 
 export interface ConditionalRule {
-  field: string; // ID del campo a evaluar
-  operator: 'equals' | 'notEquals' | 'contains' | 'greaterThan' | 'lessThan';
-  value: string | number | boolean; // Valor a comparar
+  field: string;
+  operator: "equals" | "notEquals" | "contains" | "notContains";
+  value: string | number | boolean;
 }
 
 export interface ConditionalLogic {
-  action: 'show' | 'hide' | 'enable' | 'disable' | 'require';
+  action: "show" | "hide" | "enable" | "disable" | "require";
   conditions: ConditionalRule[];
-  logic: 'and' | 'or'; // Cómo combinar múltiples condiciones
+  logic: "and" | "or"; // Cómo combinar múltiples condiciones
 }
 
 export interface FormField {
@@ -43,7 +43,7 @@ export interface FormField {
     pattern?: string; // Regex para validación personalizada
   };
   order: number; // Orden de aparición
-  
+
   // Propiedades avanzadas
   helpText?: string; // Texto de ayuda que se muestra debajo del campo
   defaultValue?: string | number | boolean; // Valor por defecto

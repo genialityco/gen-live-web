@@ -46,10 +46,10 @@ const FIELD_TYPES: { value: FormFieldType; label: string }[] = [
 
 // Campo obligatorio del sistema (siempre debe existir)
 const EMAIL_FIELD: FormField = {
-  id: 'email_system',
-  type: 'email',
-  label: 'Correo electrónico',
-  placeholder: 'tu@email.com',
+  id: "email_system",
+  type: "email",
+  label: "Correo electrónico",
+  placeholder: "tu@email.com",
   required: true,
   order: 0,
   isIdentifier: false, // Puede ser marcado como identificador por el admin
@@ -90,7 +90,63 @@ export default function RegistrationFormBuilder({
   const handleSave = async () => {
     try {
       setLoading(true);
-      await updateRegistrationForm(org.domainSlug, form);
+
+      // 🧼 Normalizar antes de enviar al backend
+      const normalizedForm: RegistrationForm = {
+        ...form,
+        fields: form.fields.map((field, index) => {
+          const normalizedField: any = { ...field, order: index };
+
+          if (field.conditionalLogic && field.conditionalLogic.length > 0) {
+            const allowedActions = [
+              "show",
+              "hide",
+              "enable",
+              "disable",
+              "require",
+            ] as const;
+
+            normalizedField.conditionalLogic = field.conditionalLogic
+              // Filtrar reglas vacías/mal formadas
+              .filter(
+                (rule) => rule && allowedActions.includes(rule.action as any)
+              )
+              .map((rule) => ({
+                ...rule,
+                // logic solo puede ser 'and' | 'or'
+                logic: rule.logic === "or" ? "or" : "and",
+                conditions: (rule.conditions || []).map((cond) => ({
+                  ...cond,
+                  // Normalizar operadores
+                  operator:
+                    cond.operator === "notEquals"
+                      ? "notEquals"
+                      : cond.operator === "contains"
+                      ? "contains"
+                      : cond.operator === "notContains"
+                      ? "notContains"
+                      : "equals",
+                })),
+              }));
+
+            // Si después de normalizar ya no hay reglas válidas, eliminar conditionalLogic
+            if (
+              !normalizedField.conditionalLogic ||
+              normalizedField.conditionalLogic.length === 0
+            ) {
+              delete normalizedField.conditionalLogic;
+            }
+          } else {
+            // Si no hay lógica condicional, no enviar el campo
+            delete normalizedField.conditionalLogic;
+          }
+
+          return normalizedField;
+        }),
+      };
+
+      await updateRegistrationForm(org.domainSlug, normalizedForm);
+
       notifications.show({
         title: "Éxito",
         message: "Formulario de registro actualizado",
@@ -151,11 +207,15 @@ export default function RegistrationFormBuilder({
     });
   };
 
-  const addPrePopulatedField = async (fieldType: 'pais' | 'estado' | 'ciudad' | 'pais-telefono', countryCode?: string) => {
+  const addPrePopulatedField = async (
+    fieldType: "pais" | "estado" | "ciudad" | "pais-telefono",
+    countryCode?: string
+  ) => {
     // Importar dinámicamente la librería
-    const { getAllCountries, getStatesByCountry, getCitiesByCountry } = await import('../../data/form-catalogs');
-    
-    if (fieldType === 'pais') {
+    const { getAllCountries, getStatesByCountry, getCitiesByCountry } =
+      await import("../../data/form-catalogs");
+
+    if (fieldType === "pais") {
       const countries = getAllCountries();
       const template: Partial<FormField> = {
         id: `pais_${Date.now()}`,
@@ -165,24 +225,26 @@ export default function RegistrationFormBuilder({
         required: true,
         helpText: "Seleccione el país de residencia",
         options: countries
-          .sort((a: { name: string; }, b: { name: any; }) => a.name.localeCompare(b.name))
-          .map((country: { isoCode: any; name: any; }) => ({
+          .sort((a: { name: string }, b: { name: any }) =>
+            a.name.localeCompare(b.name)
+          )
+          .map((country: { isoCode: any; name: any }) => ({
             value: country.isoCode,
             label: country.name,
           })),
       };
       addFieldDirectly(template);
-      
+
       notifications.show({
-        title: 'Campo agregado',
+        title: "Campo agregado",
         message: `Se agregó el campo País con ${countries.length} países`,
-        color: 'green',
+        color: "green",
       });
-    } else if (fieldType === 'pais-telefono') {
+    } else if (fieldType === "pais-telefono") {
       // Agregar campo País + Código País + Teléfono relacionados
       const countries = getAllCountries();
       const timestamp = Date.now();
-      
+
       // 1. Campo País
       const paisField: Partial<FormField> = {
         id: `pais_${timestamp}`,
@@ -192,13 +254,15 @@ export default function RegistrationFormBuilder({
         required: true,
         helpText: "Seleccione el país de residencia",
         options: countries
-          .sort((a: { name: string; }, b: { name: any; }) => a.name.localeCompare(b.name))
-          .map((country: { isoCode: any; name: any; }) => ({
+          .sort((a: { name: string }, b: { name: any }) =>
+            a.name.localeCompare(b.name)
+          )
+          .map((country: { isoCode: any; name: any }) => ({
             value: country.isoCode,
             label: country.name,
           })),
       };
-      
+
       // 2. Campo Código de País (auto-calculado)
       const codigoField: Partial<FormField> = {
         id: `codigo_pais_${timestamp}`,
@@ -213,7 +277,7 @@ export default function RegistrationFormBuilder({
           pattern: "^\\+\\d{1,4}$",
         },
       };
-      
+
       // 3. Campo Teléfono
       const telefonoField: Partial<FormField> = {
         id: `telefono_${timestamp}`,
@@ -227,11 +291,11 @@ export default function RegistrationFormBuilder({
           maxLength: 15,
         },
       };
-      
+
       // Agregar los tres campos en una sola operación
       setForm((prevForm: RegistrationForm) => {
         const baseOrder = prevForm.fields.length;
-        
+
         const newFields: FormField[] = [
           {
             ...paisField,
@@ -269,21 +333,22 @@ export default function RegistrationFormBuilder({
             validation: telefonoField.validation,
           },
         ];
-        
+
         return { ...prevForm, fields: [...prevForm.fields, ...newFields] };
       });
-      
+
       notifications.show({
-        title: 'Campos agregados',
-        message: 'Se agregaron los campos País, Código de país y Teléfono relacionados',
-        color: 'green',
+        title: "Campos agregados",
+        message:
+          "Se agregaron los campos País, Código de país y Teléfono relacionados",
+        color: "green",
       });
-    } else if (fieldType === 'estado') {
+    } else if (fieldType === "estado") {
       // Necesitamos saber de qué país
       if (!countryCode) {
-        countryCode = 'CO'; // Por defecto Colombia
+        countryCode = "CO"; // Por defecto Colombia
       }
-      
+
       const states = getStatesByCountry(countryCode);
       const template: Partial<FormField> = {
         id: `estado_${Date.now()}`,
@@ -293,42 +358,48 @@ export default function RegistrationFormBuilder({
         required: true,
         helpText: "Seleccione el estado o departamento",
         options: states
-          .sort((a: { name: string; }, b: { name: any; }) => a.name.localeCompare(b.name))
-          .map((state: { name: any; }) => ({
+          .sort((a: { name: string }, b: { name: any }) =>
+            a.name.localeCompare(b.name)
+          )
+          .map((state: { name: any }) => ({
             value: state.name,
             label: state.name,
           })),
       };
       addFieldDirectly(template);
-      
+
       notifications.show({
-        title: 'Campo agregado',
+        title: "Campo agregado",
         message: `Se agregó el campo Estado/Departamento con ${states.length} opciones`,
-        color: 'green',
+        color: "green",
       });
-    } else if (fieldType === 'ciudad') {
+    } else if (fieldType === "ciudad") {
       if (!countryCode) {
-        countryCode = 'CO'; // Por defecto Colombia
+        countryCode = "CO"; // Por defecto Colombia
       }
-      
+
       const cities = getCitiesByCountry(countryCode);
       const states = getStatesByCountry(countryCode);
-      
+
       // Crear opciones con parentValue para cascada
       // Usar ciudad|estado como value único para evitar duplicados
       const cityOptions = cities
-        .sort((a: { name: string; }, b: { name: any; }) => a.name.localeCompare(b.name))
-        .map((city: { stateCode: any; name: any; }) => {
+        .sort((a: { name: string }, b: { name: any }) =>
+          a.name.localeCompare(b.name)
+        )
+        .map((city: { stateCode: any; name: any }) => {
           // Encontrar el nombre del estado
-          const state = states.find((s: { isoCode: any; }) => s.isoCode === city.stateCode);
-          const stateName = state?.name || 'Desconocido';
+          const state = states.find(
+            (s: { isoCode: any }) => s.isoCode === city.stateCode
+          );
+          const stateName = state?.name || "Desconocido";
           return {
             value: `${city.name}|${stateName}`, // Value único: ciudad|departamento
             label: `${city.name} (${stateName})`, // Label descriptivo
             parentValue: stateName, // Enlazar con el estado
           };
         });
-      
+
       const template: Partial<FormField> = {
         id: `ciudad_${Date.now()}`,
         type: "select",
@@ -339,11 +410,11 @@ export default function RegistrationFormBuilder({
         options: cityOptions,
       };
       addFieldDirectly(template);
-      
+
       notifications.show({
-        title: 'Campo agregado',
+        title: "Campo agregado",
         message: `Se agregó el campo Ciudad con ${cities.length} opciones`,
-        color: 'green',
+        color: "green",
       });
     }
   };
@@ -357,7 +428,7 @@ export default function RegistrationFormBuilder({
     if (!editingField) return;
 
     const existingIndex = form.fields.findIndex(
-      (f: { id: any; }) => f.id === editingField.id
+      (f: { id: any }) => f.id === editingField.id
     );
 
     if (existingIndex >= 0) {
@@ -378,16 +449,16 @@ export default function RegistrationFormBuilder({
     // No permitir eliminar el campo de email (obligatorio del sistema)
     if (fieldId === EMAIL_FIELD.id) {
       notifications.show({
-        title: 'No permitido',
-        message: 'El campo de email es obligatorio y no se puede eliminar',
-        color: 'red',
+        title: "No permitido",
+        message: "El campo de email es obligatorio y no se puede eliminar",
+        color: "red",
       });
       return;
     }
-    
+
     setForm({
       ...form,
-      fields: form.fields.filter((f: { id: string; }) => f.id !== fieldId),
+      fields: form.fields.filter((f: { id: string }) => f.id !== fieldId),
     });
   };
 
@@ -413,7 +484,7 @@ export default function RegistrationFormBuilder({
   const loadDefaultFields = () => {
     // Email siempre es el primer campo (obligatorio del sistema)
     const emailField = { ...EMAIL_FIELD };
-    
+
     // Resto de campos por defecto
     const otherFields: FormField[] = DEFAULT_FIELDS.map((template, index) => ({
       id: `field_${Date.now()}_${index}`,
@@ -423,7 +494,7 @@ export default function RegistrationFormBuilder({
       options: template.options,
       order: index + 1, // Empezar desde 1 porque email es 0
     }));
-    
+
     setForm({ ...form, fields: [emailField, ...otherFields] });
   };
 
@@ -507,11 +578,7 @@ export default function RegistrationFormBuilder({
               <Text fw={600}>Campos del formulario</Text>
               <Group>
                 {form.fields.length === 0 && (
-                  <Button
-                    variant="light"
-                    size="sm"
-                    onClick={loadDefaultFields}
-                  >
+                  <Button variant="light" size="sm" onClick={loadDefaultFields}>
                     📋 Cargar campos predeterminados
                   </Button>
                 )}
@@ -529,13 +596,15 @@ export default function RegistrationFormBuilder({
             {/* Campos especiales pre-poblados */}
             {form.fields.length > 0 && (
               <Alert color="blue" variant="light">
-                <Text size="sm" fw={600} mb="xs">Agregar campos especiales pre-poblados:</Text>
+                <Text size="sm" fw={600} mb="xs">
+                  Agregar campos especiales pre-poblados:
+                </Text>
                 <Group gap="xs">
                   <Button
                     size="xs"
                     variant="light"
                     color="blue"
-                    onClick={() => addPrePopulatedField('pais')}
+                    onClick={() => addPrePopulatedField("pais")}
                   >
                     🌎 País
                   </Button>
@@ -543,7 +612,7 @@ export default function RegistrationFormBuilder({
                     size="xs"
                     variant="light"
                     color="cyan"
-                    onClick={() => addPrePopulatedField('estado', 'CO')}
+                    onClick={() => addPrePopulatedField("estado", "CO")}
                   >
                     📍 Estado/Depto CO
                   </Button>
@@ -551,7 +620,7 @@ export default function RegistrationFormBuilder({
                     size="xs"
                     variant="light"
                     color="teal"
-                    onClick={() => addPrePopulatedField('ciudad', 'CO')}
+                    onClick={() => addPrePopulatedField("ciudad", "CO")}
                   >
                     🏙️ Ciudad CO
                   </Button>
@@ -559,7 +628,7 @@ export default function RegistrationFormBuilder({
                     size="xs"
                     variant="light"
                     color="violet"
-                    onClick={() => addPrePopulatedField('pais-telefono')}
+                    onClick={() => addPrePopulatedField("pais-telefono")}
                   >
                     📞 País + Teléfono
                   </Button>
@@ -567,8 +636,7 @@ export default function RegistrationFormBuilder({
               </Alert>
             )}
 
-            <Group justify="space-between">
-            </Group>
+            <Group justify="space-between"></Group>
 
             {form.fields.length === 0 ? (
               <Alert color="gray">
@@ -638,7 +706,11 @@ export default function RegistrationFormBuilder({
                           color="blue"
                           size="sm"
                           onClick={() => editField(field)}
-                          title={field.id === EMAIL_FIELD.id ? 'Solo puedes editar si es identificador' : 'Editar campo'}
+                          title={
+                            field.id === EMAIL_FIELD.id
+                              ? "Solo puedes editar si es identificador"
+                              : "Editar campo"
+                          }
                         >
                           ✏️
                         </ActionIcon>
@@ -648,7 +720,11 @@ export default function RegistrationFormBuilder({
                           size="sm"
                           onClick={() => deleteField(String(field.id))}
                           disabled={field.id === EMAIL_FIELD.id}
-                          title={field.id === EMAIL_FIELD.id ? 'El email del sistema no se puede eliminar' : 'Eliminar campo'}
+                          title={
+                            field.id === EMAIL_FIELD.id
+                              ? "El email del sistema no se puede eliminar"
+                              : "Eliminar campo"
+                          }
                         >
                           🗑️
                         </ActionIcon>
@@ -671,7 +747,8 @@ export default function RegistrationFormBuilder({
         }}
         title={
           <Text fw={600}>
-            {editingField && form.fields.find((f: { id: any; }) => f.id === editingField.id)
+            {editingField &&
+            form.fields.find((f: { id: any }) => f.id === editingField.id)
               ? "Editar campo"
               : "Nuevo campo"}
           </Text>
@@ -684,17 +761,22 @@ export default function RegistrationFormBuilder({
             {editingField.id === EMAIL_FIELD.id ? (
               <>
                 <Alert color="blue" variant="light">
-                  El campo de <strong>email del sistema</strong> es obligatorio y no se pueden modificar sus propiedades básicas.
-                  Solo puedes configurarlo como campo identificador.
+                  El campo de <strong>email del sistema</strong> es obligatorio
+                  y no se pueden modificar sus propiedades básicas. Solo puedes
+                  configurarlo como campo identificador.
                 </Alert>
-                
+
                 <Paper p="md" withBorder>
                   <Stack gap="sm">
                     <Group>
                       <Text fw={500}>Correo electrónico</Text>
-                      <Badge color="orange" size="xs">Campo del sistema</Badge>
+                      <Badge color="orange" size="xs">
+                        Campo del sistema
+                      </Badge>
                     </Group>
-                    <Text size="sm" c="dimmed">Tipo: Email | Requerido: Sí</Text>
+                    <Text size="sm" c="dimmed">
+                      Tipo: Email | Requerido: Sí
+                    </Text>
                   </Stack>
                 </Paper>
 
@@ -714,461 +796,563 @@ export default function RegistrationFormBuilder({
 
                 <Alert color="violet" variant="light">
                   <Text size="sm">
-                    <strong>Recomendación:</strong> Activa esta opción si quieres que el email sea usado para verificar registros previos.
-                    Los usuarios podrán ingresar su email para verificar si ya están registrados en la organización o evento.
+                    <strong>Recomendación:</strong> Activa esta opción si
+                    quieres que el email sea usado para verificar registros
+                    previos. Los usuarios podrán ingresar su email para
+                    verificar si ya están registrados en la organización o
+                    evento.
                   </Text>
                 </Alert>
               </>
             ) : (
               <>
-            {/* Configuración Básica */}
-            <Divider label="Configuración Básica" labelPosition="center" />
-            
-            <Select
-              label="Tipo de campo"
-              value={editingField.type}
-              onChange={(value) =>
-                setEditingField({
-                  ...editingField,
-                  type: value as FormFieldType,
-                })
-              }
-              data={FIELD_TYPES}
-              required
-            />
-
-            <TextInput
-              label="Etiqueta"
-              value={editingField.label}
-              onChange={(e) =>
-                setEditingField({
-                  ...editingField,
-                  label: e.currentTarget.value,
-                })
-              }
-              placeholder="Nombre del campo"
-              required
-            />
-
-            {editingField.type !== "checkbox" && (
-              <TextInput
-                label="Placeholder"
-                value={editingField.placeholder || ""}
-                onChange={(e) =>
-                  setEditingField({
-                    ...editingField,
-                    placeholder: e.currentTarget.value,
-                  })
-                }
-                placeholder="Texto de ayuda dentro del campo"
-              />
-            )}
-
-            <Textarea
-              label="Texto de ayuda"
-              description="Mensaje que aparece debajo del campo para guiar al usuario"
-              value={editingField.helpText || ""}
-              onChange={(e) =>
-                setEditingField({
-                  ...editingField,
-                  helpText: e.currentTarget.value,
-                })
-              }
-              placeholder="Ej: Si su cédula contiene letras, ingrese solo los números"
-              rows={2}
-            />
-
-            <Group grow>
-              <Switch
-                label="Campo requerido"
-                checked={editingField.required}
-                onChange={(e) =>
-                  setEditingField({
-                    ...editingField,
-                    required: e.currentTarget.checked,
-                  })
-                }
-              />
-              <Switch
-                label="Campo oculto"
-                description="No visible para el usuario"
-                checked={editingField.hidden || false}
-                onChange={(e) =>
-                  setEditingField({
-                    ...editingField,
-                    hidden: e.currentTarget.checked,
-                  })
-                }
-              />
-            </Group>
-
-            <Switch
-              label="Campo identificador"
-              description="Usar para búsqueda de registros existentes (ej: email, número de ID)"
-              checked={editingField.isIdentifier || false}
-              onChange={(e) =>
-                setEditingField({
-                  ...editingField,
-                  isIdentifier: e.currentTarget.checked,
-                })
-              }
-            />
-
-            {editingField.type !== "checkbox" && (
-              <TextInput
-                label="Valor por defecto"
-                description="Valor que se asigna automáticamente"
-                value={editingField.defaultValue as string || ""}
-                onChange={(e) =>
-                  setEditingField({
-                    ...editingField,
-                    defaultValue: e.currentTarget.value,
-                  })
-                }
-                placeholder="Ej: No aplica"
-              />
-            )}
-
-            {/* Opciones para Select */}
-            {editingField.type === "select" && (
-              <>
-                <Divider label="Opciones del Selector" labelPosition="center" />
-                
-                <Textarea
-                  label="Opciones"
-                  description="Formato: valor|etiqueta|valorPadre (uno por línea). El valorPadre es opcional para opciones en cascada."
-                  value={
-                    editingField.options
-                      ?.map((o: { value: any; label: any; parentValue?: string; }) => `${o.value}|${o.label}${o.parentValue ? '|' + o.parentValue : ''}`)
-                      .join("\n") || ""
-                  }
-                  onChange={(e) => {
-                    const lines = e.currentTarget.value.split("\n");
-                    const options = lines
-                      .filter((line) => line.trim())
-                      .map((line) => {
-                        const parts = line.split("|");
-                        return {
-                          value: parts[0]?.trim() || "",
-                          label: parts[1]?.trim() || parts[0]?.trim() || "",
-                          parentValue: parts[2]?.trim() || undefined,
-                        };
-                      });
-                    setEditingField({ ...editingField, options });
-                  }}
-                  placeholder="colombia|Colombia&#10;endocrinologia|Endocrinología|medicina-interna"
-                  rows={6}
-                />
+                {/* Configuración Básica */}
+                <Divider label="Configuración Básica" labelPosition="center" />
 
                 <Select
-                  label="Depende de (campo padre)"
-                  description="Si seleccionas un campo padre, este selector mostrará solo las opciones filtradas"
-                  value={editingField.dependsOn || ""}
+                  label="Tipo de campo"
+                  value={editingField.type}
                   onChange={(value) =>
                     setEditingField({
                       ...editingField,
-                      dependsOn: value || undefined,
+                      type: value as FormFieldType,
                     })
                   }
-                  data={[
-                    { value: "", label: "-- Ninguno --" },
-                    ...form.fields
-                      .filter((f: { id: any; type: string; }) => f.id !== editingField.id && f.type === "select")
-                      .map((f: { id: any; label: any; }) => ({ value: f.id, label: f.label })),
-                  ]}
-                  clearable
+                  data={FIELD_TYPES}
+                  required
                 />
-              </>
-            )}
 
-            {/* Validaciones */}
-            <Divider label="Validaciones" labelPosition="center" />
-
-            {(editingField.type === "text" || editingField.type === "email" || editingField.type === "tel") && (
-              <>
                 <TextInput
-                  label="Patrón RegEx"
-                  description="Expresión regular para validar el formato (ej: ^[0-9]+$ para solo números)"
-                  value={editingField.validation?.pattern || ""}
+                  label="Etiqueta"
+                  value={editingField.label}
                   onChange={(e) =>
                     setEditingField({
                       ...editingField,
-                      validation: {
-                        ...editingField.validation,
-                        pattern: e.currentTarget.value,
-                      },
+                      label: e.currentTarget.value,
                     })
                   }
-                  placeholder="^[a-zA-Z]+$"
+                  placeholder="Nombre del campo"
+                  required
+                />
+
+                {editingField.type !== "checkbox" && (
+                  <TextInput
+                    label="Placeholder"
+                    value={editingField.placeholder || ""}
+                    onChange={(e) =>
+                      setEditingField({
+                        ...editingField,
+                        placeholder: e.currentTarget.value,
+                      })
+                    }
+                    placeholder="Texto de ayuda dentro del campo"
+                  />
+                )}
+
+                <Textarea
+                  label="Texto de ayuda"
+                  description="Mensaje que aparece debajo del campo para guiar al usuario"
+                  value={editingField.helpText || ""}
+                  onChange={(e) =>
+                    setEditingField({
+                      ...editingField,
+                      helpText: e.currentTarget.value,
+                    })
+                  }
+                  placeholder="Ej: Si su cédula contiene letras, ingrese solo los números"
+                  rows={2}
                 />
 
                 <Group grow>
-                  <NumberInput
-                    label="Longitud mínima"
-                    value={editingField.validation?.minLength}
-                    onChange={(value) =>
+                  <Switch
+                    label="Campo requerido"
+                    checked={editingField.required}
+                    onChange={(e) =>
                       setEditingField({
                         ...editingField,
-                        validation: {
-                          ...editingField.validation,
-                          minLength: value as number,
-                        },
+                        required: e.currentTarget.checked,
                       })
                     }
-                    min={0}
                   />
-                  <NumberInput
-                    label="Longitud máxima"
-                    value={editingField.validation?.maxLength}
-                    onChange={(value) =>
+                  <Switch
+                    label="Campo oculto"
+                    description="No visible para el usuario"
+                    checked={editingField.hidden || false}
+                    onChange={(e) =>
                       setEditingField({
                         ...editingField,
-                        validation: {
-                          ...editingField.validation,
-                          maxLength: value as number,
-                        },
+                        hidden: e.currentTarget.checked,
                       })
                     }
-                    min={0}
                   />
                 </Group>
-              </>
-            )}
 
-            {editingField.type === "number" && (
-              <Group grow>
-                <NumberInput
-                  label="Valor mínimo"
-                  value={editingField.validation?.min}
-                  onChange={(value) =>
+                <Switch
+                  label="Campo identificador"
+                  description="Usar para búsqueda de registros existentes (ej: email, número de ID)"
+                  checked={editingField.isIdentifier || false}
+                  onChange={(e) =>
                     setEditingField({
                       ...editingField,
-                      validation: {
-                        ...editingField.validation,
-                        min: value as number,
-                      },
+                      isIdentifier: e.currentTarget.checked,
                     })
                   }
                 />
-                <NumberInput
-                  label="Valor máximo"
-                  value={editingField.validation?.max}
-                  onChange={(value) =>
-                    setEditingField({
-                      ...editingField,
-                      validation: {
-                        ...editingField.validation,
-                        max: value as number,
-                      },
-                    })
-                  }
+
+                {editingField.type !== "checkbox" && (
+                  <TextInput
+                    label="Valor por defecto"
+                    description="Valor que se asigna automáticamente"
+                    value={(editingField.defaultValue as string) || ""}
+                    onChange={(e) =>
+                      setEditingField({
+                        ...editingField,
+                        defaultValue: e.currentTarget.value,
+                      })
+                    }
+                    placeholder="Ej: No aplica"
+                  />
+                )}
+
+                {/* Opciones para Select */}
+                {editingField.type === "select" && (
+                  <>
+                    <Divider
+                      label="Opciones del Selector"
+                      labelPosition="center"
+                    />
+
+                    <Textarea
+                      label="Opciones"
+                      description="Formato: valor|etiqueta|valorPadre (uno por línea). El valorPadre es opcional para opciones en cascada."
+                      value={
+                        editingField.options
+                          ?.map(
+                            (o: {
+                              value: any;
+                              label: any;
+                              parentValue?: string;
+                            }) =>
+                              `${o.value}|${o.label}${
+                                o.parentValue ? "|" + o.parentValue : ""
+                              }`
+                          )
+                          .join("\n") || ""
+                      }
+                      onChange={(e) => {
+                        const lines = e.currentTarget.value.split("\n");
+                        const options = lines
+                          .filter((line) => line.trim())
+                          .map((line) => {
+                            const parts = line.split("|");
+                            return {
+                              value: parts[0]?.trim() || "",
+                              label: parts[1]?.trim() || parts[0]?.trim() || "",
+                              parentValue: parts[2]?.trim() || undefined,
+                            };
+                          });
+                        setEditingField({ ...editingField, options });
+                      }}
+                      placeholder="colombia|Colombia&#10;endocrinologia|Endocrinología|medicina-interna"
+                      rows={6}
+                    />
+
+                    <Select
+                      label="Depende de (campo padre)"
+                      description="Si seleccionas un campo padre, este selector mostrará solo las opciones filtradas"
+                      value={editingField.dependsOn || ""}
+                      onChange={(value) =>
+                        setEditingField({
+                          ...editingField,
+                          dependsOn: value || undefined,
+                        })
+                      }
+                      data={[
+                        { value: "", label: "-- Ninguno --" },
+                        ...form.fields
+                          .filter(
+                            (f: { id: any; type: string }) =>
+                              f.id !== editingField.id && f.type === "select"
+                          )
+                          .map((f: { id: any; label: any }) => ({
+                            value: f.id,
+                            label: f.label,
+                          })),
+                      ]}
+                      clearable
+                    />
+                  </>
+                )}
+
+                {/* Validaciones */}
+                <Divider label="Validaciones" labelPosition="center" />
+
+                {(editingField.type === "text" ||
+                  editingField.type === "email" ||
+                  editingField.type === "tel") && (
+                  <>
+                    <TextInput
+                      label="Patrón RegEx"
+                      description="Expresión regular para validar el formato (ej: ^[0-9]+$ para solo números)"
+                      value={editingField.validation?.pattern || ""}
+                      onChange={(e) =>
+                        setEditingField({
+                          ...editingField,
+                          validation: {
+                            ...editingField.validation,
+                            pattern: e.currentTarget.value,
+                          },
+                        })
+                      }
+                      placeholder="^[a-zA-Z]+$"
+                    />
+
+                    <Group grow>
+                      <NumberInput
+                        label="Longitud mínima"
+                        value={editingField.validation?.minLength}
+                        onChange={(value) =>
+                          setEditingField({
+                            ...editingField,
+                            validation: {
+                              ...editingField.validation,
+                              minLength: value as number,
+                            },
+                          })
+                        }
+                        min={0}
+                      />
+                      <NumberInput
+                        label="Longitud máxima"
+                        value={editingField.validation?.maxLength}
+                        onChange={(value) =>
+                          setEditingField({
+                            ...editingField,
+                            validation: {
+                              ...editingField.validation,
+                              maxLength: value as number,
+                            },
+                          })
+                        }
+                        min={0}
+                      />
+                    </Group>
+                  </>
+                )}
+
+                {editingField.type === "number" && (
+                  <Group grow>
+                    <NumberInput
+                      label="Valor mínimo"
+                      value={editingField.validation?.min}
+                      onChange={(value) =>
+                        setEditingField({
+                          ...editingField,
+                          validation: {
+                            ...editingField.validation,
+                            min: value as number,
+                          },
+                        })
+                      }
+                    />
+                    <NumberInput
+                      label="Valor máximo"
+                      value={editingField.validation?.max}
+                      onChange={(value) =>
+                        setEditingField({
+                          ...editingField,
+                          validation: {
+                            ...editingField.validation,
+                            max: value as number,
+                          },
+                        })
+                      }
+                    />
+                  </Group>
+                )}
+
+                {/* Lógica Condicional */}
+                <Divider
+                  label="Lógica Condicional (Avanzado)"
+                  labelPosition="center"
                 />
-              </Group>
-            )}
 
-            {/* Lógica Condicional */}
-            <Divider label="Lógica Condicional (Avanzado)" labelPosition="center" />
-            
-            <Alert color="blue" variant="light">
-              <Text size="sm">
-                <strong>Mostrar/ocultar dinámicamente:</strong> Configura cuándo debe aparecer este campo según el valor de otros campos.
-              </Text>
-            </Alert>
+                <Alert color="blue" variant="light">
+                  <Text size="sm">
+                    <strong>Mostrar/ocultar dinámicamente:</strong> Configura
+                    cuándo debe aparecer este campo según el valor de otros
+                    campos.
+                  </Text>
+                </Alert>
 
-            <Select
-              label="Acción condicional"
-              description="¿Qué hacer cuando se cumplan las condiciones?"
-              value={editingField.conditionalLogic?.[0]?.action || ""}
-              onChange={(value) => {
-                if (!value) {
-                  setEditingField({
-                    ...editingField,
-                    conditionalLogic: undefined,
-                  });
-                  return;
-                }
-                
-                const existingConditions = editingField.conditionalLogic?.[0]?.conditions || [];
-                const existingLogic = editingField.conditionalLogic?.[0]?.logic || 'and';
-                
-                setEditingField({
-                  ...editingField,
-                  conditionalLogic: [{
-                    action: value as 'show' | 'hide',
-                    conditions: existingConditions.length > 0 ? existingConditions : [{
-                      field: '',
-                      operator: 'equals' as const,
-                      value: '',
-                    }],
-                    logic: existingLogic,
-                  }],
-                });
-              }}
-              data={[
-                { value: "", label: "-- Sin lógica condicional --" },
-                { value: "show", label: "Mostrar cuando..." },
-                { value: "hide", label: "Ocultar cuando..." },
-              ]}
-              clearable
-            />
-
-            {editingField.conditionalLogic && editingField.conditionalLogic.length > 0 && (
-              <>
                 <Select
-                  label="Lógica de condiciones"
-                  description="¿Cómo evaluar múltiples condiciones?"
-                  value={editingField.conditionalLogic[0]?.logic || "and"}
+                  label="Acción condicional"
+                  description="¿Qué hacer cuando se cumplan las condiciones?"
+                  value={editingField.conditionalLogic?.[0]?.action || ""}
                   onChange={(value) => {
-                    if (!editingField.conditionalLogic) return;
-                    
+                    if (!value) {
+                      setEditingField({
+                        ...editingField,
+                        conditionalLogic: undefined,
+                      });
+                      return;
+                    }
+
+                    const existingConditions =
+                      editingField.conditionalLogic?.[0]?.conditions || [];
+                    const existingLogic =
+                      editingField.conditionalLogic?.[0]?.logic || "and";
+
                     setEditingField({
                       ...editingField,
-                      conditionalLogic: [{
-                        ...editingField.conditionalLogic[0],
-                        logic: value as 'and' | 'or',
-                      }],
+                      conditionalLogic: [
+                        {
+                          action: value as "show" | "hide",
+                          conditions:
+                            existingConditions.length > 0
+                              ? existingConditions
+                              : [
+                                  {
+                                    field: "",
+                                    operator: "equals" as const,
+                                    value: "",
+                                  },
+                                ],
+                          logic: existingLogic,
+                        },
+                      ],
                     });
                   }}
                   data={[
-                    { value: "and", label: "Y (todas las condiciones deben cumplirse)" },
-                    { value: "or", label: "O (al menos una condición debe cumplirse)" },
+                    { value: "", label: "-- Sin lógica condicional --" },
+                    { value: "show", label: "Mostrar cuando..." },
+                    { value: "hide", label: "Ocultar cuando..." },
                   ]}
+                  clearable
                 />
 
-                <Stack gap="xs">
-                  {editingField.conditionalLogic[0]?.conditions.map((condition, index: number) => (
-                    <Paper key={index} p="md" withBorder>
+                {editingField.conditionalLogic &&
+                  editingField.conditionalLogic.length > 0 && (
+                    <>
+                      <Select
+                        label="Lógica de condiciones"
+                        description="¿Cómo evaluar múltiples condiciones?"
+                        value={editingField.conditionalLogic[0]?.logic || "and"}
+                        onChange={(value) => {
+                          if (!editingField.conditionalLogic) return;
+
+                          setEditingField({
+                            ...editingField,
+                            conditionalLogic: [
+                              {
+                                ...editingField.conditionalLogic[0],
+                                logic: value as "and" | "or",
+                              },
+                            ],
+                          });
+                        }}
+                        data={[
+                          {
+                            value: "and",
+                            label: "Y (todas las condiciones deben cumplirse)",
+                          },
+                          {
+                            value: "or",
+                            label: "O (al menos una condición debe cumplirse)",
+                          },
+                        ]}
+                      />
+
                       <Stack gap="xs">
-                        <Group justify="space-between">
-                          <Text size="sm" fw={500}>Condición {index + 1}</Text>
-                          {editingField.conditionalLogic![0].conditions.length > 1 && (
-                            <ActionIcon
-                              color="red"
-                              variant="subtle"
-                              onClick={() => {
-                                if (!editingField.conditionalLogic) return;
-                                const newConditions = [...editingField.conditionalLogic[0].conditions];
-                                newConditions.splice(index, 1);
-                                setEditingField({
-                                  ...editingField,
-                                  conditionalLogic: [{
-                                    ...editingField.conditionalLogic[0],
-                                    conditions: newConditions,
-                                  }],
-                                });
-                              }}
-                            >
-                              <IconTrash size={16} />
-                            </ActionIcon>
-                          )}
-                        </Group>
-                  
-                        <Select
-                          label="Campo a evaluar"
-                          description="¿Qué campo quieres comprobar?"
-                          value={condition.field || ""}
-                          onChange={(value) => {
-                            if (!value || !editingField.conditionalLogic) return;
-                            const newConditions = [...editingField.conditionalLogic[0].conditions];
-                            newConditions[index] = { ...condition, field: value };
+                        {editingField.conditionalLogic[0]?.conditions.map(
+                          (condition, index: number) => (
+                            <Paper key={index} p="md" withBorder>
+                              <Stack gap="xs">
+                                <Group justify="space-between">
+                                  <Text size="sm" fw={500}>
+                                    Condición {index + 1}
+                                  </Text>
+                                  {editingField.conditionalLogic![0].conditions
+                                    .length > 1 && (
+                                    <ActionIcon
+                                      color="red"
+                                      variant="subtle"
+                                      onClick={() => {
+                                        if (!editingField.conditionalLogic)
+                                          return;
+                                        const newConditions = [
+                                          ...editingField.conditionalLogic[0]
+                                            .conditions,
+                                        ];
+                                        newConditions.splice(index, 1);
+                                        setEditingField({
+                                          ...editingField,
+                                          conditionalLogic: [
+                                            {
+                                              ...editingField
+                                                .conditionalLogic[0],
+                                              conditions: newConditions,
+                                            },
+                                          ],
+                                        });
+                                      }}
+                                    >
+                                      <IconTrash size={16} />
+                                    </ActionIcon>
+                                  )}
+                                </Group>
+
+                                <Select
+                                  label="Campo a evaluar"
+                                  description="¿Qué campo quieres comprobar?"
+                                  value={condition.field || ""}
+                                  onChange={(value) => {
+                                    if (
+                                      !value ||
+                                      !editingField.conditionalLogic
+                                    )
+                                      return;
+                                    const newConditions = [
+                                      ...editingField.conditionalLogic[0]
+                                        .conditions,
+                                    ];
+                                    newConditions[index] = {
+                                      ...condition,
+                                      field: value,
+                                    };
+                                    setEditingField({
+                                      ...editingField,
+                                      conditionalLogic: [
+                                        {
+                                          ...editingField.conditionalLogic[0],
+                                          conditions: newConditions,
+                                        },
+                                      ],
+                                    });
+                                  }}
+                                  data={form.fields
+                                    .filter(
+                                      (f: { id: any }) =>
+                                        f.id !== editingField.id
+                                    )
+                                    .map((f: { id: any; label: any }) => ({
+                                      value: f.id,
+                                      label: f.label,
+                                    }))}
+                                />
+
+                                <Group grow>
+                                  <Select
+                                    label="Operador"
+                                    value={condition.operator || "equals"}
+                                    onChange={(value) => {
+                                      if (!editingField.conditionalLogic)
+                                        return;
+                                      const newConditions = [
+                                        ...editingField.conditionalLogic[0]
+                                          .conditions,
+                                      ];
+                                      newConditions[index] = {
+                                        ...condition,
+                                        operator: value as
+                                          | "equals"
+                                          | "notEquals",
+                                      };
+                                      setEditingField({
+                                        ...editingField,
+                                        conditionalLogic: [
+                                          {
+                                            ...editingField.conditionalLogic[0],
+                                            conditions: newConditions,
+                                          },
+                                        ],
+                                      });
+                                    }}
+                                    data={[
+                                      { value: "equals", label: "Es igual a" },
+                                      {
+                                        value: "notEquals",
+                                        label: "Es diferente de",
+                                      },
+                                    ]}
+                                  />
+
+                                  <TextInput
+                                    label="Valor"
+                                    description="Valor a comparar"
+                                    value={
+                                      typeof condition.value === "string"
+                                        ? condition.value
+                                        : String(condition.value ?? "")
+                                    }
+                                    onChange={(e) => {
+                                      if (!editingField.conditionalLogic)
+                                        return;
+                                      const newValue = e.currentTarget.value;
+                                      const newConditions = [
+                                        ...editingField.conditionalLogic[0]
+                                          .conditions,
+                                      ];
+                                      newConditions[index] = {
+                                        ...condition,
+                                        value: newValue,
+                                      };
+                                      setEditingField({
+                                        ...editingField,
+                                        conditionalLogic: [
+                                          {
+                                            ...editingField.conditionalLogic[0],
+                                            conditions: newConditions,
+                                          },
+                                        ],
+                                      });
+                                    }}
+                                    placeholder="Ej: CO, medico_especialista"
+                                  />
+                                </Group>
+                              </Stack>
+                            </Paper>
+                          )
+                        )}
+
+                        <Button
+                          variant="light"
+                          leftSection={<IconPlus size={16} />}
+                          onClick={() => {
+                            if (!editingField.conditionalLogic) return;
                             setEditingField({
                               ...editingField,
-                              conditionalLogic: [{
-                                ...editingField.conditionalLogic[0],
-                                conditions: newConditions,
-                              }],
+                              conditionalLogic: [
+                                {
+                                  ...editingField.conditionalLogic[0],
+                                  conditions: [
+                                    ...editingField.conditionalLogic[0]
+                                      .conditions,
+                                    {
+                                      field: "",
+                                      operator: "equals" as const,
+                                      value: "",
+                                    },
+                                  ],
+                                },
+                              ],
                             });
                           }}
-                          data={form.fields
-                            .filter((f: { id: any; }) => f.id !== editingField.id)
-                            .map((f: { id: any; label: any; }) => ({ value: f.id, label: f.label }))}
-                        />
-                  
-                        <Group grow>
-                          <Select
-                            label="Operador"
-                            value={condition.operator || "equals"}
-                            onChange={(value) => {
-                              if (!editingField.conditionalLogic) return;
-                              const newConditions = [...editingField.conditionalLogic[0].conditions];
-                              newConditions[index] = { 
-                                ...condition, 
-                                operator: value as 'equals' | 'notEquals' 
-                              };
-                              setEditingField({
-                                ...editingField,
-                                conditionalLogic: [{
-                                  ...editingField.conditionalLogic[0],
-                                  conditions: newConditions,
-                                }],
-                              });
-                            }}
-                            data={[
-                              { value: "equals", label: "Es igual a" },
-                              { value: "notEquals", label: "Es diferente de" },
-                            ]}
-                          />
-                  
-                          <TextInput
-                            label="Valor"
-                            description="Valor a comparar"
-                            value={typeof condition.value === "string" ? condition.value : String(condition.value ?? "")}
-                            onChange={(e) => {
-                              if (!editingField.conditionalLogic) return;
-                              const newValue = e.currentTarget.value;
-                              const newConditions = [...editingField.conditionalLogic[0].conditions];
-                              newConditions[index] = { 
-                                ...condition, 
-                                value: newValue
-                              };
-                              setEditingField({
-                                ...editingField,
-                                conditionalLogic: [{
-                                  ...editingField.conditionalLogic[0],
-                                  conditions: newConditions,
-                                }],
-                              });
-                            }}
-                            placeholder="Ej: CO, medico_especialista"
-                          />
-                        </Group>
+                        >
+                          Agregar condición
+                        </Button>
                       </Stack>
-                    </Paper>
-                  ))}
 
-                  <Button
-                    variant="light"
-                    leftSection={<IconPlus size={16} />}
-                    onClick={() => {
-                      if (!editingField.conditionalLogic) return;
-                      setEditingField({
-                        ...editingField,
-                        conditionalLogic: [{
-                          ...editingField.conditionalLogic[0],
-                          conditions: [
-                            ...editingField.conditionalLogic[0].conditions,
-                            {
-                              field: '',
-                              operator: 'equals' as const,
-                              value: '',
-                            },
-                          ],
-                        }],
-                      });
-                    }}
-                  >
-                    Agregar condición
-                  </Button>
-                </Stack>
-
-                <Alert color="cyan" variant="light">
-                  <Text size="xs">
-                    <strong>Ejemplo:</strong> Mostrar "Área de especialidad" cuando "Perfil" es igual a "medico_especialista" O "residente"
-                  </Text>
-                </Alert>
+                      <Alert color="cyan" variant="light">
+                        <Text size="xs">
+                          <strong>Ejemplo:</strong> Mostrar "Área de
+                          especialidad" cuando "Perfil" es igual a
+                          "medico_especialista" O "residente"
+                        </Text>
+                      </Alert>
+                    </>
+                  )}
               </>
-            )}
-            </>
             )}
 
             {/* Botones siempre visibles (fuera del condicional) */}

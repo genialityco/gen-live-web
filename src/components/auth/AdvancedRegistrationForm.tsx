@@ -98,26 +98,20 @@ function evaluateRule(rule: ConditionalRule, values: FormValues): boolean {
 
 // Determina si el campo se debe mostrar
 function shouldShowField(field: FormField, values: FormValues): boolean {
-  // Si es hidden hard, no se muestra nunca
   if (field.hidden) return false;
 
   const logic = field.conditionalLogic as ConditionalRule[] | null | undefined;
-  if (!logic || logic.length === 0) {
-    // Sin lógica condicional: visible por defecto
-    return true;
-  }
+  if (!logic || logic.length === 0) return true;
 
   const showRules = logic.filter((r) => r.action === "show");
   const hideRules = logic.filter((r) => r.action === "hide");
 
   let visible = true;
 
-  // Si hay reglas de "show", solo se muestra si al menos una se cumple
   if (showRules.length > 0) {
     visible = showRules.some((rule) => evaluateRule(rule, values));
   }
 
-  // Si hay reglas de "hide" y alguna se cumple, se oculta
   if (hideRules.length > 0) {
     const mustHide = hideRules.some((rule) => evaluateRule(rule, values));
     if (mustHide) visible = false;
@@ -497,16 +491,47 @@ export function AdvancedRegistrationForm({
           {sortedFields.map((field) => {
             const currentValues = form.values;
 
+            // 1. Si el campo depende de otro, heredamos visibilidad
+            if (field.dependsOn) {
+              const parentField = sortedFields.find(
+                (f) => f.id === field.dependsOn
+              );
+
+              if (parentField) {
+                const parentVisible = shouldShowField(
+                  parentField,
+                  currentValues
+                );
+                const parentValue = currentValues[parentField.id];
+
+                // Si el padre está oculto o sin valor, este campo también se oculta
+                if (
+                  !parentVisible ||
+                  parentValue === "" ||
+                  parentValue === null ||
+                  parentValue === undefined
+                ) {
+                  return null;
+                }
+              }
+            }
+
+            // 2. Evaluar lógica propia del campo
             const visible = shouldShowField(field, currentValues);
             if (!visible) return null;
 
             const filteredOptions = getFilteredOptions(field, currentValues);
 
+            const inputProps =
+              field.type === "checkbox"
+                ? form.getInputProps(field.id, { type: "checkbox" })
+                : form.getInputProps(field.id);
+
             return (
               <FormFieldComponent
                 key={field.id}
                 field={field}
-                inputProps={form.getInputProps(field.id)}
+                inputProps={inputProps}
                 filteredOptions={filteredOptions}
               />
             );
