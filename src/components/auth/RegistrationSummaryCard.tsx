@@ -70,7 +70,6 @@ export function RegistrationSummaryCard({
     return null;
   };
 
-  // Función para manejar "Continuar al evento"
   const handleContinueToEvent = async () => {
     try {
       setLoading(true);
@@ -89,7 +88,6 @@ export function RegistrationSummaryCard({
         return;
       }
 
-      // Crear sesión anónima primero
       const userUID = await createAnonymousSession(attendeeEmail);
       console.log(
         "🔐 Created anonymous session with UID:",
@@ -101,7 +99,6 @@ export function RegistrationSummaryCard({
       localStorage.setItem("user-email", attendeeEmail);
       localStorage.setItem(`uid-${userUID}-email`, attendeeEmail);
 
-      // Si no está registrado en este evento específico, crear EventUser con Firebase UID
       if (!isRegistered) {
         await registerToEventWithFirebase(eventId, {
           email: attendeeEmail,
@@ -117,13 +114,11 @@ export function RegistrationSummaryCard({
           color: "green",
         });
       } else {
-        // Si ya está registrado, solo asociar Firebase UID
         try {
           await associateFirebaseUID(eventId, attendeeEmail, userUID);
           console.log("🔗 Associated Firebase UID with existing EventUser");
         } catch (error) {
           console.error("⚠️ Failed to associate Firebase UID:", error);
-          // No fallamos aquí, el usuario ya está registrado
         }
       }
 
@@ -140,61 +135,86 @@ export function RegistrationSummaryCard({
     }
   };
 
-  // Ordenar campos según el orden del formulario
   const sortedFields = [...formConfig.fields].sort((a, b) => a.order - b.order);
 
-  // Transformar valores a etiquetas legibles usando la función utilitaria
   const readableData = transformRegistrationDataToLabels(
     attendee.registrationData,
     formConfig.fields
   );
 
   return (
-    <Card shadow="md" padding="xl" radius="lg" withBorder>
-      <Stack gap="lg">
-        <Stack gap="sm" ta="center">
-          <Title order={2}>Tu información de registro</Title>
+    <Card shadow="sm" padding="lg" radius="md" withBorder>
+      <Stack gap="md">
+        {/* Header compacto */}
+        <Group justify="space-between" align="flex-start">
+          <Stack gap={2} style={{ flex: 1, minWidth: 0 }}>
+            <Title order={4}>Resumen de tu registro</Title>
+            <Text size="xs" c="dimmed">
+              Revisa que tus datos estén correctos antes de entrar al evento.
+            </Text>
+          </Stack>
 
           {isRegistered ? (
             <Badge
               color="green"
-              size="lg"
-              leftSection={<IconCheck size={16} />}
+              size="sm"
+              leftSection={<IconCheck size={14} />}
             >
-              Ya estás registrado en este evento
+              Registrado
             </Badge>
           ) : (
-            <Badge color="blue" size="lg">
+            <Badge color="blue" size="sm">
               Registro encontrado
             </Badge>
           )}
+        </Group>
 
-          <Text size="sm" c="dimmed">
-            Verifica que tu información esté correcta antes de continuar:
-          </Text>
-        </Stack>
-
-        {/* Resumen de datos */}
-        <Paper p="lg" withBorder radius="md" maw={600} mx="auto" w="100%">
-          <Stack gap="md">
+        {/* Resumen de datos, compacto */}
+        <Paper
+          p="md"
+          withBorder
+          radius="md"
+          w="100%"
+          style={{ background: "var(--mantine-color-gray-0)" }}
+        >
+          <Stack gap={6}>
             {sortedFields.map((field) => {
               const originalValue = attendee.registrationData[field.id];
               const displayValue = readableData[field.id];
 
-              // No mostrar campos ocultos o auto-calculados en el resumen
               if (field.hidden || !originalValue) return null;
 
               return (
-                <Group key={field.id} justify="space-between" wrap="nowrap">
+                <Group
+                  key={field.id}
+                  justify="space-between"
+                  align="flex-start"
+                  wrap="nowrap"
+                  gap={8}
+                >
                   <Text
-                    size="sm"
+                    size="xs"
                     fw={500}
                     c="dimmed"
-                    style={{ flex: "0 0 40%" }}
+                    style={{
+                      flex: "0 0 40%",
+                      whiteSpace: "nowrap",
+                      textOverflow: "ellipsis",
+                      overflow: "hidden",
+                    }}
+                    title={field.label} // Tooltip nativo al pasar el mouse
                   >
-                    {field.label}:
+                    {field.label}
                   </Text>
-                  <Text size="sm" style={{ flex: 1, textAlign: "right" }}>
+
+                  <Text
+                    size="xs"
+                    style={{
+                      flex: 1,
+                      textAlign: "right",
+                      wordBreak: "break-word",
+                    }}
+                  >
                     {displayValue}
                   </Text>
                 </Group>
@@ -203,30 +223,34 @@ export function RegistrationSummaryCard({
           </Stack>
         </Paper>
 
-        <Divider />
+        <Divider my={4} />
 
-        {/* Opciones */}
-        <Stack gap="md" maw={400} mx="auto" w="100%">
+        {/* Acciones más compactas */}
+        <Stack gap={6} w="100%">
           <Button
-            size="lg"
-            rightSection={<IconArrowRight size={20} />}
+            size="sm"
+            rightSection={<IconArrowRight size={16} />}
             onClick={handleContinueToEvent}
             loading={loading}
+            fullWidth
           >
-            Continuar al evento
+            Entrar al evento
           </Button>
 
-          <Button
-            variant="light"
-            leftSection={<IconEdit size={20} />}
-            onClick={onUpdateInfo}
-          >
-            Actualizar mi información
-          </Button>
+          <Group justify="space-between" gap={4}>
+            <Button
+              variant="subtle"
+              size="xs"
+              leftSection={<IconEdit size={14} />}
+              onClick={onUpdateInfo}
+            >
+              Actualizar información
+            </Button>
 
-          <Button variant="subtle" size="sm" onClick={onBack}>
-            ← Volver
-          </Button>
+            <Button variant="subtle" size="xs" onClick={onBack}>
+              ← Volver
+            </Button>
+          </Group>
         </Stack>
       </Stack>
     </Card>

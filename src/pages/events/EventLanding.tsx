@@ -22,6 +22,8 @@ import { useAuth } from "../../auth/AuthProvider";
 import { useEventRealtimeData } from "../../hooks/useEventRealtimeData";
 import { BrandedHeader, BrandedFooter } from "../../components/branding";
 import UserSession from "../../components/auth/UserSession";
+import { signOut } from "firebase/auth";
+import { auth } from "../../core/firebase";
 
 export default function EventLanding() {
   const { slug, eventSlug } = useParams<{ slug: string; eventSlug: string }>();
@@ -206,11 +208,33 @@ export default function EventLanding() {
       }
     }
 
-    // 🔵 4) Usuario logueado pero sin OrgAttendee/EventUser → ir al flujo de registro del evento
+    // 4) Usuario logueado pero sin OrgAttendee/EventUser → forzar logout y limpiar sesión
     console.log(
-      "🎟️ EventLanding: Logged user but no registration, going to /register"
+      "EventLanding: Logged user but no OrgAttendee/EventUser → forcing logout"
     );
-    navigate(`/org/${slug}/event/${eventSlug}/register`);
+
+    try {
+      // 1) Cerrar sesión en Firebase
+      await signOut(auth);
+
+      // 2) Limpiar correos almacenados
+      localStorage.removeItem("user-email");
+
+      if (user?.uid) {
+        localStorage.removeItem(`uid-${user.uid}-email`);
+      }
+
+      // (Opcional) Limpieza extra de llaves relacionadas
+      Object.keys(localStorage)
+        .filter((k) => k.startsWith("uid-") || k.includes("email"))
+        .forEach((k) => localStorage.removeItem(k));
+
+      console.log(
+        "✅ EventLanding: Session cleaned, user must go through /access again"
+      );
+    } catch (error) {
+      console.error("❌ EventLanding: Error cleaning session:", error);
+    }
   };
 
   useEffect(() => {

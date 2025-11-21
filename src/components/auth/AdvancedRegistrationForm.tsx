@@ -42,6 +42,90 @@ interface AdvancedRegistrationFormProps {
 
 type FormValues = Record<string, string | number | boolean>;
 
+type ConditionalOperator = "equals" | "notEquals" | "contains" | "notContains";
+type ConditionalLogicLogic = "and" | "or";
+
+interface ConditionalCondition {
+  field: string;
+  operator: ConditionalOperator;
+  value: string | number | boolean;
+}
+
+interface ConditionalRule {
+  action: "show" | "hide";
+  conditions: ConditionalCondition[];
+  logic: ConditionalLogicLogic;
+}
+
+// Evalúa UNA condición
+function evaluateCondition(
+  condition: ConditionalCondition,
+  values: FormValues
+): boolean {
+  const fieldValue = values[condition.field];
+
+  switch (condition.operator) {
+    case "equals":
+      return fieldValue === condition.value;
+    case "notEquals":
+      return fieldValue !== condition.value;
+    case "contains":
+      if (typeof fieldValue === "string") {
+        return fieldValue.includes(String(condition.value));
+      }
+      return false;
+    case "notContains":
+      if (typeof fieldValue === "string") {
+        return !fieldValue.includes(String(condition.value));
+      }
+      return true;
+    default:
+      return false;
+  }
+}
+
+// Evalúa un grupo de condiciones de una regla
+function evaluateRule(rule: ConditionalRule, values: FormValues): boolean {
+  if (!rule.conditions || rule.conditions.length === 0) return true;
+
+  if (rule.logic === "and") {
+    return rule.conditions.every((c) => evaluateCondition(c, values));
+  }
+
+  // logic === "or"
+  return rule.conditions.some((c) => evaluateCondition(c, values));
+}
+
+// Determina si el campo se debe mostrar
+function shouldShowField(field: FormField, values: FormValues): boolean {
+  // Si es hidden hard, no se muestra nunca
+  if (field.hidden) return false;
+
+  const logic = field.conditionalLogic as ConditionalRule[] | null | undefined;
+  if (!logic || logic.length === 0) {
+    // Sin lógica condicional: visible por defecto
+    return true;
+  }
+
+  const showRules = logic.filter((r) => r.action === "show");
+  const hideRules = logic.filter((r) => r.action === "hide");
+
+  let visible = true;
+
+  // Si hay reglas de "show", solo se muestra si al menos una se cumple
+  if (showRules.length > 0) {
+    visible = showRules.some((rule) => evaluateRule(rule, values));
+  }
+
+  // Si hay reglas de "hide" y alguna se cumple, se oculta
+  if (hideRules.length > 0) {
+    const mustHide = hideRules.some((rule) => evaluateRule(rule, values));
+    if (mustHide) visible = false;
+  }
+
+  return visible;
+}
+
 // Componente memoizado para cada campo del formulario
 const FormFieldComponent = memo(
   ({
@@ -59,6 +143,7 @@ const FormFieldComponent = memo(
       placeholder: field.placeholder,
       required: field.required,
       style: { display: field.hidden ? "none" : "block" },
+      size: "sm" as const,
     };
 
     switch (field.type) {
@@ -80,9 +165,33 @@ const FormFieldComponent = memo(
           />
         );
       case "checkbox":
-        return <Checkbox key={field.id} label={field.label} {...inputProps} />;
+        return (
+          <Checkbox
+            key={field.id}
+            label={field.label}
+            size="sm"
+            styles={{
+              label: {
+                whiteSpace: "normal",
+                lineHeight: 1.4,
+                fontSize: "0.8rem",
+              },
+            }}
+            {...inputProps}
+          />
+        );
+
       case "textarea":
-        return <Textarea {...commonProps} rows={4} {...inputProps} />;
+        return (
+          <Textarea
+            {...commonProps}
+            rows={3}
+            autosize
+            minRows={3}
+            maxRows={6}
+            {...inputProps}
+          />
+        );
       default:
         return null;
     }
@@ -106,7 +215,6 @@ export function AdvancedRegistrationForm({
   const [formLoading, setFormLoading] = useState(true);
   const { createAnonymousSession } = useAuth();
 
-  // Memoizar el mapa de ciudades para evitar recalcularlo en cada render
   const cityToStateMap = useMemo(() => buildCityToStateMap("CO"), []);
 
   useEffect(() => {
@@ -134,18 +242,12 @@ export function AdvancedRegistrationForm({
     validate: {},
   });
 
-  // Inicializar valores del formulario cuando se carga la configuración
   useEffect(() => {
     if (!formConfig) return;
 
     const initialValues: FormValues = {};
-    const validationRules: Record<
-      string,
-      (value: string | number | boolean) => string | null
-    > = {};
 
     formConfig.fields.forEach((field) => {
-      // Valor inicial
       if (existingData?.registrationData[field.id] !== undefined) {
         initialValues[field.id] = existingData.registrationData[field.id];
       } else if (field.defaultValue !== undefined) {
@@ -153,35 +255,39 @@ export function AdvancedRegistrationForm({
       } else {
         initialValues[field.id] = field.type === "checkbox" ? false : "";
       }
-
-      // Validaciones
-      if (field.required && !field.hidden) {
-        validationRules[field.id] = (value: string | number | boolean) => {
-          if (field.type === "checkbox") {
-            return value ? null : `${field.label} es requerido`;
-          }
-          return value ? null : `${field.label} es requerido`;
-        };
-      }
     });
 
     form.setInitialValues(initialValues);
     form.setValues(initialValues);
-    // NOTE: Mantine form no tiene setValidationRules separado
   }, [formConfig, existingData]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Memoizar campos ordenados
   const sortedFields = useMemo(() => {
     if (!formConfig) return [];
     return [...formConfig.fields].sort((a, b) => a.order - b.order);
   }, [formConfig]);
 
-  // Función para obtener opciones filtradas basadas en campos dependientes
   const getFilteredOptions = useCallback(
     (field: FormField, currentValues: FormValues) => {
       if (!field.options) return [];
 
-      // Para ciudades, filtrar por estado/departamento seleccionado
+      // 1) Caso genérico: si el field tiene dependsOn y las opciones tienen parentValue
+      if (field.dependsOn) {
+        const parentValue = currentValues[field.dependsOn];
+
+        if (parentValue) {
+          const filteredByParent = field.options.filter((opt) => {
+            if (!opt.parentValue) return true; // por si hay opciones "globales"
+            return opt.parentValue === parentValue;
+          });
+
+          // Si filtramos algo, devolvemos eso
+          if (filteredByParent.length > 0) {
+            return filteredByParent;
+          }
+        }
+      }
+
+      // 2) Caso especial ciudades (tu lógica previa con cityToStateMap)
       if (
         field.id.toLowerCase().includes("city") ||
         field.id.toLowerCase().includes("ciudad")
@@ -195,12 +301,22 @@ export function AdvancedRegistrationForm({
 
         if (stateField && currentValues[stateField.id]) {
           const selectedState = currentValues[stateField.id] as string;
-          return field.options.filter(
+
+          // intentar usar cityToStateMap
+          const fromMap = field.options.filter(
             (city) => cityToStateMap[city.value] === selectedState
           );
+          if (fromMap.length > 0) return fromMap;
+
+          // fallback: usar parentValue
+          const fromParent = field.options.filter(
+            (city) => city.parentValue === selectedState
+          );
+          if (fromParent.length > 0) return fromParent;
         }
       }
 
+      // 3) Default: sin filtrado especial
       return field.options;
     },
     [sortedFields, cityToStateMap]
@@ -209,11 +325,8 @@ export function AdvancedRegistrationForm({
   const handleSubmit = async (values: FormValues) => {
     try {
       setLoading(true);
-
-      // Auto-calcular código de país si hay campo de teléfono
       const processedValues = { ...values };
 
-      // Buscar campo de país y teléfono para auto-calcular código
       const countryField = sortedFields.find(
         (f) =>
           f.id.toLowerCase().includes("country") ||
@@ -225,7 +338,6 @@ export function AdvancedRegistrationForm({
         const countryCode = values[countryField.id] as string;
         const dialCode = getDialCodeByCountry(countryCode);
 
-        // Buscar campo de código de país
         const countryCodeField = sortedFields.find(
           (f) =>
             f.id.toLowerCase().includes("countrycode") ||
@@ -237,7 +349,6 @@ export function AdvancedRegistrationForm({
         }
       }
 
-      // Email y nombre
       const emailField = sortedFields.find((f) => f.type === "email");
       const emailValue = emailField
         ? (processedValues[emailField.id] as string)
@@ -262,7 +373,6 @@ export function AdvancedRegistrationForm({
         return;
       }
 
-      // 1) Crear/actualizar sesión anónima SIEMPRE
       const userUID = await createAnonymousSession(emailValue);
       console.log(
         "🔐 Created/updated anonymous session with UID:",
@@ -274,20 +384,17 @@ export function AdvancedRegistrationForm({
       localStorage.setItem("user-email", emailValue);
       localStorage.setItem(`uid-${userUID}-email`, emailValue);
 
-      // 2) Flujo según registrationScope
-      if (registrationScope === "org-only") {
-        // 👉 Solo OrgAttendee (no EventUser)
+      const isOrgOnly = registrationScope === "org-only";
+
+      if (isOrgOnly) {
         await registerOrgAttendeeAdvanced(orgId, {
           attendeeId: existingData?.attendeeId,
           email: emailValue,
           name: nameValue,
-          formData: processedValues, // 👈 importante: se llama formData
+          formData: processedValues,
           firebaseUID: userUID,
-          // metadata opcional si quieres
-          // metadata: { source: "org-access" },
         });
 
-        console.log("✅ Org-only registration completed (OrgAttendee)");
         notifications.show({
           color: "green",
           title: existingData ? "Datos actualizados" : "Registro exitoso",
@@ -296,7 +403,6 @@ export function AdvancedRegistrationForm({
             : "Te registraste correctamente en la organización.",
         });
       } else {
-        // 👉 Org + Event (mantiene comportamiento previo)
         if (!eventId) {
           console.error(
             "❌ registrationScope is 'org+event' pero falta eventId"
@@ -317,9 +423,6 @@ export function AdvancedRegistrationForm({
           firebaseUID: userUID,
         });
 
-        console.log(
-          "✅ Registration completed - OrgAttendee updated and EventUser created"
-        );
         notifications.show({
           color: "green",
           title: "Registro exitoso",
@@ -344,9 +447,9 @@ export function AdvancedRegistrationForm({
 
   if (formLoading) {
     return mode === "modal" ? null : (
-      <Card shadow="md" padding="xl" radius="lg" withBorder>
-        <Stack align="center" gap="lg">
-          <Text>Cargando formulario...</Text>
+      <Card shadow="sm" padding="lg" radius="md" withBorder>
+        <Stack align="center" gap="sm">
+          <Text size="sm">Cargando formulario...</Text>
         </Stack>
       </Card>
     );
@@ -354,10 +457,14 @@ export function AdvancedRegistrationForm({
 
   if (!formConfig) {
     return mode === "modal" ? null : (
-      <Card shadow="md" padding="xl" radius="lg" withBorder>
-        <Stack align="center" gap="lg">
-          <Text c="red">Error al cargar el formulario</Text>
-          <Button onClick={onCancel}>Volver</Button>
+      <Card shadow="sm" padding="lg" radius="md" withBorder>
+        <Stack align="center" gap="sm">
+          <Text c="red" size="sm">
+            Error al cargar el formulario
+          </Text>
+          <Button size="sm" onClick={onCancel}>
+            Volver
+          </Button>
         </Stack>
       </Card>
     );
@@ -367,10 +474,10 @@ export function AdvancedRegistrationForm({
 
   const formContent = (
     <form onSubmit={form.onSubmit(handleSubmit)}>
-      <Stack gap="lg">
+      <Stack gap="md">
         {mode === "page" && (
-          <Stack gap="sm" ta="center">
-            <Title order={2}>
+          <Stack gap={4} ta="center">
+            <Title order={3}>
               {existingData
                 ? "Actualizar información"
                 : formConfig.title ||
@@ -379,18 +486,19 @@ export function AdvancedRegistrationForm({
                     : "Registro al evento")}
             </Title>
             {formConfig.description && (
-              <Text c="dimmed" size="md">
+              <Text c="dimmed" size="sm">
                 {formConfig.description}
               </Text>
             )}
           </Stack>
         )}
 
-        <Stack gap="md" maw={600} mx="auto" w="100%">
+        <Stack gap="sm" maw={600} mx="auto" w="100%">
           {sortedFields.map((field) => {
             const currentValues = form.values;
-            const shouldShow = !field.hidden;
-            if (!shouldShow) return null;
+
+            const visible = shouldShowField(field, currentValues);
+            if (!visible) return null;
 
             const filteredOptions = getFilteredOptions(field, currentValues);
 
@@ -405,8 +513,8 @@ export function AdvancedRegistrationForm({
           })}
         </Stack>
 
-        <Stack gap="md" maw={400} mx="auto" w="100%">
-          <Button type="submit" loading={loading} size="lg">
+        <Stack gap={8} maw={400} mx="auto" w="100%">
+          <Button type="submit" loading={loading} size="sm" fullWidth>
             {existingData
               ? "Actualizar información"
               : isOrgOnly
@@ -415,7 +523,7 @@ export function AdvancedRegistrationForm({
           </Button>
 
           {onCancel && (
-            <Button variant="subtle" size="sm" onClick={onCancel}>
+            <Button variant="subtle" size="xs" onClick={onCancel} fullWidth>
               Cancelar
             </Button>
           )}
@@ -435,7 +543,7 @@ export function AdvancedRegistrationForm({
             : formConfig.title ||
               (isOrgOnly ? "Registro en la organización" : "Registro al evento")
         }
-        size="lg"
+        size="md"
         centered
       >
         {formContent}
@@ -444,7 +552,7 @@ export function AdvancedRegistrationForm({
   }
 
   return (
-    <Card shadow="md" padding="xl" radius="lg" withBorder>
+    <Card shadow="sm" padding="lg" radius="md" withBorder>
       {formContent}
     </Card>
   );

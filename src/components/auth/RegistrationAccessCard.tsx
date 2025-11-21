@@ -18,8 +18,6 @@ interface RegistrationAccessCardProps {
 }
 
 export function RegistrationAccessCard({
-  formTitle,
-  formDescription,
   onSelectLogin,
   onSelectRegister,
   onCancel,
@@ -29,11 +27,8 @@ export function RegistrationAccessCard({
       <Stack gap="xl" align="center">
         <Box ta="center">
           <Title order={2} mb="sm">
-            {formTitle || "¿Cómo deseas continuar?"}
+            ¿Cómo deseas continuar?
           </Title>
-          <Text c="dimmed" size="md" maw={500} mx="auto" lh={1.5}>
-            {formDescription || "Selecciona una opción para acceder al evento"}
-          </Text>
         </Box>
 
         <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="lg" w="100%" maw={600}>
@@ -45,12 +40,9 @@ export function RegistrationAccessCard({
                 <Title order={4} size="h5">
                   Ya estoy registrado
                 </Title>
-                <Text size="sm" c="dimmed" lh={1.4}>
-                  Buscar mi registro existente usando mi información
-                </Text>
               </Stack>
               <Button fullWidth variant="filled">
-                Buscar mi registro
+                Ingresar
               </Button>
             </Stack>
           </Card>
@@ -63,9 +55,6 @@ export function RegistrationAccessCard({
                 <Title order={4} size="h5">
                   Primera vez
                 </Title>
-                <Text size="sm" c="dimmed" lh={1.4}>
-                  Completar el formulario de registro para este evento
-                </Text>
               </Stack>
               <Button fullWidth variant="light">
                 Registrarme ahora

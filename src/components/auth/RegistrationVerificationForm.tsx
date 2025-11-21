@@ -7,6 +7,7 @@ import {
   Text,
   Alert,
   Title,
+  Group,
 } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { useState, useEffect } from "react";
@@ -62,7 +63,8 @@ export function RegistrationVerificationForm({
   }, [orgSlug]);
 
   // Obtener solo los campos identificadores
-  const identifierFields = formConfig?.fields.filter(f => f.isIdentifier) || [];
+  const identifierFields =
+    formConfig?.fields.filter((f) => f.isIdentifier) || [];
 
   const form = useForm<FormValues>({
     initialValues: {},
@@ -74,11 +76,12 @@ export function RegistrationVerificationForm({
     if (!formConfig) return;
 
     const initialValues: FormValues = {};
-    const validationRules: Record<string, (value: string) => string | null> = {};
+    const validationRules: Record<string, (value: string) => string | null> =
+      {};
 
     identifierFields.forEach((field) => {
       initialValues[field.id] = "";
-      
+
       if (field.required) {
         validationRules[field.id] = (value: string) => {
           return value ? null : `${field.label} es requerido`;
@@ -104,9 +107,9 @@ export function RegistrationVerificationForm({
       // Los campos identificadores pueden ser documento, teléfono, etc.
       // El backend busca el OrgAttendee usando esos identificadores
       // y devuelve el objeto completo que incluye el email
-      
+
       let userEmail: string | null = null;
-      
+
       // PRIORIDAD 1: Buscar email_system en registrationData (campo estándar del sistema)
       if (result.orgAttendee?.registrationData?.email_system) {
         userEmail = result.orgAttendee.registrationData.email_system;
@@ -120,8 +123,10 @@ export function RegistrationVerificationForm({
       // PRIORIDAD 3: Buscar cualquier campo tipo email en registrationData
       else if (result.orgAttendee?.registrationData) {
         // Buscar cualquier campo que contenga '@' (es un email)
-        for (const [key, value] of Object.entries(result.orgAttendee.registrationData)) {
-          if (typeof value === 'string' && value.includes('@')) {
+        for (const [key, value] of Object.entries(
+          result.orgAttendee.registrationData
+        )) {
+          if (typeof value === "string" && value.includes("@")) {
             userEmail = value;
             console.log(`✅ Email found in OrgAttendee (${key}):`, userEmail);
             break;
@@ -130,7 +135,7 @@ export function RegistrationVerificationForm({
       }
       // PRIORIDAD 4: Si el campo identificador ingresado es email (caso raro pero válido)
       if (!userEmail) {
-        const emailField = identifierFields.find(f => f.type === 'email');
+        const emailField = identifierFields.find((f) => f.type === "email");
         if (emailField && values[emailField.id]) {
           userEmail = values[emailField.id];
           console.log("✅ Email found in identifier field:", userEmail);
@@ -139,24 +144,33 @@ export function RegistrationVerificationForm({
 
       if (result.isRegistered && result.eventUser) {
         // Usuario YA registrado en este evento (tiene OrgAttendee Y EventUser)
-        console.log("✅ User already registered to this event (OrgAttendee + EventUser)");
-        
+        console.log(
+          "✅ User already registered to this event (OrgAttendee + EventUser)"
+        );
+
         // CRÍTICO: Crear sesión anónima con el email ANTES de redirigir
         if (userEmail) {
           try {
-            console.log("🔐 Creating anonymous session for registered user with email:", userEmail);
+            console.log(
+              "🔐 Creating anonymous session for registered user with email:",
+              userEmail
+            );
             const userUID = await createAnonymousSession(userEmail);
             console.log("✅ Anonymous session created with UID:", userUID);
-            
+
             // Guardar email en localStorage para que EventAttend pueda usarlo
-            localStorage.setItem('user-email', userEmail);
+            localStorage.setItem("user-email", userEmail);
             localStorage.setItem(`uid-${userUID}-email`, userEmail);
           } catch (error) {
-            console.error("❌ CRITICAL: Could not create anonymous session:", error);
+            console.error(
+              "❌ CRITICAL: Could not create anonymous session:",
+              error
+            );
             notifications.show({
               color: "red",
               title: "Error de sesión",
-              message: "No se pudo crear la sesión. Por favor intenta de nuevo.",
+              message:
+                "No se pudo crear la sesión. Por favor intenta de nuevo.",
             });
             setLoading(false);
             return; // No continuar si falla la sesión
@@ -166,7 +180,8 @@ export function RegistrationVerificationForm({
           notifications.show({
             color: "red",
             title: "Error",
-            message: "No se pudo identificar tu email. Por favor contacta al administrador.",
+            message:
+              "No se pudo identificar tu email. Por favor contacta al administrador.",
           });
           setLoading(false);
           return;
@@ -177,31 +192,31 @@ export function RegistrationVerificationForm({
           title: "¡Bienvenido de vuelta!",
           message: "Ya estás registrado en este evento",
         });
-
       } else if (result.orgAttendee && !result.isRegistered) {
         // Usuario existe en organización pero NO en evento (solo OrgAttendee, sin EventUser)
-        console.log("📝 User exists in org but not in event - will show summary");
-        
+        console.log(
+          "📝 User exists in org but not in event - will show summary"
+        );
+
         // Guardar email para uso posterior
         if (userEmail) {
-          localStorage.setItem('user-email', userEmail);
+          localStorage.setItem("user-email", userEmail);
         }
-        
+
         notifications.show({
           color: "blue",
           title: "Te encontramos",
           message: "Verifica tus datos y continúa al evento",
         });
-
       } else {
         // Usuario nuevo (ni OrgAttendee ni EventUser)
         console.log("🆕 New user - no previous registration");
-        
+
         // Guardar email para pre-llenar formulario
         if (userEmail) {
-          localStorage.setItem('user-email', userEmail);
+          localStorage.setItem("user-email", userEmail);
         }
-        
+
         notifications.show({
           color: "blue",
           title: "Nuevo registro",
@@ -214,7 +229,6 @@ export function RegistrationVerificationForm({
         ...result,
         identifierFields: values,
       });
-
     } catch (error) {
       console.error("Error verifying registration:", error);
       notifications.show({
@@ -240,58 +254,65 @@ export function RegistrationVerificationForm({
   if (!formConfig || identifierFields.length === 0) {
     return (
       <Alert color="red" title="Error de configuración">
-        No se encontraron campos identificadores en el formulario. 
-        Por favor contacta al administrador.
+        No se encontraron campos identificadores en el formulario. Por favor
+        contacta al administrador.
       </Alert>
     );
   }
 
   return (
-    <Card shadow="md" padding="xl" radius="lg" withBorder>
+    <Card shadow="sm" padding="lg" radius="md" withBorder>
       <form onSubmit={form.onSubmit(handleVerify)}>
-        <Stack gap="lg">
-          <div>
-            <Title order={3}>Ingresar</Title>
-            <Text size="sm" c="dimmed" mt="xs">
-              Ingresa tus datos para verificar si ya estás registrado
+        <Stack gap="md">
+          {/* Header compacto */}
+          <Stack gap={2}>
+            <Title order={4}>Ingresar</Title>
+            <Text size="xs" c="dimmed">
+              Verifica si ya estás registrado.
             </Text>
-          </div>
+          </Stack>
 
-          {identifierFields.map((field) => (
-            <TextInput
-              key={field.id}
-              label={field.label}
-              placeholder={field.placeholder}
-              type={field.type === 'email' ? 'email' : field.type === 'tel' ? 'tel' : 'text'}
-              required={field.required}
-              {...form.getInputProps(field.id)}
-            />
-          ))}
+          {/* Campos de identificación */}
+          <Stack gap="xs">
+            {identifierFields.map((field) => (
+              <TextInput
+                key={field.id}
+                label={field.label}
+                placeholder={field.placeholder}
+                type={
+                  field.type === "email"
+                    ? "email"
+                    : field.type === "tel"
+                    ? "tel"
+                    : "text"
+                }
+                required={field.required}
+                size="sm"
+                {...form.getInputProps(field.id)}
+              />
+            ))}
+          </Stack>
 
-          <Stack gap="md" mt="md">
-            <Button 
-              type="submit" 
-              size="lg" 
-              loading={loading}
-              fullWidth
-            >
+          {/* Acciones compactas */}
+          <Stack gap="xs" mt={4}>
+            <Button type="submit" size="sm" loading={loading} fullWidth>
               Ingresar
             </Button>
 
             {onNewRegistration && (
-              <>
-                <Text size="sm" ta="center" c="dimmed">
+              <Group justify="center" gap={4}>
+                <Text size="xs" c="dimmed">
                   ¿Primera vez aquí?
                 </Text>
-                <Button 
-                  variant="light" 
-                  size="md" 
+                <Button
+                  variant="subtle"
+                  size="xs"
+                  px="xs"
                   onClick={onNewRegistration}
-                  fullWidth
                 >
-                  Registrarme por primera vez
+                  Registrarme
                 </Button>
-              </>
+              </Group>
             )}
           </Stack>
         </Stack>

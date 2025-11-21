@@ -370,8 +370,6 @@ export default function OrgAccess() {
             <Box>
               {flowStep === "access-options" && (
                 <RegistrationAccessCard
-                  formTitle={formConfig.title}
-                  formDescription={formConfig.description}
                   onSelectLogin={() => setFlowStep("quick-login")}
                   onSelectRegister={() => setFlowStep("full-registration")}
                   onCancel={() => navigate(`/org/${slug}`)}
