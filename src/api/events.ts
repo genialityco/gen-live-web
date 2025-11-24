@@ -193,10 +193,20 @@ export async function associateFirebaseUID(
   return data;
 }
 
+export type OrgCheckReason = "USER_NOT_FOUND" | "INVALID_FIELDS";
+
+export type OrgCheckResponse = {
+  found: boolean;
+  reason?: OrgCheckReason;
+  message?: string;
+  mismatched?: string[];
+  orgAttendee?: any;
+};
+
 export async function checkOrgRegistrationByIdentifiers(
   orgId: string,
   identifierFields: Record<string, any>
-) {
+): Promise<OrgCheckResponse> {
   console.log("🌐 API: Checking ORG registration by identifiers", {
     orgId,
     identifierFields,

@@ -753,7 +753,7 @@ export default function RegistrationFormBuilder({
               : "Nuevo campo"}
           </Text>
         }
-        size="lg"
+        size="xl"
       >
         {editingField && (
           <Stack gap="md">

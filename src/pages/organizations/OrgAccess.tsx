@@ -258,17 +258,55 @@ export default function OrgAccess() {
 
       const result = await checkOrgRegistrationByIdentifiers(org._id, values);
 
+      // 🔹 Si no se encontró, diferenciamos casos
       if (!result || !result.found || !result.orgAttendee) {
-        notifications.show({
-          color: "red",
-          title: "No encontrado",
-          message:
-            result?.message ??
-            "No encontramos un registro con esos datos en esta organización.",
-        });
+        // limpiar errores previos
+        Object.keys(values).forEach((field) =>
+          orgIdentifierForm.clearFieldError(field)
+        );
+
+        if (result?.reason === "USER_NOT_FOUND") {
+          // Caso: no existe ningún usuario con esos identificadores base
+          notifications.show({
+            color: "red",
+            title: "Usuario no encontrado",
+            message:
+              "No encontramos ningún registro con estos datos en esta organización.",
+          });
+        } else if (result?.reason === "INVALID_FIELDS") {
+          // Caso: usuario base existe pero uno o más campos no coinciden
+          if (result.mismatched && result.mismatched.length > 0) {
+            result.mismatched.forEach((field) => {
+              if (field in values) {
+                orgIdentifierForm.setFieldError(
+                  field,
+                  "Este dato no coincide con nuestro registro"
+                );
+              }
+            });
+          }
+
+          notifications.show({
+            color: "orange",
+            title: "Datos incorrectos",
+            message:
+              "Algunos de los datos ingresados no coinciden con nuestro registro. Revisa la información e inténtalo nuevamente.",
+          });
+        } else {
+          // Fallback genérico
+          notifications.show({
+            color: "red",
+            title: "No encontrado",
+            message:
+              result?.message ??
+              "No encontramos un registro con esos datos en esta organización.",
+          });
+        }
+
         return;
       }
 
+      // 🔹 Si sí se encontró, seguimos como ya lo tenías
       const userEmail =
         extractEmailFromOrgAttendee(result.orgAttendee) ||
         Object.values(values).find(

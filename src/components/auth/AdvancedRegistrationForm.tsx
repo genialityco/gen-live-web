@@ -164,6 +164,8 @@ const FormFieldComponent = memo(
             key={field.id}
             label={field.label}
             size="sm"
+            required={field.required}
+            style={{ display: field.hidden ? "none" : "block" }}
             styles={{
               label: {
                 whiteSpace: "normal",
