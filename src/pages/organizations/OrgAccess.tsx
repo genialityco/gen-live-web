@@ -40,6 +40,12 @@ import { useAuth } from "../../auth/AuthProvider";
 import { notifications } from "@mantine/notifications";
 import { useForm } from "@mantine/form";
 
+// 👇 nuevo import para orgAttendee
+import {
+  fetchOrgAttendeeByEmail,
+  type OrgAttendee,
+} from "../../api/org-attendees";
+
 type FlowStep =
   | "loading"
   | "access-options"
@@ -53,6 +59,7 @@ type FormValues = Record<string, string>;
 export default function OrgAccess() {
   const { slug } = useParams<{ slug: string }>();
   const [searchParams] = useSearchParams();
+  const mode = searchParams.get("mode");
   const navigate = useNavigate();
   const { user, createAnonymousSession } = useAuth();
 
@@ -68,6 +75,10 @@ export default function OrgAccess() {
   const [error, setError] = useState<string | null>(null);
   const [autoRegistering, setAutoRegistering] = useState(false);
   const [orgLoading, setOrgLoading] = useState(false);
+
+  // 👇 estado propio para el flujo de actualización ORG-ONLY
+  const [orgAttendeeForUpdate, setOrgAttendeeForUpdate] =
+    useState<OrgAttendee | null>(null);
 
   const orgIdentifierForm = useForm<FormValues>({
     initialValues: {},
@@ -90,14 +101,75 @@ export default function OrgAccess() {
         const config = await fetchRegistrationForm(slug);
         setFormConfig(config);
 
-        // ORG-ONLY
+        // ================= ORG-ONLY =================
         if (!isEventMode) {
           const hasIdentifiers = config.fields.some((f) => f.isIdentifier);
+
+          // 🔹 Si venimos con ?mode=update, intentamos cargar el OrgAttendee
+          if (mode === "update") {
+            // obtenemos email del usuario actual / localStorage
+            let userEmail = user?.email;
+            if (!userEmail && user?.uid) {
+              userEmail = localStorage.getItem(`uid-${user.uid}-email`) || null;
+            }
+            if (!userEmail) {
+              userEmail = localStorage.getItem("user-email") || null;
+            }
+
+            if (!userEmail) {
+              notifications.show({
+                color: "red",
+                title: "No se pudo cargar tu información",
+                message:
+                  "No encontramos un correo asociado a tu sesión. Ingresa de nuevo para actualizar tus datos.",
+              });
+              setFlowStep(hasIdentifiers ? "access-options" : "full-registration");
+              return;
+            }
+
+            try {
+              const attendee = await fetchOrgAttendeeByEmail(
+                orgData._id,
+                userEmail
+              );
+
+              if (!attendee) {
+                notifications.show({
+                  color: "red",
+                  title: "Registro no encontrado",
+                  message:
+                    "No encontramos un registro asociado a tu correo en esta organización.",
+                });
+                setFlowStep(hasIdentifiers ? "access-options" : "full-registration");
+                return;
+              }
+
+              console.log("🔎 OrgAccess(org-only): attendee for update:", attendee);
+              setOrgAttendeeForUpdate(attendee);
+              setFlowStep("update-registration");
+              return;
+            } catch (e) {
+              console.error(
+                "❌ OrgAccess(org-only): error loading attendee for update:",
+                e
+              );
+              notifications.show({
+                color: "red",
+                title: "Error",
+                message:
+                  "No se pudo cargar tu información para actualizarla. Intenta de nuevo.",
+              });
+              setFlowStep(hasIdentifiers ? "access-options" : "full-registration");
+              return;
+            }
+          }
+
+          // 🔹 flujo normal (sin modo update)
           setFlowStep(hasIdentifiers ? "access-options" : "full-registration");
           return;
         }
 
-        // EVENT MODE
+        // ================= EVENT MODE =================
         const eventsData = await fetchEventsByOrg(orgData._id);
         const foundEvent = eventsData.find(
           (e) => e.slug === eventSlugFromQuery || e._id === eventSlugFromQuery
@@ -182,7 +254,7 @@ export default function OrgAccess() {
     };
 
     initFlow();
-  }, [slug, eventSlugFromQuery, isEventMode, navigate, user]);
+  }, [slug, eventSlugFromQuery, isEventMode, navigate, user, mode]);
 
   useEffect(() => {
     if (!formConfig) return;
@@ -266,7 +338,6 @@ export default function OrgAccess() {
         );
 
         if (result?.reason === "USER_NOT_FOUND") {
-          // Caso: no existe ningún usuario con esos identificadores base
           notifications.show({
             color: "red",
             title: "Usuario no encontrado",
@@ -274,7 +345,6 @@ export default function OrgAccess() {
               "No encontramos ningún registro con estos datos en esta organización.",
           });
         } else if (result?.reason === "INVALID_FIELDS") {
-          // Caso: usuario base existe pero uno o más campos no coinciden
           if (result.mismatched && result.mismatched.length > 0) {
             result.mismatched.forEach((field) => {
               if (field in values) {
@@ -293,7 +363,6 @@ export default function OrgAccess() {
               "Algunos de los datos ingresados no coinciden con nuestro registro. Revisa la información e inténtalo nuevamente.",
           });
         } else {
-          // Fallback genérico
           notifications.show({
             color: "red",
             title: "No encontrado",
@@ -406,6 +475,29 @@ export default function OrgAccess() {
 
           {identifierFields.length > 0 ? (
             <Box>
+              {/* 🔹 Modo actualización ORG-ONLY */}
+              {flowStep === "update-registration" && orgAttendeeForUpdate && (
+                <AdvancedRegistrationForm
+                  orgSlug={slug!}
+                  orgId={org._id}
+                  registrationScope="org-only"
+                  onSuccess={() => {
+                    notifications.show({
+                      color: "green",
+                      title: "Datos actualizados",
+                      message: "Tu información se actualizó correctamente.",
+                    });
+                    navigate(`/org/${slug}`);
+                  }}
+                  onCancel={() => navigate(`/org/${slug}`)}
+                  existingData={{
+                    attendeeId: orgAttendeeForUpdate._id,
+                    registrationData: orgAttendeeForUpdate.registrationData ?? {},
+                  }}
+                  mode="page"
+                />
+              )}
+
               {flowStep === "access-options" && (
                 <RegistrationAccessCard
                   onSelectLogin={() => setFlowStep("quick-login")}

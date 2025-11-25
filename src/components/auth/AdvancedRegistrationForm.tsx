@@ -124,6 +124,38 @@ function shouldShowField(field: FormField, values: FormValues): boolean {
   return visible;
 }
 
+function isFieldEffectivelyVisible(
+  field: FormField,
+  values: FormValues,
+  allFields: FormField[]
+): boolean {
+  // 1. Si depende de otro campo, heredamos visibilidad y valor del padre
+  if (field.dependsOn) {
+    const parentField = allFields.find((f) => f.id === field.dependsOn);
+
+    if (parentField) {
+      const parentVisible = isFieldEffectivelyVisible(
+        parentField,
+        values,
+        allFields
+      );
+      const parentValue = values[parentField.id];
+
+      if (
+        !parentVisible ||
+        parentValue === "" ||
+        parentValue === null ||
+        parentValue === undefined
+      ) {
+        return false;
+      }
+    }
+  }
+
+  // 2. Aplicar la lógica propia del campo (hidden + conditionalLogic)
+  return shouldShowField(field, values);
+}
+
 type SelectOption = { value: string; label?: string; parentValue?: string };
 
 function uniqueOptions<T extends { value: any }>(options: T[]): T[] {
@@ -505,6 +537,23 @@ export function AdvancedRegistrationForm({
       setLoading(true);
       const processedValues = { ...values };
 
+      // Limpiar valores de campos NO visibles (para no conservar datos viejos)
+      sortedFields.forEach((field) => {
+        const visible = isFieldEffectivelyVisible(
+          field,
+          processedValues,
+          sortedFields
+        );
+
+        if (!visible) {
+          if (field.type === "checkbox") {
+            processedValues[field.id] = false; // sin marcar
+          } else {
+            processedValues[field.id] = ""; // o null si prefieres
+          }
+        }
+      });
+
       // Rellenar código de país basado en selección de país
       const countryField = sortedFields.find(
         (f) =>
@@ -601,6 +650,16 @@ export function AdvancedRegistrationForm({
           return;
         }
 
+        // actualizar también el OrgAttendee al mismo tiempo
+        await registerOrgAttendeeAdvanced(orgId, {
+          attendeeId: existingData?.attendeeId,
+          email: emailValue,
+          name: nameValue,
+          formData: processedValues,
+          firebaseUID: userUID,
+        });
+
+        // registrar al evento
         await registerToEventWithFirebase(eventId, {
           email: emailValue,
           name: nameValue,
@@ -682,33 +741,11 @@ export function AdvancedRegistrationForm({
           {sortedFields.map((field) => {
             const currentValues = form.values;
 
-            // 1. Si el campo depende de otro, heredamos visibilidad
-            if (field.dependsOn) {
-              const parentField = sortedFields.find(
-                (f) => f.id === field.dependsOn
-              );
-
-              if (parentField) {
-                const parentVisible = shouldShowField(
-                  parentField,
-                  currentValues
-                );
-                const parentValue = currentValues[parentField.id];
-
-                // Si el padre está oculto o sin valor, este campo también se oculta
-                if (
-                  !parentVisible ||
-                  parentValue === "" ||
-                  parentValue === null ||
-                  parentValue === undefined
-                ) {
-                  return null;
-                }
-              }
-            }
-
-            // 2. Evaluar lógica propia del campo
-            const visible = shouldShowField(field, currentValues);
+            const visible = isFieldEffectivelyVisible(
+              field,
+              currentValues,
+              sortedFields
+            );
             if (!visible) return null;
 
             const filteredOptions = getFilteredOptions(field, currentValues);

@@ -1,6 +1,17 @@
 /* eslint-disable react-refresh/only-export-components */
-import { onAuthStateChanged, signInAnonymously, type User } from "firebase/auth";
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import {
+  onAuthStateChanged,
+  signInAnonymously,
+  type User,
+} from "firebase/auth";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { auth } from "../core/firebase";
 
 type Ctx = {
@@ -9,6 +20,9 @@ type Ctx = {
   isAnonymous: boolean;
   createAnonymousSession: (email: string) => Promise<string>; // Retorna UID
   getDeviceInfo: () => string; // Info del dispositivo para debugging
+
+  sessionName: string | null;
+  setSessionName: (name: string | null) => void;
 };
 
 const AuthCtx = createContext<Ctx | null>(null);
@@ -16,6 +30,8 @@ const AuthCtx = createContext<Ctx | null>(null);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(auth.currentUser ?? null);
   const [loading, setLoading] = useState(true);
+
+  const [sessionName, setSessionName] = useState<string | null>(null);
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (u) => {
@@ -25,32 +41,66 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return unsub;
   }, []);
 
+  useEffect(() => {
+    if (!user) {
+      setSessionName(null);
+      return;
+    }
+
+    // Si ya tienes un sessionName por OrgAttendee, respétalo
+    if (sessionName) return;
+
+    const fallback =
+      user.displayName ||
+      (user.email ? user.email.split("@")[0] : null) ||
+      null;
+
+    if (fallback) {
+      setSessionName(fallback);
+    }
+  }, [user, sessionName]);
+
   // Información del dispositivo para debugging
   const getDeviceInfo = useCallback((): string => {
     const navigator = window.navigator;
-    return `${navigator.userAgent.includes('Chrome') ? 'Chrome' : 'Other'}_${Date.now()}`;
+    return `${
+      navigator.userAgent.includes("Chrome") ? "Chrome" : "Other"
+    }_${Date.now()}`;
   }, []);
 
   // Crear sesión anónima y asociar con email
-  const createAnonymousSession = useCallback(async (email: string): Promise<string> => {
-    try {
-      // Si ya hay un usuario anónimo, usar ese UID
-      if (user?.isAnonymous) {
-        console.log("📱 Using existing anonymous user:", user.uid, "for email:", email);
-        return user.uid;
-      }
+  const createAnonymousSession = useCallback(
+    async (email: string): Promise<string> => {
+      try {
+        // Si ya hay un usuario anónimo, usar ese UID
+        if (user?.isAnonymous) {
+          console.log(
+            "📱 Using existing anonymous user:",
+            user.uid,
+            "for email:",
+            email
+          );
+          return user.uid;
+        }
 
-      // Si no hay usuario o no es anónimo, crear uno nuevo
-      console.log("🔐 Creating anonymous user session for email:", email);
-      const result = await signInAnonymously(auth);
-      
-      console.log("✅ Anonymous user created:", result.user.uid, "on device:", getDeviceInfo());
-      return result.user.uid;
-    } catch (error) {
-      console.error("❌ Error creating anonymous session:", error);
-      throw error;
-    }
-  }, [user, getDeviceInfo]);
+        // Si no hay usuario o no es anónimo, crear uno nuevo
+        console.log("🔐 Creating anonymous user session for email:", email);
+        const result = await signInAnonymously(auth);
+
+        console.log(
+          "✅ Anonymous user created:",
+          result.user.uid,
+          "on device:",
+          getDeviceInfo()
+        );
+        return result.user.uid;
+      } catch (error) {
+        console.error("❌ Error creating anonymous session:", error);
+        throw error;
+      }
+    },
+    [user, getDeviceInfo]
+  );
 
   const value = useMemo(
     () => ({
@@ -59,8 +109,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       isAnonymous: !!user?.isAnonymous,
       createAnonymousSession,
       getDeviceInfo,
+      sessionName,
+      setSessionName,
     }),
-    [user, loading, createAnonymousSession, getDeviceInfo]
+    [user, loading, createAnonymousSession, getDeviceInfo, sessionName]
   );
 
   return <AuthCtx.Provider value={value}>{children}</AuthCtx.Provider>;

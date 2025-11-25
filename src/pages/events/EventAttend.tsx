@@ -224,7 +224,7 @@ export default function EventAttend() {
   const { slug, eventSlug } = useParams<{ slug: string; eventSlug: string }>();
   const navigate = useNavigate();
   const isMobile = useMediaQuery("(max-width: 768px)");
-  const { user } = useAuth();
+  const { user, sessionName } = useAuth();
 
   const [org, setOrg] = useState<Org | null>(null);
   const [event, setEvent] = useState<EventItem | null>(null);
@@ -492,6 +492,12 @@ export default function EventAttend() {
   // ----------------------------------------------------------
   const contentLoading =
     loading || eventLoading || checkingRegistration || (!finalEvent && !error);
+
+  const effectiveChatName =
+    sessionName ||
+    user?.displayName ||
+    (user?.email ? user.email.split("@")[0] : null) ||
+    "Usuario";
 
   return (
     <MantineProvider theme={theme} withCssVariables>
@@ -813,14 +819,11 @@ export default function EventAttend() {
                             <iframe
                               src={`https://chat-geniality.netlify.app?${new URLSearchParams(
                                 {
-                                  nombre:
-                                    user?.email?.split("@")[0] ||
-                                    user?.displayName ||
-                                    "Usuario",
+                                  nombre: effectiveChatName,
                                   chatid: event._id,
                                   iduser: "",
                                   eventid: event._id,
-                                  anonimo: user?.isAnonymous ? "true" : "false",
+                                  // anonimo: user?.isAnonymous ? "true" : "false",
                                   message_highlighted: "",
                                 }
                               ).toString()}`}

@@ -14,6 +14,7 @@ import { signOut } from "firebase/auth";
 import { auth } from "../../core/firebase";
 import { notifications } from "@mantine/notifications";
 import { useNavigate, useParams } from "react-router-dom";
+import { fetchOrgAttendeeByEmail } from "../../api/org-attendees";
 
 interface UserSessionProps {
   compact?: boolean; // Para versión compacta en móviles
@@ -36,7 +37,7 @@ export default function UserSession({
   orgId,
   showLoginButton = true,
 }: UserSessionProps) {
-  const { user, loading } = useAuth();
+  const { user, loading, setSessionName } = useAuth();
   const [orgAttendee, setOrgAttendee] = useState<OrgAttendee | null>(null);
   const navigate = useNavigate();
   const { slug, eventSlug } = useParams<{
@@ -45,6 +46,7 @@ export default function UserSession({
   }>();
 
   // Cargar datos del usuario desde el backend (solo lectura)
+
   const loadUserData = async () => {
     if (!user?.uid || !orgId) return;
 
@@ -57,14 +59,33 @@ export default function UserSession({
       }
 
       if (userEmail) {
-        const attendeeResponse = await fetch(
-          `/api/org-attendees/by-email/${encodeURIComponent(
-            userEmail
-          )}/org/${orgId}`
-        );
-        if (attendeeResponse.ok) {
-          const attendeeData = await attendeeResponse.json();
-          setOrgAttendee(attendeeData);
+        const attendeeData = await fetchOrgAttendeeByEmail(orgId, userEmail);
+
+        console.log("🔎 OrgAttendee recibido:", attendeeData);
+        if (attendeeData) {
+          setOrgAttendee({
+            ...attendeeData,
+            createdAt: new Date(attendeeData.createdAt),
+          });
+
+          // 👇 Actualizamos el nombre global de sesión
+          const resolvedName =
+            attendeeData.name ||
+            user.displayName ||
+            userEmail.split("@")[0] ||
+            "Usuario";
+
+          setSessionName(resolvedName);
+        } else {
+          setOrgAttendee(null);
+
+          // Si no hay attendee, intentar al menos un fallback
+          const fallbackName =
+            user.displayName ||
+            (userEmail ? userEmail.split("@")[0] : null) ||
+            null;
+
+          setSessionName(fallbackName);
         }
       }
     } catch (error) {
@@ -72,11 +93,26 @@ export default function UserSession({
     }
   };
 
+  const goToUpdateInfo = () => {
+    if (!slug || !orgId) {
+      notifications.show({
+        title: "Error",
+        message: "No se pudo determinar la organización.",
+        color: "red",
+      });
+      return;
+    }
+
+    // Por ejemplo, centralizamos en OrgAccess con un modo update
+    navigate(`/org/${slug}/access?mode=update`);
+  };
+
   // Cerrar sesión
   const handleSignOut = async () => {
     try {
       await signOut(auth);
       setOrgAttendee(null);
+      setSessionName(null); // 👈 limpiamos el nombre de sesión
 
       localStorage.removeItem("user-email");
       if (user?.uid) {
@@ -183,17 +219,17 @@ export default function UserSession({
       <Menu.Target>
         <Button
           variant="subtle"
-          leftSection={
+          rightSection={
             <Avatar size="sm" radius="xl" color="blue">
               {userEmail ? userEmail[0]?.toUpperCase() : "U"}
             </Avatar>
           }
           styles={{
             inner: { justifyContent: "flex-start" },
-            section: { marginInlineStart: 0 },
+            section: { marginInlineStart: 15 },
           }}
         >
-          {compact ? "" : userEmail || "Usuario"}
+          {compact ? "" : orgAttendee?.name || userEmail || "Usuario"}
         </Button>
       </Menu.Target>
 
@@ -211,10 +247,20 @@ export default function UserSession({
                 Sin email asociado
               </Text>
             )}
+
+            {orgAttendee?.name && (
+              <Text size="xs" c="dimmed">
+                Nombre: {orgAttendee.name}
+              </Text>
+            )}
           </Stack>
         </Card>
 
         <Menu.Divider />
+
+        <Menu.Item leftSection="✏️" onClick={goToUpdateInfo}>
+          Actualizar información
+        </Menu.Item>
 
         <Menu.Item leftSection="🚪" color="red" onClick={handleSignOut}>
           Cerrar sesión
