@@ -210,6 +210,8 @@ const FormFieldComponent = memo(
     inputProps: ReturnType<ReturnType<typeof useForm>["getInputProps"]>;
     filteredOptions?: SelectOption[];
   }) => {
+    const helpText = field.helpText || undefined;
+
     const commonProps = {
       key: field.id,
       label: field.label,
@@ -217,6 +219,7 @@ const FormFieldComponent = memo(
       required: field.required,
       style: { display: field.hidden ? "none" : "block" },
       size: "sm" as const,
+      description: helpText,
     };
 
     switch (field.type) {
