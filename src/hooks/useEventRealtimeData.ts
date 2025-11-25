@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useEffect, useState, useMemo } from "react";
 import { ref as r, onValue } from "firebase/database";
 import { rtdb } from "../core/firebase";

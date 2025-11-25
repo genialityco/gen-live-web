@@ -61,14 +61,13 @@ export default function UserSession({
       if (userEmail) {
         const attendeeData = await fetchOrgAttendeeByEmail(orgId, userEmail);
 
-        console.log("🔎 OrgAttendee recibido:", attendeeData);
         if (attendeeData) {
           setOrgAttendee({
             ...attendeeData,
             createdAt: new Date(attendeeData.createdAt),
           });
 
-          // 👇 Actualizamos el nombre global de sesión
+          // Actualizamos el nombre global de sesión
           const resolvedName =
             attendeeData.name ||
             user.displayName ||

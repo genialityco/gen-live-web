@@ -66,9 +66,7 @@ export function useEventRealtime(slug: string) {
       };
 
       // online inicial
-      console.log("✍️ Writing initial presence for event:", evId, "UID:", uid);
       await writePresence();
-      console.log("✅ Initial presence written");
       
       // Remover al desconectar
       try {
@@ -91,12 +89,10 @@ export function useEventRealtime(slug: string) {
     })();
 
     return () => {
-      console.log("🧹 useEventRealtime cleanup - Removing presence for event:", slug);
       cancelled = true;
       
       // CRÍTICO: Eliminar presencia manualmente al desmontar componente
       if (presenceRef.current) {
-        console.log("🗑️ Removing presence node:", presenceRef.current.toString());
         set(presenceRef.current, null)
           .then(() => console.log("✅ Presence removed successfully"))
           .catch((err) => console.error("❌ Error removing presence:", err));

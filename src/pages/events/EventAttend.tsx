@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/exhaustive-deps */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type React from "react";
 import { useState, useEffect, useMemo } from "react";
@@ -30,6 +31,7 @@ import { useAuth } from "../../auth/AuthProvider";
 import { useEventRealtime } from "../../hooks/useEventRealtime";
 import UserSession from "../../components/auth/UserSession";
 import { useMediaQuery } from "@mantine/hooks";
+import { markEventUserAsAttended } from "../../api/event-users";
 
 // --------------------------------------------------------------
 // Branding Helpers (mismos que en OrganizationLanding)
@@ -231,6 +233,8 @@ export default function EventAttend() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const [attendeeId, setAttendeeId] = useState<string | null>(null);
+
   const [isRegistered, setIsRegistered] = useState<boolean>(false);
   const [checkingRegistration, setCheckingRegistration] =
     useState<boolean>(true);
@@ -295,7 +299,6 @@ export default function EventAttend() {
       if (!event) return;
 
       if (!user) {
-        console.log("🔍 EventAttend: No user, treating as not registered");
         setIsRegistered(false);
         setCheckingRegistration(false);
         return;
@@ -316,39 +319,11 @@ export default function EventAttend() {
         }
 
         if (userEmail) {
-          console.log(
-            "🎯 EventAttend: [PRIORITY 1] Checking registration by EMAIL (stable method)",
-            {
-              eventId: event._id,
-              userEmail,
-              userUID: user.uid,
-              isAnonymous: user.isAnonymous,
-              emailSource: user.email ? "user.email" : "localStorage",
-            }
-          );
-
           const result = await checkIfRegistered(event._id, userEmail);
-          console.log("✅ EventAttend: Registration check by email result", {
-            isRegistered: result.isRegistered,
-            result,
-          });
 
           if (result.isRegistered && user.uid) {
             try {
-              console.log("🌐 API: Associating Firebase UID", {
-                eventId: event._id,
-                email: userEmail,
-                firebaseUID: user.uid,
-              });
-              const resp = await associateFirebaseUID(
-                event._id,
-                userEmail,
-                user.uid
-              );
-              console.log("📡 API: Associate UID response", resp);
-              console.log(
-                "🔄 EventAttend: Synced Firebase UID for existing registration"
-              );
+              await associateFirebaseUID(event._id, userEmail, user.uid);
             } catch (syncError) {
               console.warn(
                 "⚠️ EventAttend: Could not sync UID, but user is registered:",
@@ -357,26 +332,17 @@ export default function EventAttend() {
             }
           }
 
+          if (result.orgAttendee?._id) {
+            setAttendeeId(result.orgAttendee._id);
+          }
+
           setIsRegistered(!!result.isRegistered);
           return;
         }
 
         // PRIORIDAD 2: Firebase UID
         if (user.uid && !user.email) {
-          console.log(
-            "🎯 EventAttend: [PRIORITY 2] Checking registration by Firebase UID (fallback)",
-            {
-              eventId: event._id,
-              userUID: user.uid,
-              isAnonymous: user.isAnonymous,
-            }
-          );
-
           const result = await checkIfRegisteredByUID(event._id, user.uid);
-          console.log("✅ EventAttend: Registration check by UID result", {
-            isRegistered: result.isRegistered,
-            result,
-          });
           setIsRegistered(!!result.isRegistered);
           return;
         }
@@ -384,34 +350,16 @@ export default function EventAttend() {
         // PRIORIDAD 3: fallback viejo (last-registered-email)
         const storedEmail = localStorage.getItem("last-registered-email");
         if (storedEmail) {
-          console.log(
-            "🎯 EventAttend: [PRIORITY 3] Last fallback - checking by stored email",
-            {
-              eventId: event._id,
-              storedEmail,
-            }
-          );
-
           const result = await checkIfRegistered(event._id, storedEmail);
-          console.log(
-            "✅ EventAttend: Registration check by stored email result",
-            {
-              isRegistered: result.isRegistered,
-              result,
-            }
-          );
           setIsRegistered(!!result.isRegistered);
           localStorage.removeItem("last-registered-email");
           return;
         }
-
-        console.log(
-          "⚠️ EventAttend: Could not verify registration - no user, UID, email, or stored email"
-        );
         setIsRegistered(false);
       } catch (err) {
         console.error("❌ EventAttend: Error checking registration:", err);
         setIsRegistered(false);
+        setAttendeeId(null);
       } finally {
         setCheckingRegistration(false);
       }
@@ -486,6 +434,34 @@ export default function EventAttend() {
     const id = setInterval(tick, 1000);
     return () => clearInterval(id);
   }, [status, finalEvent?.schedule?.startsAt]);
+
+  useEffect(() => {
+    // Necesitamos:
+    // - que exista el evento
+    // - que tengamos attendeeId
+    // - que ya sepamos que está registrado
+    if (!event || !attendeeId || !isRegistered) return;
+
+    const syncTracking = async () => {
+      try {
+        // 1) Siempre: actualizar último login cuando entra a /attend
+        // await updateEventUserLastLogin(attendeeId, event._id);
+        // console.log("✅ Updated EventUser lastLoginAt");
+        // 2) Si el evento está EN VIVO en este momento, marcar asistencia
+        if (status === "live") {
+          console.log("✅ Marking EventUser as attended");
+          await markEventUserAsAttended(attendeeId, event._id);
+        }
+
+        // Si quieres marcar solo la primera vez que pasa a live,
+        // puedes controlar con un flag local para no spamear el endpoint.
+      } catch (err) {
+        console.error("❌ Error syncing EventUser tracking:", err);
+      }
+    };
+
+    void syncTracking();
+  }, [event?._id, attendeeId, isRegistered, status]);
 
   // ----------------------------------------------------------
   // Render con MantineProvider + branding

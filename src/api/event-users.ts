@@ -12,3 +12,25 @@ export async function registerEventUserFromOrgAttendee(
     firebaseUID,
   });
 }
+
+// Actualizar último login (lastLoginAt)
+export async function updateEventUserLastLogin(
+  attendeeId: string,
+  eventId: string
+) {
+  return await api.patch("/event-users/update-login", {
+    attendeeId,
+    eventId,
+  });
+}
+
+// Marcar como asistió / check-in
+export async function markEventUserAsAttended(
+  attendeeId: string,
+  eventId: string
+) {
+  return await api.patch("/event-users/mark-attended", {
+    attendeeId,
+    eventId,
+  });
+}

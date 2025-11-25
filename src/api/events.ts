@@ -136,13 +136,11 @@ export async function registerToEventWithFirebase(
 }
 
 export async function checkIfRegistered(eventId: string, email: string) {
-  console.log("🌐 API: Checking if registered", { eventId, email });
 
   const { data } = await api.get(`/events/${eventId}/is-registered`, {
     params: { email },
   });
 
-  console.log("📡 API: Registration check response", data);
   return data as {
     isRegistered: boolean;
     orgAttendee?: {
@@ -160,16 +158,12 @@ export async function checkIfRegisteredByUID(
   eventId: string,
   firebaseUID: string
 ) {
-  console.log("🌐 API: Checking if registered by UID", {
-    eventId,
-    firebaseUID,
-  });
+
 
   const { data } = await api.get(`/events/${eventId}/is-registered-by-uid`, {
     params: { firebaseUID },
   });
 
-  console.log("📡 API: Registration check by UID response", data);
   return data as { isRegistered: boolean };
 }
 
@@ -178,18 +172,12 @@ export async function associateFirebaseUID(
   email: string,
   firebaseUID: string
 ) {
-  console.log("🌐 API: Associating Firebase UID", {
-    eventId,
-    email,
-    firebaseUID,
-  });
 
   const { data } = await api.post(`/events/${eventId}/associate-firebase-uid`, {
     email,
     firebaseUID,
   });
 
-  console.log("📡 API: Associate UID response", data);
   return data;
 }
 
@@ -207,10 +195,7 @@ export async function checkOrgRegistrationByIdentifiers(
   orgId: string,
   identifierFields: Record<string, any>
 ): Promise<OrgCheckResponse> {
-  console.log("🌐 API: Checking ORG registration by identifiers", {
-    orgId,
-    identifierFields,
-  });
+
 
   const { data } = await api.post(
     `/events/org/${orgId}/check-registration-by-identifiers`,
@@ -219,7 +204,6 @@ export async function checkOrgRegistrationByIdentifiers(
     }
   );
 
-  console.log("📡 API: ORG registration check by identifiers response", data);
   return data as {
     found: boolean;
     orgAttendee?: {
@@ -237,19 +221,12 @@ export async function checkRegistrationByIdentifiers(
   eventId: string,
   identifierFields: Record<string, any>
 ) {
-  console.log("🌐 API: Checking registration by identifiers", {
-    eventId,
-    identifierFields,
-  });
-
   const { data } = await api.post(
     `/events/${eventId}/check-registration-by-identifiers`,
     {
       identifierFields,
     }
   );
-
-  console.log("📡 API: Registration check by identifiers response", data);
   return data as {
     isRegistered: boolean;
     orgAttendee?: any;
@@ -324,11 +301,6 @@ export async function createEventUserForSession(
   firebaseUID: string,
   userEmail: string
 ) {
-  console.log("🔍 API: Creating EventUser for session", {
-    eventId,
-    firebaseUID,
-    userEmail,
-  });
 
   try {
     // Intentar crear/actualizar usando el endpoint con Firebase UID incluido
@@ -341,7 +313,6 @@ export async function createEventUserForSession(
       }
     );
 
-    console.log("✅ API: EventUser created/updated for session");
     return data;
   } catch (error) {
     console.error("❌ API: Failed to create EventUser for session:", error);
