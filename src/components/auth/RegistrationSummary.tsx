@@ -1,5 +1,5 @@
+// src/components/auth/RegistrationSummary.tsx
 import {
-  Modal,
   Stack,
   Button,
   Text,
@@ -7,6 +7,8 @@ import {
   Divider,
   Group,
   Badge,
+  Card,
+  Title,
 } from "@mantine/core";
 import { IconCheck, IconEdit, IconArrowRight } from "@tabler/icons-react";
 import type { RegistrationForm } from "../../types";
@@ -14,8 +16,6 @@ import type { FoundRegistration } from "../../api/events";
 import { transformRegistrationDataToLabels } from "../../utils/formDataTransform";
 
 interface RegistrationSummaryProps {
-  opened: boolean;
-  onClose: () => void;
   registration: FoundRegistration;
   formConfig: RegistrationForm;
   onContinueToEvent: () => void;
@@ -23,8 +23,6 @@ interface RegistrationSummaryProps {
 }
 
 export function RegistrationSummary({
-  opened,
-  onClose,
   registration,
   formConfig,
   onContinueToEvent,
@@ -44,14 +42,10 @@ export function RegistrationSummary({
   );
 
   return (
-    <Modal
-      opened={opened}
-      onClose={onClose}
-      title="Tu información de registro"
-      size="lg"
-      centered
-    >
+    <Card shadow="md" padding="xl" radius="lg" withBorder>
       <Stack gap="lg">
+        <Title order={4}>Tu información de registro</Title>
+
         {isRegistered ? (
           <Badge color="green" size="lg" leftSection={<IconCheck size={16} />}>
             Ya estás registrado en este evento
@@ -72,13 +66,22 @@ export function RegistrationSummary({
             {sortedFields.map((field) => {
               const originalValue = attendee.registrationData[field.id];
               const displayValue = readableData[field.id];
-              
-              // No mostrar campos ocultos o auto-calculados en el resumen
+
+              // No mostrar campos ocultos o vacíos en el resumen
               if (field.hidden || !originalValue) return null;
 
               return (
-                <Group key={field.id} justify="space-between">
-                  <Text size="sm" fw={500} c="dimmed" style={{ flex: '0 0 40%' }}>
+                <Group
+                  key={field.id}
+                  justify="space-between"
+                  align="flex-start"
+                >
+                  <Text
+                    size="sm"
+                    fw={500}
+                    c="dimmed"
+                    style={{ flex: "0 0 40%" }}
+                  >
                     {field.label}:
                   </Text>
                   <Text size="sm" style={{ flex: 1 }}>
@@ -95,7 +98,7 @@ export function RegistrationSummary({
         {/* Opciones */}
         <Stack gap="sm">
           <Button
-            size="lg"
+            size="md"
             fullWidth
             rightSection={<IconArrowRight size={20} />}
             onClick={onContinueToEvent}
@@ -111,12 +114,8 @@ export function RegistrationSummary({
           >
             Actualizar mi información
           </Button>
-
-          <Button variant="subtle" fullWidth onClick={onClose}>
-            Cerrar
-          </Button>
         </Stack>
       </Stack>
-    </Modal>
+    </Card>
   );
 }

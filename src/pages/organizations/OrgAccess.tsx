@@ -32,9 +32,9 @@ import {
 import type { RegistrationForm } from "../../types";
 import type { FoundRegistration } from "../../api/events";
 import { RegistrationAccessCard } from "../../components/auth/RegistrationAccessCard";
-import { RegistrationSummaryCard } from "../../components/auth/RegistrationSummaryCard";
 import { AdvancedRegistrationForm } from "../../components/auth/AdvancedRegistrationForm";
 import { RegistrationVerificationForm } from "../../components/auth/RegistrationVerificationForm";
+import { RegistrationSummary } from "../../components/auth/RegistrationSummary";
 import UserSession from "../../components/auth/UserSession";
 import { useAuth } from "../../auth/AuthProvider";
 import { notifications } from "@mantine/notifications";
@@ -45,6 +45,9 @@ import {
   fetchOrgAttendeeByEmail,
   type OrgAttendee,
 } from "../../api/org-attendees";
+
+// 👇 import para crear EventUser desde OrgAttendee
+import { registerEventUserFromOrgAttendee } from "../../api/event-users";
 
 type FlowStep =
   | "loading"
@@ -75,6 +78,7 @@ export default function OrgAccess() {
   const [error, setError] = useState<string | null>(null);
   const [autoRegistering, setAutoRegistering] = useState(false);
   const [orgLoading, setOrgLoading] = useState(false);
+  const [, setCreatingEventUser] = useState(false);
 
   // 👇 estado propio para el flujo de actualización ORG-ONLY
   const [orgAttendeeForUpdate, setOrgAttendeeForUpdate] =
@@ -123,7 +127,9 @@ export default function OrgAccess() {
                 message:
                   "No encontramos un correo asociado a tu sesión. Ingresa de nuevo para actualizar tus datos.",
               });
-              setFlowStep(hasIdentifiers ? "access-options" : "full-registration");
+              setFlowStep(
+                hasIdentifiers ? "access-options" : "full-registration"
+              );
               return;
             }
 
@@ -140,11 +146,16 @@ export default function OrgAccess() {
                   message:
                     "No encontramos un registro asociado a tu correo en esta organización.",
                 });
-                setFlowStep(hasIdentifiers ? "access-options" : "full-registration");
+                setFlowStep(
+                  hasIdentifiers ? "access-options" : "full-registration"
+                );
                 return;
               }
 
-              console.log("🔎 OrgAccess(org-only): attendee for update:", attendee);
+              console.log(
+                "🔎 OrgAccess(org-only): attendee for update:",
+                attendee
+              );
               setOrgAttendeeForUpdate(attendee);
               setFlowStep("update-registration");
               return;
@@ -159,7 +170,9 @@ export default function OrgAccess() {
                 message:
                   "No se pudo cargar tu información para actualizarla. Intenta de nuevo.",
               });
-              setFlowStep(hasIdentifiers ? "access-options" : "full-registration");
+              setFlowStep(
+                hasIdentifiers ? "access-options" : "full-registration"
+              );
               return;
             }
           }
@@ -378,9 +391,9 @@ export default function OrgAccess() {
       // 🔹 Si sí se encontró, seguimos como ya lo tenías
       const userEmail =
         extractEmailFromOrgAttendee(result.orgAttendee) ||
-        Object.values(values).find(
+        (Object.values(values).find(
           (v) => typeof v === "string" && v.includes("@")
-        ) ||
+        ) as string | undefined) ||
         null;
 
       if (!userEmail) {
@@ -419,6 +432,83 @@ export default function OrgAccess() {
       });
     } finally {
       setOrgLoading(false);
+    }
+  };
+
+  // Handler para continuar desde el resumen (EVENT MODE):
+  // crea el EventUser a partir del OrgAttendee y luego navega a /attend
+  // dentro de OrgAccess.tsx
+
+  const handleContinueFromSummary = async () => {
+    if (!foundRegistration?.attendee) {
+      handleSuccessEventMode();
+      return;
+    }
+
+    if (!event) {
+      handleSuccessEventMode();
+      return;
+    }
+
+    try {
+      setCreatingEventUser(true);
+
+      const attendee = foundRegistration.attendee;
+
+      // 1) Sacar email del OrgAttendee (usando helper que ya tienes)
+      const email =
+        extractEmailFromOrgAttendee(attendee) ||
+        user?.email ||
+        localStorage.getItem(user?.uid ? `uid-${user.uid}-email` : "") ||
+        localStorage.getItem("user-email") ||
+        null;
+
+      if (!email) {
+        console.warn(
+          "⚠️ handleContinueFromSummary: no email found for attendee, proceeding without email"
+        );
+      }
+
+      // 2) Asegurar sesión anónima en Firebase y persistir email
+      let firebaseUID = user?.uid;
+
+      if (!firebaseUID && email) {
+        firebaseUID = await createAnonymousSession(email);
+        localStorage.setItem("user-email", email);
+        localStorage.setItem(`uid-${firebaseUID}-email`, email);
+      }
+
+      // 3) Guardar fallback específico para EventAttend (prioridad 3)
+      if (email) {
+        localStorage.setItem("last-registered-email", email);
+      }
+
+      // 4) Crear el EventUser a partir del OrgAttendee
+      await registerEventUserFromOrgAttendee(
+        attendee._id,
+        event._id,
+        firebaseUID
+      );
+
+      notifications.show({
+        color: "green",
+        title: "Registro completado",
+        message:
+          "Tu registro a este evento está listo. Te estamos llevando al evento.",
+      });
+
+      // 5) Ahora sí, ir a /attend
+      handleSuccessEventMode();
+    } catch (err) {
+      console.error("❌ Error creando EventUser desde summary:", err);
+      notifications.show({
+        color: "red",
+        title: "Error",
+        message:
+          "No se pudo completar tu registro al evento. Intenta nuevamente o contacta al organizador.",
+      });
+    } finally {
+      setCreatingEventUser(false);
     }
   };
 
@@ -492,7 +582,8 @@ export default function OrgAccess() {
                   onCancel={() => navigate(`/org/${slug}`)}
                   existingData={{
                     attendeeId: orgAttendeeForUpdate._id,
-                    registrationData: orgAttendeeForUpdate.registrationData ?? {},
+                    registrationData:
+                      orgAttendeeForUpdate.registrationData ?? {},
                   }}
                   mode="page"
                 />
@@ -714,13 +805,11 @@ export default function OrgAccess() {
           )}
 
           {flowStep === "summary" && foundRegistration && (
-            <RegistrationSummaryCard
-              eventId={event._id}
+            <RegistrationSummary
               registration={foundRegistration}
               formConfig={formConfig}
-              onContinueToEvent={handleSuccessEventMode}
+              onContinueToEvent={handleContinueFromSummary}
               onUpdateInfo={() => setFlowStep("update-registration")}
-              onBack={() => setFlowStep("access-options")}
             />
           )}
 

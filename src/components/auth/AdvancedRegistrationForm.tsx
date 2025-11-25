@@ -535,13 +535,18 @@ export function AdvancedRegistrationForm({
   const handleSubmit = async (values: FormValues) => {
     try {
       setLoading(true);
-      const processedValues = { ...values };
+
+      // 1) Copia inmutable para evaluar visibilidad
+      const visibilityValues = { ...values };
+
+      // 2) Copia mutable que realmente vamos a enviar
+      const processedValues: FormValues = { ...values };
 
       // Limpiar valores de campos NO visibles (para no conservar datos viejos)
       sortedFields.forEach((field) => {
         const visible = isFieldEffectivelyVisible(
           field,
-          processedValues,
+          visibilityValues, // 👈 usamos SIEMPRE la foto original
           sortedFields
         );
 
@@ -562,9 +567,9 @@ export function AdvancedRegistrationForm({
       );
       const phoneField = sortedFields.find((f) => f.type === "tel");
 
-      if (countryField && phoneField && values[countryField.id]) {
+      if (countryField && phoneField && processedValues[countryField.id]) {
         const resolvedCountryCode = resolveCountryCode(
-          values,
+          processedValues,
           sortedFields,
           countryOptions
         );
