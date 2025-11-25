@@ -1,3 +1,5 @@
+/* eslint-disable react-hooks/exhaustive-deps */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import {
   Modal,
   Card,
@@ -22,8 +24,10 @@ import type { RegistrationForm, FormField } from "../../types";
 import { notifications } from "@mantine/notifications";
 import { useAuth } from "../../auth/AuthProvider";
 import {
-  buildCityToStateMap,
   getDialCodeByCountry,
+  getAllCountries,
+  getStatesByCountry,
+  getCitiesByCountry,
 } from "../../data/form-catalogs";
 
 interface AdvancedRegistrationFormProps {
@@ -120,6 +124,49 @@ function shouldShowField(field: FormField, values: FormValues): boolean {
   return visible;
 }
 
+type SelectOption = { value: string; label?: string; parentValue?: string };
+
+function uniqueOptions<T extends { value: any }>(options: T[]): T[] {
+  const seen = new Set<string>();
+  return options.filter((opt) => {
+    const key = String(opt.value);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function resolveCountryCode(
+  currentValues: FormValues,
+  sortedFields: FormField[],
+  countryOptions: SelectOption[]
+): string | undefined {
+  // Busca el campo de país, pero ignora los que son código (ej: codigo_pais, countrycode)
+  const countryField = sortedFields.find((f) => {
+    const id = f.id.toLowerCase();
+    // Debe contener 'pais' o 'country', pero NO 'codigo' ni 'code'
+    const isCountry = id.includes("pais") || id.includes("country");
+    const isCode = id.includes("codigo") || id.includes("code");
+    return isCountry && !isCode;
+  });
+
+  if (!countryField) return undefined;
+
+  const raw = currentValues[countryField.id];
+  if (!raw || typeof raw !== "string") return undefined;
+
+  // Si ya parece un ISO2 (CL, AR, MX...)
+  if (/^[A-Z]{2}$/i.test(raw)) {
+    return raw.toUpperCase();
+  }
+
+  // Si lo que se guardó fue el label (ej: "Colombia"), lo mapeamos
+  const byLabel = countryOptions.find((c) => c.label === raw);
+  if (byLabel) return byLabel.value;
+
+  return undefined;
+}
+
 // Componente memoizado para cada campo del formulario
 const FormFieldComponent = memo(
   ({
@@ -129,7 +176,7 @@ const FormFieldComponent = memo(
   }: {
     field: FormField;
     inputProps: ReturnType<ReturnType<typeof useForm>["getInputProps"]>;
-    filteredOptions?: typeof field.options;
+    filteredOptions?: SelectOption[];
   }) => {
     const commonProps = {
       key: field.id,
@@ -144,20 +191,24 @@ const FormFieldComponent = memo(
       case "text":
       case "email":
         return <TextInput {...commonProps} type={field.type} {...inputProps} />;
+
       case "tel":
         return <TextInput {...commonProps} type="tel" {...inputProps} />;
+
       case "number":
         return <NumberInput {...commonProps} {...inputProps} />;
+
       case "select":
         return (
           <Select
             {...commonProps}
-            data={filteredOptions || field.options || []}
+            data={(filteredOptions as any) || (field.options as any) || []}
             searchable
             clearable
             {...inputProps}
           />
         );
+
       case "checkbox":
         return (
           <Checkbox
@@ -188,6 +239,7 @@ const FormFieldComponent = memo(
             {...inputProps}
           />
         );
+
       default:
         return null;
     }
@@ -211,7 +263,20 @@ export function AdvancedRegistrationForm({
   const [formLoading, setFormLoading] = useState(true);
   const { createAnonymousSession } = useAuth();
 
-  const cityToStateMap = useMemo(() => buildCityToStateMap("CO"), []);
+  // Opciones de países precalculadas (value = isoCode, label = nombre)
+  const countryOptions: SelectOption[] = useMemo(
+    () =>
+      uniqueOptions(
+        getAllCountries()
+          .slice()
+          .sort((a, b) => a.name.localeCompare(b.name))
+          .map((country) => ({
+            value: country.isoCode,
+            label: country.name,
+          }))
+      ),
+    []
+  );
 
   useEffect(() => {
     const loadForm = async () => {
@@ -255,67 +320,184 @@ export function AdvancedRegistrationForm({
 
     form.setInitialValues(initialValues);
     form.setValues(initialValues);
-  }, [formConfig, existingData]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [formConfig, existingData]);
 
   const sortedFields = useMemo(() => {
     if (!formConfig) return [];
     return [...formConfig.fields].sort((a, b) => a.order - b.order);
   }, [formConfig]);
 
+  // --- IDs de campos especiales: país y código de país ---
+  const countryFieldId = useMemo(() => {
+    const field = sortedFields.find((f) => {
+      const id = f.id.toLowerCase();
+      const isCountry = id.includes("pais") || id.includes("country");
+      const isCode = id.includes("codigo") || id.includes("code");
+      return isCountry && !isCode; // solo el campo de selección de país
+    });
+    return field?.id;
+  }, [sortedFields]);
+
+  const countryCodeFieldId = useMemo(() => {
+    const field = sortedFields.find((f) => {
+      const id = f.id.toLowerCase();
+      // aquí SÍ queremos el campo de código, ej: "codigo_pais"
+      return id.includes("countrycode") || id.includes("codigo");
+    });
+    return field?.id;
+  }, [sortedFields]);
+
+  // --- Auto-asignar código de país al cambiar el país ---
+  useEffect(() => {
+    if (!countryFieldId || !countryCodeFieldId) return;
+
+    const rawCountry = form.values[countryFieldId];
+    const currentCode = form.values[countryCodeFieldId];
+
+    // Si no hay país seleccionado, limpiamos el código (opcional)
+    if (!rawCountry || typeof rawCountry !== "string") {
+      if (currentCode) {
+        form.setFieldValue(countryCodeFieldId, "");
+      }
+      return;
+    }
+
+    const resolvedCountryCode = resolveCountryCode(
+      form.values,
+      sortedFields,
+      countryOptions
+    );
+
+    if (!resolvedCountryCode) return;
+
+    const dialCode = getDialCodeByCountry(resolvedCountryCode);
+    if (!dialCode) return;
+
+    const formatted = `+${dialCode}`;
+
+    if (currentCode !== formatted) {
+      form.setFieldValue(countryCodeFieldId, formatted);
+    }
+    // 👇 escuchamos solo el valor del país y las refs necesarias
+  }, [
+    countryFieldId,
+    countryCodeFieldId,
+    form,
+    form.values[countryFieldId as keyof FormValues],
+    sortedFields,
+    countryOptions,
+  ]);
+
+  /**
+   * Devuelve las opciones para un campo select.
+   * - Para País/Estado/Ciudad: usa la librería country-state-city (options no vienen de BD).
+   * - Para otros selects: usa field.options y parentValue para cascada.
+   */
   const getFilteredOptions = useCallback(
     (field: FormField, currentValues: FormValues) => {
+      const idLower = field.id.toLowerCase();
+
+      const isCountryField =
+        idLower.includes("pais") || idLower.includes("country");
+      const isStateField =
+        idLower.includes("estado") ||
+        idLower.includes("departamento") ||
+        idLower.includes("state");
+      const isCityField =
+        idLower.includes("ciudad") || idLower.includes("city");
+
+      // ---- País (select dinámico) ----
+      if (isCountryField) {
+        return countryOptions; // ya viene deduplicado
+      }
+
+      // ---- Resolver código de país una sola vez ----
+      const countryCode = resolveCountryCode(
+        currentValues,
+        sortedFields,
+        countryOptions
+      );
+
+      // Si no hay país seleccionado, no mostramos estados/ciudades todavía
+      if (!countryCode && (isStateField || isCityField)) {
+        return [];
+      }
+
+      // ---- Estado/Departamento (select dinámico) ----
+      if (isStateField) {
+        const states = getStatesByCountry(countryCode!);
+
+        return uniqueOptions(
+          states
+            .slice()
+            .sort((a, b) => a.name.localeCompare(b.name))
+            .map((s) => ({
+              value: s.name,
+              label: s.name,
+            }))
+        );
+      }
+
+      // ---- Ciudad (select dinámico) ----
+      if (isCityField) {
+        const stateField = sortedFields.find(
+          (f) =>
+            f.id.toLowerCase().includes("estado") ||
+            f.id.toLowerCase().includes("departamento") ||
+            f.id.toLowerCase().includes("state")
+        );
+
+        const selectedState =
+          stateField && typeof currentValues[stateField.id] === "string"
+            ? (currentValues[stateField.id] as string)
+            : undefined;
+
+        const cities = getCitiesByCountry(countryCode!);
+        const states = getStatesByCountry(countryCode!);
+
+        return uniqueOptions(
+          cities
+            .filter((city) => {
+              if (!selectedState) return true; // si no hay depto, mostrar todas
+              const state = states.find((s) => s.isoCode === city.stateCode);
+              return state?.name === selectedState;
+            })
+            .slice()
+            .sort((a, b) => a.name.localeCompare(b.name))
+            .map((city) => {
+              const state = states.find((s) => s.isoCode === city.stateCode);
+              const stateName = state?.name;
+              return {
+                value: city.name, // guardas solo el nombre
+                label: stateName ? `${city.name} (${stateName})` : city.name,
+              };
+            })
+        );
+      }
+
+      // ---- Caso genérico: selects de negocio (perfil, especialidad, etc.) ----
       if (!field.options) return [];
 
-      // 1) Caso genérico: si el field tiene dependsOn y las opciones tienen parentValue
       if (field.dependsOn) {
         const parentValue = currentValues[field.dependsOn];
 
         if (parentValue) {
-          const filteredByParent = field.options.filter((opt) => {
-            if (!opt.parentValue) return true; // por si hay opciones "globales"
-            return opt.parentValue === parentValue;
-          });
+          const filteredByParent = (field.options as any).filter(
+            (opt: SelectOption) => {
+              if (!opt.parentValue) return true;
+              return opt.parentValue === parentValue;
+            }
+          );
 
-          // Si filtramos algo, devolvemos eso
           if (filteredByParent.length > 0) {
-            return filteredByParent;
+            return uniqueOptions(filteredByParent);
           }
         }
       }
 
-      // 2) Caso especial ciudades (tu lógica previa con cityToStateMap)
-      if (
-        field.id.toLowerCase().includes("city") ||
-        field.id.toLowerCase().includes("ciudad")
-      ) {
-        const stateField = sortedFields.find(
-          (f) =>
-            f.id.toLowerCase().includes("state") ||
-            f.id.toLowerCase().includes("department") ||
-            f.id.toLowerCase().includes("departamento")
-        );
-
-        if (stateField && currentValues[stateField.id]) {
-          const selectedState = currentValues[stateField.id] as string;
-
-          // intentar usar cityToStateMap
-          const fromMap = field.options.filter(
-            (city) => cityToStateMap[city.value] === selectedState
-          );
-          if (fromMap.length > 0) return fromMap;
-
-          // fallback: usar parentValue
-          const fromParent = field.options.filter(
-            (city) => city.parentValue === selectedState
-          );
-          if (fromParent.length > 0) return fromParent;
-        }
-      }
-
-      // 3) Default: sin filtrado especial
-      return field.options;
+      return uniqueOptions(field.options as any);
     },
-    [sortedFields, cityToStateMap]
+    [sortedFields, countryOptions]
   );
 
   const handleSubmit = async (values: FormValues) => {
@@ -323,6 +505,7 @@ export function AdvancedRegistrationForm({
       setLoading(true);
       const processedValues = { ...values };
 
+      // Rellenar código de país basado en selección de país
       const countryField = sortedFields.find(
         (f) =>
           f.id.toLowerCase().includes("country") ||
@@ -331,8 +514,14 @@ export function AdvancedRegistrationForm({
       const phoneField = sortedFields.find((f) => f.type === "tel");
 
       if (countryField && phoneField && values[countryField.id]) {
-        const countryCode = values[countryField.id] as string;
-        const dialCode = getDialCodeByCountry(countryCode);
+        const resolvedCountryCode = resolveCountryCode(
+          values,
+          sortedFields,
+          countryOptions
+        );
+        const dialCode = resolvedCountryCode
+          ? getDialCodeByCountry(resolvedCountryCode)
+          : "";
 
         const countryCodeField = sortedFields.find(
           (f) =>
@@ -341,7 +530,7 @@ export function AdvancedRegistrationForm({
         );
 
         if (countryCodeField && dialCode) {
-          processedValues[countryCodeField.id] = dialCode;
+          processedValues[countryCodeField.id] = `+${dialCode}`;
         }
       }
 

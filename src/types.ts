@@ -10,6 +10,8 @@ export type FormFieldType =
   | "checkbox"
   | "textarea";
 
+export type OptionsSource = "manual" | "countries" | "states" | "cities";
+
 export interface FormFieldOption {
   label: string;
   value: string;
@@ -35,6 +37,10 @@ export interface FormField {
   placeholder?: string;
   required: boolean;
   options?: FormFieldOption[]; // Para tipo 'select'
+
+  optionsSource?: OptionsSource;
+  countryCode?: string;
+
   validation?: {
     min?: number;
     max?: number;

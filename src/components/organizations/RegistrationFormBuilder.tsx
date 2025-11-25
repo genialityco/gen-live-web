@@ -179,6 +179,11 @@ export default function RegistrationFormBuilder({
       dependsOn: fieldTemplate?.dependsOn,
       conditionalLogic: fieldTemplate?.conditionalLogic,
       validation: fieldTemplate?.validation,
+      // nuevos campos de tipos/TS (opcionales)
+      optionsSource: fieldTemplate?.optionsSource,
+      countryCode: fieldTemplate?.countryCode,
+      isIdentifier: fieldTemplate?.isIdentifier,
+      autoCalculated: fieldTemplate?.autoCalculated,
     };
     setEditingField(newField);
     setIsModalOpen(true);
@@ -202,85 +207,110 @@ export default function RegistrationFormBuilder({
         dependsOn: fieldTemplate.dependsOn,
         conditionalLogic: fieldTemplate.conditionalLogic,
         validation: fieldTemplate.validation,
+        isIdentifier: fieldTemplate.isIdentifier,
+        optionsSource: fieldTemplate.optionsSource,
+        countryCode: fieldTemplate.countryCode,
       };
       return { ...prevForm, fields: [...prevForm.fields, newField] };
     });
   };
 
-  const addPrePopulatedField = async (
+  const addPrePopulatedField = (
     fieldType: "pais" | "estado" | "ciudad" | "pais-telefono",
     countryCode?: string
   ) => {
-    // Importar dinámicamente la librería
-    const { getAllCountries, getStatesByCountry, getCitiesByCountry } =
-      await import("../../data/form-catalogs");
+    const timestamp = Date.now();
 
     if (fieldType === "pais") {
-      const countries = getAllCountries();
-      const template: Partial<FormField> = {
-        id: `pais_${Date.now()}`,
-        type: "select",
-        label: "País",
-        placeholder: "Seleccione su país",
-        required: true,
-        helpText: "Seleccione el país de residencia",
-        options: countries
-          .sort((a: { name: string }, b: { name: any }) =>
-            a.name.localeCompare(b.name)
-          )
-          .map((country: { isoCode: any; name: any }) => ({
-            value: country.isoCode,
-            label: country.name,
-          })),
-      };
-      addFieldDirectly(template);
-
-      notifications.show({
-        title: "Campo agregado",
-        message: `Se agregó el campo País con ${countries.length} países`,
-        color: "green",
-      });
-    } else if (fieldType === "pais-telefono") {
-      // Agregar campo País + Código País + Teléfono relacionados
-      const countries = getAllCountries();
-      const timestamp = Date.now();
-
-      // 1. Campo País
-      const paisField: Partial<FormField> = {
+      // Campo País basado en librería (se resuelve en el formulario público)
+      addFieldDirectly({
         id: `pais_${timestamp}`,
         type: "select",
         label: "País",
         placeholder: "Seleccione su país",
         required: true,
         helpText: "Seleccione el país de residencia",
-        options: countries
-          .sort((a: { name: string }, b: { name: any }) =>
-            a.name.localeCompare(b.name)
-          )
-          .map((country: { isoCode: any; name: any }) => ({
-            value: country.isoCode,
-            label: country.name,
-          })),
-      };
+        optionsSource: "countries", // <- clave: no guardamos opciones
+      });
 
-      // 2. Campo Código de País (auto-calculado)
-      const codigoField: Partial<FormField> = {
-        id: `codigo_pais_${timestamp}`,
+      notifications.show({
+        title: "Campo agregado",
+        message: "Se agregó el campo País (catálogo dinámico).",
+        color: "green",
+      });
+    } else if (fieldType === "estado") {
+      // Campo Estado/Departamento basado en librería
+      addFieldDirectly({
+        id: `estado_${timestamp}`,
+        type: "select",
+        label: "Estado/Departamento",
+        placeholder: "Seleccione su estado",
+        required: true,
+        helpText: "Seleccione el estado o departamento",
+        optionsSource: "states",
+        countryCode: countryCode || "CO", // por defecto CO
+      });
+
+      notifications.show({
+        title: "Campo agregado",
+        message:
+          "Se agregó el campo Estado/Departamento (catálogo dinámico por país).",
+        color: "green",
+      });
+    } else if (fieldType === "ciudad") {
+      // Campo Ciudad basado en librería
+      addFieldDirectly({
+        id: `ciudad_${timestamp}`,
+        type: "select",
+        label: "Ciudad",
+        placeholder: "Seleccione su ciudad",
+        required: true,
+        helpText: "Seleccione la ciudad",
+        optionsSource: "cities",
+        countryCode: countryCode || "CO", // por defecto CO
+        // opcionalmente, en el futuro, podrías setear dependsOn a un campo estado
+      });
+
+      notifications.show({
+        title: "Campo agregado",
+        message: "Se agregó el campo Ciudad (catálogo dinámico por estado).",
+        color: "green",
+      });
+    } else if (fieldType === "pais-telefono") {
+      // Agregar campos País + Código país (auto) + Teléfono
+      const paisId = `pais_${timestamp}`;
+      const codigoId = `codigo_pais_${timestamp}`;
+      const telefonoId = `telefono_${timestamp}`;
+
+      // 1. Campo País (select dinámico por librería)
+      addFieldDirectly({
+        id: paisId,
+        type: "select",
+        label: "País",
+        placeholder: "Seleccione su país",
+        required: true,
+        helpText: "Seleccione el país de residencia",
+        optionsSource: "countries",
+      });
+
+      // 2. Campo Código de país (texto auto-calculado según país)
+      addFieldDirectly({
+        id: codigoId,
         type: "text",
         label: "Código de país",
         placeholder: "+57",
         required: true,
         helpText: "Se asigna automáticamente según el país",
         autoCalculated: true,
-        dependsOn: `pais_${timestamp}`,
+        dependsOn: paisId,
         validation: {
           pattern: "^\\+\\d{1,4}$",
         },
-      };
+      });
 
       // 3. Campo Teléfono
-      const telefonoField: Partial<FormField> = {
-        id: `telefono_${timestamp}`,
+      addFieldDirectly({
+        id: telefonoId,
         type: "tel",
         label: "Número de teléfono",
         placeholder: "3001234567",
@@ -290,130 +320,12 @@ export default function RegistrationFormBuilder({
           minLength: 7,
           maxLength: 15,
         },
-      };
-
-      // Agregar los tres campos en una sola operación
-      setForm((prevForm: RegistrationForm) => {
-        const baseOrder = prevForm.fields.length;
-
-        const newFields: FormField[] = [
-          {
-            ...paisField,
-            id: paisField.id!,
-            type: paisField.type!,
-            label: paisField.label!,
-            placeholder: paisField.placeholder,
-            required: paisField.required!,
-            options: paisField.options,
-            order: baseOrder,
-            helpText: paisField.helpText,
-          },
-          {
-            ...codigoField,
-            id: codigoField.id!,
-            type: codigoField.type!,
-            label: codigoField.label!,
-            placeholder: codigoField.placeholder,
-            required: codigoField.required!,
-            order: baseOrder + 1,
-            helpText: codigoField.helpText,
-            autoCalculated: codigoField.autoCalculated,
-            dependsOn: codigoField.dependsOn,
-            validation: codigoField.validation,
-          },
-          {
-            ...telefonoField,
-            id: telefonoField.id!,
-            type: telefonoField.type!,
-            label: telefonoField.label!,
-            placeholder: telefonoField.placeholder,
-            required: telefonoField.required!,
-            order: baseOrder + 2,
-            helpText: telefonoField.helpText,
-            validation: telefonoField.validation,
-          },
-        ];
-
-        return { ...prevForm, fields: [...prevForm.fields, ...newFields] };
       });
 
       notifications.show({
         title: "Campos agregados",
         message:
-          "Se agregaron los campos País, Código de país y Teléfono relacionados",
-        color: "green",
-      });
-    } else if (fieldType === "estado") {
-      // Necesitamos saber de qué país
-      if (!countryCode) {
-        countryCode = "CO"; // Por defecto Colombia
-      }
-
-      const states = getStatesByCountry(countryCode);
-      const template: Partial<FormField> = {
-        id: `estado_${Date.now()}`,
-        type: "select",
-        label: "Estado/Departamento",
-        placeholder: "Seleccione su estado",
-        required: true,
-        helpText: "Seleccione el estado o departamento",
-        options: states
-          .sort((a: { name: string }, b: { name: any }) =>
-            a.name.localeCompare(b.name)
-          )
-          .map((state: { name: any }) => ({
-            value: state.name,
-            label: state.name,
-          })),
-      };
-      addFieldDirectly(template);
-
-      notifications.show({
-        title: "Campo agregado",
-        message: `Se agregó el campo Estado/Departamento con ${states.length} opciones`,
-        color: "green",
-      });
-    } else if (fieldType === "ciudad") {
-      if (!countryCode) {
-        countryCode = "CO"; // Por defecto Colombia
-      }
-
-      const cities = getCitiesByCountry(countryCode);
-      const states = getStatesByCountry(countryCode);
-
-      // Crear opciones con parentValue para cascada
-      // Usar ciudad|estado como value único para evitar duplicados
-      const cityOptions = cities
-        .sort((a: { name: string }, b: { name: any }) =>
-          a.name.localeCompare(b.name)
-        )
-        .map((city: { stateCode: any; name: any }) => {
-          // Encontrar el nombre del estado
-          const state = states.find(
-            (s: { isoCode: any }) => s.isoCode === city.stateCode
-          );
-          const stateName = state?.name || "Desconocido";
-          return {
-            value: `${city.name}|${stateName}`, // Value único: ciudad|departamento
-            label: `${city.name} (${stateName})`, // Label descriptivo
-            parentValue: stateName, // Enlazar con el estado
-          };
-        });
-
-      const template: Partial<FormField> = {
-        id: `ciudad_${Date.now()}`,
-        type: "select",
-        label: "Ciudad",
-        placeholder: "Seleccione su ciudad",
-        required: true,
-        helpText: "Seleccione la ciudad",
-        options: cityOptions,
-      };
-      addFieldDirectly(template);
-
-      notifications.show({
-        title: "Campo agregado",
-        message: `Se agregó el campo Ciudad con ${cities.length} opciones`,
+          "Se agregaron los campos País, Código de país y Teléfono relacionados (catálogos dinámicos).",
         color: "green",
       });
     }
@@ -922,65 +834,119 @@ export default function RegistrationFormBuilder({
                       labelPosition="center"
                     />
 
-                    <Textarea
-                      label="Opciones"
-                      description="Formato: valor|etiqueta|valorPadre (uno por línea). El valorPadre es opcional para opciones en cascada."
-                      value={
-                        editingField.options
-                          ?.map(
-                            (o: {
-                              value: any;
-                              label: any;
-                              parentValue?: string;
-                            }) =>
-                              `${o.value}|${o.label}${
-                                o.parentValue ? "|" + o.parentValue : ""
-                              }`
-                          )
-                          .join("\n") || ""
-                      }
-                      onChange={(e) => {
-                        const lines = e.currentTarget.value.split("\n");
-                        const options = lines
-                          .filter((line) => line.trim())
-                          .map((line) => {
-                            const parts = line.split("|");
-                            return {
-                              value: parts[0]?.trim() || "",
-                              label: parts[1]?.trim() || parts[0]?.trim() || "",
-                              parentValue: parts[2]?.trim() || undefined,
-                            };
-                          });
-                        setEditingField({ ...editingField, options });
-                      }}
-                      placeholder="colombia|Colombia&#10;endocrinologia|Endocrinología|medicina-interna"
-                      rows={6}
-                    />
+                    {/* Solo permitir editar opciones manuales */}
+                    {(!editingField.optionsSource ||
+                      editingField.optionsSource === "manual") && (
+                      <>
+                        <Textarea
+                          label="Opciones"
+                          description="Formato: valor|etiqueta|valorPadre (uno por línea). El valorPadre es opcional para opciones en cascada."
+                          value={
+                            editingField.options
+                              ?.map(
+                                (o: {
+                                  value: any;
+                                  label: any;
+                                  parentValue?: string;
+                                }) =>
+                                  `${o.value}|${o.label}${
+                                    o.parentValue ? "|" + o.parentValue : ""
+                                  }`
+                              )
+                              .join("\n") || ""
+                          }
+                          onChange={(e) => {
+                            const lines = e.currentTarget.value.split("\n");
+                            const options = lines
+                              .filter((line) => line.trim())
+                              .map((line) => {
+                                const parts = line.split("|");
+                                return {
+                                  value: parts[0]?.trim() || "",
+                                  label:
+                                    parts[1]?.trim() || parts[0]?.trim() || "",
+                                  parentValue: parts[2]?.trim() || undefined,
+                                };
+                              });
+                            setEditingField({ ...editingField, options });
+                          }}
+                          placeholder="colombia|Colombia&#10;endocrinologia|Endocrinología|medicina-interna"
+                          rows={6}
+                        />
 
-                    <Select
-                      label="Depende de (campo padre)"
-                      description="Si seleccionas un campo padre, este selector mostrará solo las opciones filtradas"
-                      value={editingField.dependsOn || ""}
-                      onChange={(value) =>
-                        setEditingField({
-                          ...editingField,
-                          dependsOn: value || undefined,
-                        })
-                      }
-                      data={[
-                        { value: "", label: "-- Ninguno --" },
-                        ...form.fields
-                          .filter(
-                            (f: { id: any; type: string }) =>
-                              f.id !== editingField.id && f.type === "select"
-                          )
-                          .map((f: { id: any; label: any }) => ({
-                            value: f.id,
-                            label: f.label,
-                          })),
-                      ]}
-                      clearable
-                    />
+                        <Select
+                          label="Depende de (campo padre)"
+                          description="Si seleccionas un campo padre, este selector mostrará solo las opciones filtradas"
+                          value={editingField.dependsOn || ""}
+                          onChange={(value) =>
+                            setEditingField({
+                              ...editingField,
+                              dependsOn: value || undefined,
+                            })
+                          }
+                          data={[
+                            { value: "", label: "-- Ninguno --" },
+                            ...form.fields
+                              .filter(
+                                (f: { id: any; type: string }) =>
+                                  f.id !== editingField.id &&
+                                  f.type === "select"
+                              )
+                              .map((f: { id: any; label: any }) => ({
+                                value: f.id,
+                                label: f.label,
+                              })),
+                          ]}
+                          clearable
+                        />
+                      </>
+                    )}
+
+                    {/* Selects con catálogo dinámico */}
+                    {editingField.optionsSource &&
+                      editingField.optionsSource !== "manual" && (
+                        <>
+                          <Alert color="blue" variant="light">
+                            <Text size="sm">
+                              Las opciones de este campo se generan
+                              automáticamente a partir de catálogos de{" "}
+                              {editingField.optionsSource === "countries" &&
+                                "países"}
+                              {editingField.optionsSource === "states" &&
+                                "estados/departamentos"}
+                              {editingField.optionsSource === "cities" &&
+                                "ciudades"}
+                              . No es necesario configurarlas manualmente.
+                            </Text>
+                          </Alert>
+
+                          <Select
+                            label="Depende de (campo padre)"
+                            description="Para catálogos dinámicos, puedes hacer que este campo dependa de otro (ej: Estado depende de País)."
+                            value={editingField.dependsOn || ""}
+                            onChange={(value) =>
+                              setEditingField({
+                                ...editingField,
+                                dependsOn: value || undefined,
+                              })
+                            }
+                            data={[
+                              { value: "", label: "-- Ninguno --" },
+                              ...form.fields
+                                .filter(
+                                  (f: { id: any; type: string }) =>
+                                    f.id !== editingField.id &&
+                                    f.type === "select"
+                                )
+                                .map((f: { id: any; label: any }) => ({
+                                  value: f.id,
+                                  label: f.label,
+                                })),
+                            ]}
+                            clearable
+                          />
+                        </>
+                      )}
                   </>
                 )}
 
