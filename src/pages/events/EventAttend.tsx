@@ -825,7 +825,7 @@ export default function EventAttend() {
                     </Card>
 
                     {/* Tablón de anuncios */}
-                    <Card shadow="sm" padding="md" radius="lg" withBorder>
+                    {/* <Card shadow="sm" padding="md" radius="lg" withBorder>
                       <Stack gap="sm">
                         <Title order={5}>📌 Tablón de anuncios</Title>
                         {event?.description ? (
@@ -855,7 +855,7 @@ export default function EventAttend() {
                           </Text>
                         )}
                       </Stack>
-                    </Card>
+                    </Card> */}
                   </Stack>
                 </Grid.Col>
               </Grid>
