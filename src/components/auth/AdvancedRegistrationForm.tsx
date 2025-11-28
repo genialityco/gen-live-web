@@ -248,7 +248,6 @@ const FormFieldComponent = memo(
         return (
           <Checkbox
             key={field.id}
-            label={field.label}
             size="sm"
             required={field.required}
             style={{ display: field.hidden ? "none" : "block" }}
@@ -260,6 +259,10 @@ const FormFieldComponent = memo(
               },
             }}
             {...inputProps}
+            // 👇 Reemplazamos el label directo por un nodo HTML renderizado
+            label={
+              <span dangerouslySetInnerHTML={{ __html: field.label || "" }} />
+            }
           />
         );
 
