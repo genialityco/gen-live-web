@@ -16,7 +16,6 @@ import {
   Box,
   MantineProvider,
   Image,
-  AspectRatio,
   ScrollArea,
   ThemeIcon,
 } from "@mantine/core";
@@ -215,7 +214,7 @@ function EventBanner({
 }: {
   imageUrl?: string;
   imageUrlMobile?: string; // variante mobile (cuadrada/rectangular)
-  height: number;
+  height?: number;
   status: string;
   showOverlay?: boolean;
   /** Si es true, usa siempre la imagen mobile (en desktop y mobile). */
@@ -234,7 +233,7 @@ function EventBanner({
         <Image
           src={src}
           h={height}
-          fit="cover"
+          fit="contain"
           style={{ transition: "transform 0.3s ease" }}
         />
       ) : (
@@ -247,7 +246,7 @@ function EventBanner({
             bottom: 0,
             left: 0,
             right: 0,
-            height: height > 250 ? "40%" : "30%",
+            height: (height ?? 0) > 250 ? "40%" : "30%",
             background: "linear-gradient(to top, rgba(0,0,0,0.3), transparent)",
           }}
         />
@@ -260,9 +259,8 @@ function EventBanner({
 function Hero({
   org,
   nextEvent,
-  orgSlug
-}: 
-{
+  orgSlug,
+}: {
   org: Org;
   nextEvent: EventItem | null;
   orgSlug: string;
@@ -288,15 +286,12 @@ function Hero({
     >
       {/* Mostrar el banner solo en desktop */}
       {!isMobile && (
-        <AspectRatio ratio={16 / 6}>
-          <EventBanner
-            imageUrl={heroImg}
-            imageUrlMobile={heroImgMobile}
-            height={420}
-            status={nextEvent?.status || "upcoming"}
-            showOverlay
-          />
-        </AspectRatio>
+        <EventBanner
+          imageUrl={heroImg}
+          imageUrlMobile={heroImgMobile}
+          status={nextEvent?.status || "upcoming"}
+          showOverlay
+        />
       )}
 
       {/* Contenido principal */}
@@ -387,9 +382,8 @@ function InfoRow({ date }: { date?: string | null }) {
 
 function NextEventSection({
   event,
-  orgSlug
-}: 
-{
+  orgSlug,
+}: {
   event: EventItem;
   orgSlug: string;
 }) {
@@ -443,7 +437,6 @@ function NextEventSection({
       <EventBanner
         imageUrl={event.branding?.header?.backgroundImageUrl}
         imageUrlMobile={event.branding?.header?.backgroundImageMobileUrl}
-        height={380}
         status={event.status}
         showOverlay
       />
@@ -522,9 +515,8 @@ function NextEventSection({
 
 function PastEventCard({
   event,
-  orgSlug
-}:
-{
+  orgSlug,
+}: {
   event: EventItem;
   orgSlug: string;
 }) {
@@ -599,9 +591,8 @@ function PastEventCard({
 // Item de "Próximos" (forzado a imagen mobile)
 function UpcomingEventCard({
   event,
-  orgSlug
-}:
-{
+  orgSlug,
+}: {
   event: EventItem;
   orgSlug: string;
 }) {

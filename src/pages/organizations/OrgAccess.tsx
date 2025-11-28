@@ -43,11 +43,13 @@ import { useForm } from "@mantine/form";
 // 👇 nuevo import para orgAttendee
 import {
   fetchOrgAttendeeByEmail,
+  recoverOrgAccess,
   type OrgAttendee,
 } from "../../api/org-attendees";
 
 // 👇 import para crear EventUser desde OrgAttendee
 import { registerEventUserFromOrgAttendee } from "../../api/event-users";
+import { normalizeIdentifierValue } from "../../utils/normalizeByType";
 
 type FlowStep =
   | "loading"
@@ -55,7 +57,9 @@ type FlowStep =
   | "quick-login"
   | "summary"
   | "full-registration"
-  | "update-registration";
+  | "update-registration"
+  | "org-recovery"
+  | "not-found";
 
 type FormValues = Record<string, string>;
 
@@ -80,7 +84,14 @@ export default function OrgAccess() {
   const [orgLoading, setOrgLoading] = useState(false);
   const [, setCreatingEventUser] = useState(false);
 
-  // 👇 estado propio para el flujo de actualización ORG-ONLY
+  // estado para recuperación org-only
+  const [recoveryIdentifierId, setRecoveryIdentifierId] = useState<
+    string | null
+  >(null);
+  const [recoveryIdentifierValue, setRecoveryIdentifierValue] = useState("");
+  const [recovering, setRecovering] = useState(false);
+
+  // estado propio para el flujo de actualización ORG-ONLY
   const [orgAttendeeForUpdate, setOrgAttendeeForUpdate] =
     useState<OrgAttendee | null>(null);
 
@@ -435,6 +446,84 @@ export default function OrgAccess() {
     }
   };
 
+  const handleOrgRecoverySubmit = async () => {
+    if (!org) {
+      notifications.show({
+        color: "red",
+        title: "Error",
+        message: "Organización no cargada.",
+      });
+      return;
+    }
+
+    if (!recoveryIdentifierId || !recoveryIdentifierValue.trim()) {
+      notifications.show({
+        color: "orange",
+        title: "Dato requerido",
+        message:
+          "Selecciona el tipo de dato e ingresa un valor para enviarte el recordatorio.",
+      });
+      return;
+    }
+
+    const identifierFields =
+      formConfig?.fields?.filter((f) => f.isIdentifier) || [];
+
+    const fieldDef = identifierFields.find(
+      (f) => f.id === recoveryIdentifierId
+    );
+
+    if (!fieldDef) {
+      notifications.show({
+        color: "red",
+        title: "Error",
+        message: "El tipo de dato seleccionado no es válido.",
+      });
+      return;
+    }
+
+    const normalized = normalizeIdentifierValue(
+      recoveryIdentifierValue,
+      fieldDef.type
+    );
+
+    // Validación básica para number
+    if (fieldDef.type === "number" && Number.isNaN(normalized)) {
+      notifications.show({
+        color: "orange",
+        title: "Dato inválido",
+        message: `El valor ingresado para "${fieldDef.label}" debe ser numérico.`,
+      });
+      return;
+    }
+
+    setRecovering(true);
+    try {
+      await recoverOrgAccess(org._id, {
+        [recoveryIdentifierId]: normalized,
+      });
+
+      notifications.show({
+        color: "green",
+        title: "Si encontramos un registro...",
+        message:
+          "Te enviaremos un correo con la información para que recuerdes con qué datos te registraste.",
+      });
+
+      setFlowStep("access-options");
+    } catch (error) {
+      console.error("❌ Error en recuperación org-only:", error);
+      notifications.show({
+        color: "red",
+        title: "Error",
+        message:
+          "No se pudo procesar tu solicitud de recuperación. Intenta de nuevo más tarde.",
+      });
+    } finally {
+      setRecovering(false);
+    }
+  };
+
   // Handler para continuar desde el resumen (EVENT MODE):
   // crea el EventUser a partir del OrgAttendee y luego navega a /attend
   // dentro de OrgAccess.tsx
@@ -630,6 +719,18 @@ export default function OrgAccess() {
                         />
                       ))}
 
+                      <Text size="xs" c="dimmed">
+                        ¿No recuerdas con qué datos te registraste?{" "}
+                        <Button
+                          variant="subtle"
+                          size="xs"
+                          px={0}
+                          onClick={() => setFlowStep("org-recovery")}
+                        >
+                          Recordar mis datos
+                        </Button>
+                      </Text>
+
                       <Group justify="space-between" mt="md">
                         <Button
                           variant="subtle"
@@ -644,6 +745,78 @@ export default function OrgAccess() {
                       </Group>
                     </Stack>
                   </form>
+                </Card>
+              )}
+
+              {flowStep === "org-recovery" && (
+                <Card shadow="md" padding="xl" radius="lg" withBorder>
+                  <Stack gap="md">
+                    <Stack gap={4}>
+                      <Text fw={600} size="lg">
+                        Recordar mis datos de acceso
+                      </Text>
+                      <Text size="sm" c="dimmed">
+                        Si ya te registraste antes pero no recuerdas con qué
+                        datos, podemos enviarte un correo con un recordatorio.
+                        <br />
+                        Solo dinos qué tipo de dato recuerdas (por ejemplo, tu
+                        correo o documento) y escríbelo a continuación.
+                      </Text>
+                    </Stack>
+
+                    <Stack gap="xs">
+                      <Text size="sm" fw={500}>
+                        ¿Qué dato recuerdas?
+                      </Text>
+                      <select
+                        value={recoveryIdentifierId ?? ""}
+                        onChange={(e) =>
+                          setRecoveryIdentifierId(e.target.value || null)
+                        }
+                        style={{
+                          padding: "8px 12px",
+                          borderRadius: 8,
+                          border: "1px solid #ced4da",
+                          fontSize: 14,
+                        }}
+                      >
+                        <option value="">Selecciona un tipo de dato</option>
+                        {identifierFields.map((field) => (
+                          <option key={field.id} value={field.id}>
+                            {field.label}
+                          </option>
+                        ))}
+                      </select>
+
+                      <TextInput
+                        mt="xs"
+                        label="Valor del dato"
+                        placeholder="Escribe aquí tu correo, documento u otro identificador"
+                        value={recoveryIdentifierValue}
+                        onChange={(e) =>
+                          setRecoveryIdentifierValue(e.currentTarget.value)
+                        }
+                      />
+                    </Stack>
+
+                    <Group justify="space-between" mt="md">
+                      <Button
+                        variant="subtle"
+                        size="sm"
+                        onClick={() => setFlowStep("quick-login")}
+                      >
+                        ← Volver a ingresar
+                      </Button>
+
+                      <Button
+                        size="sm"
+                        loading={recovering}
+                        onClick={handleOrgRecoverySubmit}
+                      >
+                        Enviarme un recordatorio
+                      </Button>
+                    </Group>
+                  </Stack>
                 </Card>
               )}
 
@@ -773,19 +946,56 @@ export default function OrgAccess() {
             <Stack gap="md">
               <RegistrationVerificationForm
                 orgSlug={slug!}
+                orgId={org._id}
                 eventId={event._id}
-                onVerificationComplete={(result) => {
+                onVerificationComplete={(result: any) => {
                   console.log(
                     "🎯 OrgAccess(EventMode) verification result:",
                     result
                   );
 
+                  // 1) Campos inválidos: nos quedamos en quick-login
+                  if (result.status === "INVALID_FIELDS") {
+                    notifications.show({
+                      color: "orange",
+                      title: "Datos incorrectos",
+                      message:
+                        result.message ||
+                        "Algunos de los datos ingresados no coinciden con nuestro registro. Revisa la información e inténtalo nuevamente.",
+                    });
+                    // 👇 IMPORTANTE: NO cambiamos el flowStep,
+                    // así el usuario sigue viendo el formulario de verificación.
+                    return;
+                  }
+
+                  // 2) Usuario no encontrado explícitamente
+                  if (result.status === "USER_NOT_FOUND") {
+                    notifications.show({
+                      color: "red",
+                      title: "Usuario no encontrado",
+                      message:
+                        result.message ||
+                        "No encontramos ningún registro con estos datos en esta organización.",
+                    });
+
+                    // Aquí decides si lo mandas a registro completo o lo dejas en quick-login.
+                    // Si quieres comportamiento igual al org-only, puedes dejar al usuario decidir
+                    // con el botón de "registrarme". Si quieres adelantarlo:
+                    setFlowStep("full-registration");
+                    return;
+                  }
+
+                  // 3) Ya registrado al evento
                   if (result.isRegistered && result.eventUser) {
                     console.log(
                       "✅ User already registered, redirecting to /attend"
                     );
                     handleSuccessEventMode();
-                  } else if (result.orgAttendee && !result.isRegistered) {
+                    return;
+                  }
+
+                  // 4) Existe en la organización pero no en el evento
+                  if (result.orgAttendee && !result.isRegistered) {
                     console.log(
                       "📝 User exists in org, showing summary with option to update"
                     );
@@ -794,10 +1004,12 @@ export default function OrgAccess() {
                       attendee: result.orgAttendee,
                     });
                     setFlowStep("summary");
-                  } else {
-                    console.log("🆕 New user, showing full registration form");
-                    setFlowStep("full-registration");
+                    return;
                   }
+
+                  // 5) Caso residual: nuevo de verdad
+                  console.log("🆕 New user, showing full registration form");
+                  setFlowStep("full-registration");
                 }}
                 onNewRegistration={() => setFlowStep("full-registration")}
               />

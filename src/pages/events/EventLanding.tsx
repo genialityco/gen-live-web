@@ -412,6 +412,8 @@ export default function EventLanding() {
       }
     : {};
 
+    console.log(eventBranding)
+
   return (
     <MantineProvider theme={customTheme}>
       <Box style={brandingStyle}>

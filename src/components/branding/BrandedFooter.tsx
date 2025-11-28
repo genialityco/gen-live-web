@@ -19,9 +19,10 @@ export default function BrandedFooter({ config }: BrandedFooterProps) {
         hiddenFrom="sm"
         style={{
           width: '100%',
-          height: '150px',
+          height: '100px',
           backgroundImage: backgroundImageMobile ? `url(${backgroundImageMobile})` : undefined,
-          backgroundSize: 'cover',
+          backgroundSize: 'contain',
+          backgroundRepeat: 'no-repeat',
           backgroundPosition: 'center',
           position: 'relative',
           marginTop: '4rem',
@@ -34,9 +35,9 @@ export default function BrandedFooter({ config }: BrandedFooterProps) {
         visibleFrom="sm"
         style={{
           width: '100%',
-          height: '200px',
+          height: '220px',
           backgroundImage: backgroundImage ? `url(${backgroundImage})` : undefined,
-          backgroundSize: 'cover',
+          backgroundSize: 'contain',
           backgroundPosition: 'center',
           position: 'relative',
           marginTop: '4rem',

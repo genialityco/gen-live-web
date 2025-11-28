@@ -12,20 +12,25 @@ import {
 import { useForm } from "@mantine/form";
 import { useState, useEffect } from "react";
 import { fetchRegistrationForm } from "../../api/orgs";
-import { checkRegistrationByIdentifiers } from "../../api/events";
+import {
+  checkRegistrationByIdentifiers,
+  type EventCheckResponse,
+} from "../../api/events";
 import type { RegistrationForm } from "../../types";
 import { notifications } from "@mantine/notifications";
 import { useAuth } from "../../auth/AuthProvider";
+import { recoverOrgAccess } from "../../api/org-attendees";
+import { normalizeIdentifierValue } from "../../utils/normalizeByType";
 
 interface RegistrationVerificationFormProps {
   orgSlug: string;
   eventId: string;
-  onVerificationComplete: (result: {
-    isRegistered: boolean;
-    orgAttendee?: any;
-    eventUser?: any;
-    identifierFields: Record<string, any>;
-  }) => void;
+  orgId: string;
+  onVerificationComplete: (
+    result: EventCheckResponse & {
+      identifierFields: Record<string, any>;
+    }
+  ) => void;
   onNewRegistration?: () => void;
 }
 
@@ -34,12 +39,20 @@ type FormValues = Record<string, string>;
 export function RegistrationVerificationForm({
   orgSlug,
   eventId,
+  orgId,
   onVerificationComplete,
   onNewRegistration,
 }: RegistrationVerificationFormProps) {
   const [formConfig, setFormConfig] = useState<RegistrationForm | null>(null);
   const [loading, setLoading] = useState(false);
   const [formLoading, setFormLoading] = useState(true);
+  const [mismatchedFields, setMismatchedFields] = useState<string[]>([]);
+  const [viewMode, setViewMode] = useState<"verify" | "recover">("verify");
+  const [recoveryIdentifierId, setRecoveryIdentifierId] = useState<
+    string | null
+  >(null);
+  const [recoveryIdentifierValue, setRecoveryIdentifierValue] = useState("");
+  const [recovering, setRecovering] = useState(false);
   const { createAnonymousSession } = useAuth();
 
   useEffect(() => {
@@ -62,7 +75,6 @@ export function RegistrationVerificationForm({
     loadForm();
   }, [orgSlug]);
 
-  // Obtener solo los campos identificadores
   const identifierFields =
     formConfig?.fields.filter((f) => f.isIdentifier) || [];
 
@@ -71,7 +83,6 @@ export function RegistrationVerificationForm({
     validate: {},
   });
 
-  // Inicializar valores del formulario
   useEffect(() => {
     if (!formConfig) return;
 
@@ -91,81 +102,107 @@ export function RegistrationVerificationForm({
 
     form.setInitialValues(initialValues);
     form.setValues(initialValues);
+    // podrías también hacer form.setValidate(validationRules) si quieres usarlo
   }, [formConfig]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleVerify = async (values: FormValues) => {
     try {
       setLoading(true);
+      setMismatchedFields([]); // 👈 limpiar resaltados previos
       console.log("🔍 Verifying registration with identifiers:", values);
 
-      // Verificar registro por campos identificadores
       const result = await checkRegistrationByIdentifiers(eventId, values);
-
       console.log("📋 Verification result:", result);
 
-      // IMPORTANTE: El email SIEMPRE viene del OrgAttendee.registrationData
-      // Los campos identificadores pueden ser documento, teléfono, etc.
-      // El backend busca el OrgAttendee usando esos identificadores
-      // y devuelve el objeto completo que incluye el email
+      if (!result.isRegistered && !result.orgAttendee) {
+        Object.keys(values).forEach((field) => form.clearFieldError(field));
 
+        const reason = result.status;
+
+        if (reason === "INVALID_FIELDS") {
+          const mismatched = result.mismatched ?? [];
+
+          mismatched.forEach((fieldId) => {
+            if (fieldId in values) {
+              form.setFieldError(
+                fieldId,
+                "Este dato no coincide con nuestro registro"
+              );
+            }
+          });
+
+          setMismatchedFields(mismatched);
+
+          notifications.show({
+            color: "orange",
+            title: "Datos incorrectos",
+            message:
+              "Algunos de los datos ingresados no coinciden con nuestro registro. Revisa la información e inténtalo nuevamente.",
+          });
+
+          return;
+        }
+
+        if (reason === "USER_NOT_FOUND") {
+          notifications.show({
+            color: "red",
+            title: "Usuario no encontrado",
+            message:
+              result.message ??
+              "No encontramos ningún registro con estos datos en esta organización.",
+          });
+
+          if (onNewRegistration) {
+            onNewRegistration();
+          }
+          return;
+        }
+
+        notifications.show({
+          color: "red",
+          title: "No encontrado",
+          message:
+            result.message ?? "No encontramos un registro con estos datos.",
+        });
+        return;
+      }
+
+      // ---------- 2) A PARTIR DE AQUÍ, SÍ HAY ORGATTENDEE / EVENTUSER ----------
       let userEmail: string | null = null;
+      const orgAttendee = result.orgAttendee;
 
-      // PRIORIDAD 1: Buscar email_system en registrationData (campo estándar del sistema)
-      if (result.orgAttendee?.registrationData?.email_system) {
-        userEmail = result.orgAttendee.registrationData.email_system;
-        console.log("✅ Email found in OrgAttendee (email_system):", userEmail);
-      }
-      // PRIORIDAD 2: Buscar campo 'email' directo (compatibilidad)
-      else if (result.orgAttendee?.registrationData?.email) {
-        userEmail = result.orgAttendee.registrationData.email;
-        console.log("✅ Email found in OrgAttendee (email):", userEmail);
-      }
-      // PRIORIDAD 3: Buscar cualquier campo tipo email en registrationData
-      else if (result.orgAttendee?.registrationData) {
-        // Buscar cualquier campo que contenga '@' (es un email)
-        for (const [key, value] of Object.entries(
-          result.orgAttendee.registrationData
-        )) {
+      if (orgAttendee?.registrationData?.email_system) {
+        userEmail = orgAttendee.registrationData.email_system;
+      } else if (orgAttendee?.registrationData?.email) {
+        userEmail = orgAttendee.registrationData.email;
+      } else if (orgAttendee?.registrationData) {
+        for (const [, value] of Object.entries(orgAttendee.registrationData)) {
           if (typeof value === "string" && value.includes("@")) {
             userEmail = value;
-            console.log(`✅ Email found in OrgAttendee (${key}):`, userEmail);
             break;
           }
         }
       }
-      // PRIORIDAD 4: Si el campo identificador ingresado es email (caso raro pero válido)
+
       if (!userEmail) {
         const emailField = identifierFields.find((f) => f.type === "email");
         if (emailField && values[emailField.id]) {
           userEmail = values[emailField.id];
-          console.log("✅ Email found in identifier field:", userEmail);
         }
       }
 
-      if (result.isRegistered && result.eventUser) {
-        // Usuario YA registrado en este evento (tiene OrgAttendee Y EventUser)
-        console.log(
-          "✅ User already registered to this event (OrgAttendee + EventUser)"
-        );
-
-        // CRÍTICO: Crear sesión anónima con el email ANTES de redirigir
+      if (
+        result.isRegistered &&
+        result.eventUser &&
+        result.status === "EVENT_REGISTERED"
+      ) {
         if (userEmail) {
           try {
-            console.log(
-              "🔐 Creating anonymous session for registered user with email:",
-              userEmail
-            );
             const userUID = await createAnonymousSession(userEmail);
-            console.log("✅ Anonymous session created with UID:", userUID);
-
-            // Guardar email en localStorage para que EventAttend pueda usarlo
             localStorage.setItem("user-email", userEmail);
             localStorage.setItem(`uid-${userUID}-email`, userEmail);
           } catch (error) {
-            console.error(
-              "❌ CRITICAL: Could not create anonymous session:",
-              error
-            );
+            console.error("❌ Could not create anonymous session:", error);
             notifications.show({
               color: "red",
               title: "Error de sesión",
@@ -173,10 +210,9 @@ export function RegistrationVerificationForm({
                 "No se pudo crear la sesión. Por favor intenta de nuevo.",
             });
             setLoading(false);
-            return; // No continuar si falla la sesión
+            return;
           }
         } else {
-          console.error("❌ CRITICAL: No email found for registered user");
           notifications.show({
             color: "red",
             title: "Error",
@@ -192,13 +228,11 @@ export function RegistrationVerificationForm({
           title: "¡Bienvenido de vuelta!",
           message: "Ya estás registrado en este evento",
         });
-      } else if (result.orgAttendee && !result.isRegistered) {
-        // Usuario existe en organización pero NO en evento (solo OrgAttendee, sin EventUser)
-        console.log(
-          "📝 User exists in org but not in event - will show summary"
-        );
-
-        // Guardar email para uso posterior
+      } else if (
+        !result.isRegistered &&
+        orgAttendee &&
+        result.status === "ORG_ONLY"
+      ) {
         if (userEmail) {
           localStorage.setItem("user-email", userEmail);
         }
@@ -209,10 +243,6 @@ export function RegistrationVerificationForm({
           message: "Verifica tus datos y continúa al evento",
         });
       } else {
-        // Usuario nuevo (ni OrgAttendee ni EventUser)
-        console.log("🆕 New user - no previous registration");
-
-        // Guardar email para pre-llenar formulario
         if (userEmail) {
           localStorage.setItem("user-email", userEmail);
         }
@@ -224,7 +254,6 @@ export function RegistrationVerificationForm({
         });
       }
 
-      // Pasar resultado al componente padre
       onVerificationComplete({
         ...result,
         identifierFields: values,
@@ -238,6 +267,77 @@ export function RegistrationVerificationForm({
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleRecover = async () => {
+    if (!formConfig) return;
+
+    if (!recoveryIdentifierId || !recoveryIdentifierValue.trim()) {
+      notifications.show({
+        color: "orange",
+        title: "Dato requerido",
+        message:
+          "Selecciona un tipo de dato e ingresa un valor para enviarte el recordatorio.",
+      });
+      return;
+    }
+
+    const fieldDef = identifierFields.find(
+      (f) => f.id === recoveryIdentifierId
+    );
+
+    if (!fieldDef) {
+      notifications.show({
+        color: "red",
+        title: "Error",
+        message: "El tipo de dato seleccionado no es válido.",
+      });
+      return;
+    }
+
+    const normalized = normalizeIdentifierValue(
+      recoveryIdentifierValue,
+      fieldDef.type
+    );
+
+    if (fieldDef.type === "number" && Number.isNaN(normalized)) {
+      notifications.show({
+        color: "orange",
+        title: "Dato inválido",
+        message: `El valor ingresado para "${fieldDef.label}" debe ser numérico.`,
+      });
+      return;
+    }
+
+    try {
+      setRecovering(true);
+
+      await recoverOrgAccess(orgId, {
+        [recoveryIdentifierId]: normalized,
+      });
+
+      notifications.show({
+        color: "green",
+        title: "Si encontramos un registro...",
+        message:
+          "Te enviaremos un correo con la información para que recuerdes con qué datos te registraste.",
+      });
+
+      setViewMode("verify");
+    } catch (error) {
+      console.error(
+        "❌ Error enviando correo de recuperación (event-mode):",
+        error
+      );
+      notifications.show({
+        color: "red",
+        title: "Error",
+        message:
+          "No se pudo procesar tu solicitud de recuperación. Intenta de nuevo más tarde.",
+      });
+    } finally {
+      setRecovering(false);
     }
   };
 
@@ -260,11 +360,76 @@ export function RegistrationVerificationForm({
     );
   }
 
+  if (viewMode === "recover") {
+    // 🔹 Pantalla de recuperación
+    return (
+      <Card shadow="sm" padding="lg" radius="md" withBorder>
+        <Stack gap="md">
+          <Stack gap={2}>
+            <Title order={4}>Recordar mis datos</Title>
+            <Text size="xs" c="dimmed">
+              Si ya te registraste antes pero no recuerdas con qué datos,
+              podemos enviarte un correo con un recordatorio.
+              <br />
+              Elige qué dato recuerdas (por ejemplo, tu correo o documento) y
+              escríbelo a continuación.
+            </Text>
+          </Stack>
+
+          <Stack gap="xs">
+            <Text size="sm" fw={500}>
+              ¿Qué dato recuerdas?
+            </Text>
+            <select
+              value={recoveryIdentifierId ?? ""}
+              onChange={(e) => setRecoveryIdentifierId(e.target.value || null)}
+              style={{
+                padding: "8px 12px",
+                borderRadius: 8,
+                border: "1px solid #ced4da",
+                fontSize: 14,
+              }}
+            >
+              <option value="">Selecciona un tipo de dato</option>
+              {identifierFields.map((field) => (
+                <option key={field.id} value={field.id}>
+                  {field.label}
+                </option>
+              ))}
+            </select>
+
+            <TextInput
+              mt="xs"
+              label="Valor del dato"
+              placeholder="Escribe aquí tu correo, documento u otro identificador"
+              value={recoveryIdentifierValue}
+              onChange={(e) =>
+                setRecoveryIdentifierValue(e.currentTarget.value)
+              }
+            />
+          </Stack>
+
+          <Group justify="space-between" mt="md">
+            <Button
+              variant="subtle"
+              size="xs"
+              onClick={() => setViewMode("verify")}
+            >
+              ← Volver a verificación
+            </Button>
+            <Button size="sm" loading={recovering} onClick={handleRecover}>
+              Enviarme un recordatorio
+            </Button>
+          </Group>
+        </Stack>
+      </Card>
+    );
+  }
+
   return (
     <Card shadow="sm" padding="lg" radius="md" withBorder>
       <form onSubmit={form.onSubmit(handleVerify)}>
         <Stack gap="md">
-          {/* Header compacto */}
           <Stack gap={2}>
             <Title order={4}>Ingresar</Title>
             <Text size="xs" c="dimmed">
@@ -272,28 +437,56 @@ export function RegistrationVerificationForm({
             </Text>
           </Stack>
 
-          {/* Campos de identificación */}
           <Stack gap="xs">
-            {identifierFields.map((field) => (
-              <TextInput
-                key={field.id}
-                label={field.label}
-                placeholder={field.placeholder}
-                type={
-                  field.type === "email"
-                    ? "email"
-                    : field.type === "tel"
-                    ? "tel"
-                    : "text"
-                }
-                required={field.required}
-                size="sm"
-                {...form.getInputProps(field.id)}
-              />
-            ))}
+            {identifierFields.map((field) => {
+              const isMismatched = mismatchedFields.includes(field.id);
+
+              return (
+                <TextInput
+                  key={field.id}
+                  label={field.label}
+                  placeholder={field.placeholder}
+                  type={
+                    field.type === "email"
+                      ? "email"
+                      : field.type === "tel"
+                      ? "tel"
+                      : "text"
+                  }
+                  required={field.required}
+                  size="sm"
+                  {...form.getInputProps(field.id)}
+                  styles={(theme) => ({
+                    input: {
+                      backgroundColor: isMismatched
+                        ? theme.colors.red[0]
+                        : undefined,
+                      borderColor: isMismatched
+                        ? theme.colors.red[6]
+                        : undefined,
+                    },
+                    label: {
+                      color: isMismatched ? theme.colors.red[6] : undefined,
+                      fontWeight: isMismatched ? 600 : undefined,
+                    },
+                  })}
+                />
+              );
+            })}
           </Stack>
 
-          {/* Acciones compactas */}
+          <Text size="xs" c="dimmed">
+            ¿No recuerdas con qué datos te registraste?{" "}
+            <Button
+              variant="subtle"
+              size="xs"
+              px={0}
+              onClick={() => setViewMode("recover")}
+            >
+              Recordar mis datos
+            </Button>
+          </Text>
+
           <Stack gap="xs" mt={4}>
             <Button type="submit" size="sm" loading={loading} fullWidth>
               Ingresar

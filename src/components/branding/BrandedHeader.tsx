@@ -18,7 +18,7 @@ export default function BrandedHeader({ config }: BrandedHeaderProps) {
         hiddenFrom="sm"
         style={{
           width: '100%',
-          height: '200px',
+          height: '500px',
           backgroundImage: backgroundImageMobile ? `url(${backgroundImageMobile})` : undefined,
           backgroundSize: 'cover',
           backgroundPosition: 'center',

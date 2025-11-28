@@ -136,7 +136,6 @@ export async function registerToEventWithFirebase(
 }
 
 export async function checkIfRegistered(eventId: string, email: string) {
-
   const { data } = await api.get(`/events/${eventId}/is-registered`, {
     params: { email },
   });
@@ -158,8 +157,6 @@ export async function checkIfRegisteredByUID(
   eventId: string,
   firebaseUID: string
 ) {
-
-
   const { data } = await api.get(`/events/${eventId}/is-registered-by-uid`, {
     params: { firebaseUID },
   });
@@ -172,7 +169,6 @@ export async function associateFirebaseUID(
   email: string,
   firebaseUID: string
 ) {
-
   const { data } = await api.post(`/events/${eventId}/associate-firebase-uid`, {
     email,
     firebaseUID,
@@ -188,51 +184,51 @@ export type OrgCheckResponse = {
   reason?: OrgCheckReason;
   message?: string;
   mismatched?: string[];
-  orgAttendee?: any;
+  orgAttendee?: {
+    _id: string;
+    organizationId: string;
+    email: string;
+    name?: string;
+    registrationData?: Record<string, any>;
+  };
 };
 
 export async function checkOrgRegistrationByIdentifiers(
   orgId: string,
   identifierFields: Record<string, any>
 ): Promise<OrgCheckResponse> {
-
-
   const { data } = await api.post(
     `/events/org/${orgId}/check-registration-by-identifiers`,
-    {
-      identifierFields,
-    }
+    { identifierFields }
   );
 
-  return data as {
-    found: boolean;
-    orgAttendee?: {
-      _id: string;
-      organizationId: string;
-      email: string;
-      name?: string;
-      registrationData?: Record<string, any>;
-    };
-    message?: string;
-  };
+  return data as OrgCheckResponse;
 }
+
+export type EventCheckStatus =
+  | "USER_NOT_FOUND"
+  | "INVALID_FIELDS"
+  | "ORG_ONLY"
+  | "EVENT_REGISTERED";
+
+export type EventCheckResponse = {
+  isRegistered: boolean;
+  status: EventCheckStatus;
+  orgAttendee?: any;
+  eventUser?: any;
+  message?: string;
+  mismatched?: string[];
+};
 
 export async function checkRegistrationByIdentifiers(
   eventId: string,
   identifierFields: Record<string, any>
-) {
+): Promise<EventCheckResponse> {
   const { data } = await api.post(
     `/events/${eventId}/check-registration-by-identifiers`,
-    {
-      identifierFields,
-    }
+    { identifierFields }
   );
-  return data as {
-    isRegistered: boolean;
-    orgAttendee?: any;
-    eventUser?: any;
-    message?: string;
-  };
+  return data as EventCheckResponse;
 }
 
 // Buscar registro existente por campos identificadores
@@ -301,7 +297,6 @@ export async function createEventUserForSession(
   firebaseUID: string,
   userEmail: string
 ) {
-
   try {
     // Intentar crear/actualizar usando el endpoint con Firebase UID incluido
     const { data } = await api.post(
