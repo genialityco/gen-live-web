@@ -165,23 +165,77 @@ export default function EventAdminAttendees({
             .catch(() => ({ data: null })),
         ]);
 
-      // Log para debug
-      console.log("EventUsers raw data:", eventUsersResponse.data);
-      console.log("LiveAttendees raw data:", liveAttendeesResponse.data);
-
-      // Filtrar solo los que tienen attendeeId poblado
-      const validEventUsers = eventUsersResponse.data.filter(
+      // ---------- INSCRITOS (EventUsers) ----------
+      const validEventUsersRaw = eventUsersResponse.data.filter(
         (eu: EventUser) =>
           typeof eu.attendeeId === "object" && eu.attendeeId !== null
       );
 
-      const validLiveAttendees = liveAttendeesResponse.data.filter(
+      const seenEventUsers = new Set<string>();
+      const validEventUsers = validEventUsersRaw.filter((eu: EventUser) => {
+        const attendee =
+          typeof eu.attendeeId === "object" && eu.attendeeId !== null
+            ? eu.attendeeId
+            : null;
+
+        if (!attendee) return false;
+
+        const attendeeObj = attendee as { _id?: string; email?: string };
+
+        const key = attendeeObj._id || attendeeObj.email || null;
+        if (!key) return true; // si no hay nada con qué deduplicar, lo dejamos pasar
+
+        if (seenEventUsers.has(key)) {
+          console.log("Duplicado detectado (eventUser)", {
+            duplicatedKey: key,
+            eventUser: eu,
+          });
+          return false;
+        }
+
+        seenEventUsers.add(key);
+        return true;
+      });
+
+      console.log("EventUsers raw data:", eventUsersResponse.data);
+      console.log("Valid EventUsers (dedup):", validEventUsers);
+
+      // ---------- LIVE ATTENDEES ----------
+      const validLiveAttendeesRaw = liveAttendeesResponse.data.filter(
         (eu: LiveAttendee) =>
           typeof eu.attendeeId === "object" && eu.attendeeId !== null
       );
 
-      console.log("Valid EventUsers:", validEventUsers);
-      console.log("Valid LiveAttendees:", validLiveAttendees);
+      const seenLive = new Set<string>();
+      const validLiveAttendees = validLiveAttendeesRaw.filter(
+        (eu: LiveAttendee) => {
+          const attendee =
+            typeof eu.attendeeId === "object" && eu.attendeeId !== null
+              ? eu.attendeeId
+              : null;
+
+          if (!attendee) return false;
+
+          const attendeeObj = attendee as { _id?: string; email?: string };
+
+          const key = attendeeObj._id || attendeeObj.email || null;
+          if (!key) return true;
+
+          if (seenLive.has(key)) {
+            console.log("Duplicado detectado (liveAttendee)", {
+              duplicatedKey: key,
+              eventUser: eu,
+            });
+            return false;
+          }
+
+          seenLive.add(key);
+          return true;
+        }
+      );
+
+      console.log("LiveAttendees raw data:", liveAttendeesResponse.data);
+      console.log("Valid LiveAttendees (dedup):", validLiveAttendees);
 
       setEventUsers(validEventUsers);
       setEventUsersStats({ total: validEventUsers.length });

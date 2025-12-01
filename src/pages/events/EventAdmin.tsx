@@ -19,6 +19,7 @@ import {
   EventAdminSettings,
   EventAdminMetrics,
 } from "../../components/events";
+import { EventAdminChat } from "../../components/events/EventAdminChat";
 
 export default function EventAdmin() {
   const { slug, eventSlug } = useParams<{ slug: string; eventSlug: string }>();
@@ -49,7 +50,9 @@ export default function EventAdmin() {
       // Cargar eventos y encontrar el específico
       const eventsData = await fetchEventsByOrgPrivate(orgData._id);
       const foundEvent = eventsData.find(e => e.slug === eventSlug || e._id === eventSlug);
-      
+
+      console.log("Loaded events:", foundEvent);
+
       if (!foundEvent) {
         setError("Evento no encontrado");
         return;
@@ -81,8 +84,9 @@ export default function EventAdmin() {
       return <EventAdminMetrics event={event} />;
     } else if (path.endsWith('/settings')) {
       return <EventAdminSettings event={event} />;
+    } else if( path.endsWith('/chat')) {
+      return <EventAdminChat event={event} />;
     } else {
-      // Vista por defecto (overview)
       return <EventAdminOverview org={org} event={event} />;
     }
   };

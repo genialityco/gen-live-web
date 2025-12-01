@@ -149,6 +149,14 @@ export const routes = [
         ),
       },
       {
+        path: "/org/:slug/event/:eventSlug/admin/chat",
+        element: (
+          <Layout>
+            <EventAdmin />
+          </Layout>
+        ),
+      },
+      {
         path: "/org/:slug/event/:eventSlug/admin/metrics",
         element: (
           <Layout>

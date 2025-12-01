@@ -99,6 +99,12 @@ export default function EventAdminLayout({
       href: `/org/${slug}/event/${eventSlug}/admin/settings`,
       description: "Editar detalles del evento",
     },
+    {
+      label: "Chat en vivo",
+      icon: "💬",
+      href: `/org/${slug}/event/${eventSlug}/admin/chat`,
+      description: "Administrar el chat del evento",
+    }
   ];
 
   return (
@@ -210,7 +216,7 @@ export default function EventAdminLayout({
       </AppShell.Navbar>
 
       <AppShell.Main>
-        <Container size="xl" py="xl">
+        <Container fluid>
           {children}
         </Container>
       </AppShell.Main>
