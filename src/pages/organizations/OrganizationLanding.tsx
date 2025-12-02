@@ -315,6 +315,8 @@ function Hero({
             backdropFilter: "blur(6px)",
             background: "rgba(255,255,255,0.85)",
             maxWidth: 760,
+            width: isMobile ? "100%" : 500,
+            minWidth: isMobile ? "auto" : 500,
           }}
         >
           <Stack gap="xs">
@@ -695,6 +697,15 @@ export default function OrganizationLanding() {
     loadOrganization();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slug]);
+
+  useEffect(() => {
+    if (org) {
+      document.title = `${org.name}`;
+    }
+    return () => {
+      document.title = "Gen Live";
+    };
+  }, [org]);
 
   if (loading) {
     return (
