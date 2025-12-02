@@ -227,6 +227,7 @@ const FormFieldComponent = memo(
       size: "sm" as const,
       description: helpText,
       disabled: isFieldDisabled,
+      autoComplete: "off",
     };
 
     switch (field.type) {
@@ -796,7 +797,7 @@ export function AdvancedRegistrationForm({
   const isOrgOnly = registrationScope === "org-only";
 
   const formContent = (
-    <form onSubmit={form.onSubmit(handleSubmit)}>
+    <form onSubmit={form.onSubmit(handleSubmit)} autoComplete="off">
       <Stack gap="md">
         {mode === "page" && (
           <Stack gap={4} ta="center">
