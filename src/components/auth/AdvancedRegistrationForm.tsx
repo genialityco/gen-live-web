@@ -227,7 +227,6 @@ const FormFieldComponent = memo(
       size: "sm" as const,
       description: helpText,
       disabled: isFieldDisabled,
-      autoComplete: "off",
     };
 
     switch (field.type) {
@@ -877,10 +876,21 @@ export function AdvancedRegistrationForm({
                 ? form.getInputProps(field.id, { type: "checkbox" })
                 : form.getInputProps(field.id);
 
+            // 👇 Hack anti-autocompletado para campos de texto / email / tel / number / textarea
+            const autoCompleteProps =
+              field.type === "text" ||
+              field.type === "email" ||
+              field.type === "tel" ||
+              field.type === "number" ||
+              field.type === "textarea"
+                ? { autoComplete: "new-password" as const }
+                : {};
+
             //  si el campo es identificador, añadimos onBlur para disparar la búsqueda
             const inputProps = field.isIdentifier
               ? {
                   ...baseInputProps,
+                  ...autoCompleteProps,
                   onBlur: (e: any) => {
                     if (typeof baseInputProps.onBlur === "function") {
                       baseInputProps.onBlur(e);
@@ -888,7 +898,7 @@ export function AdvancedRegistrationForm({
                     void checkExistingByIdentifiers();
                   },
                 }
-              : baseInputProps;
+              : { ...baseInputProps, ...autoCompleteProps };
 
             return (
               <FormFieldComponent
