@@ -275,6 +275,11 @@ function Hero({
   const brandColor =
     org.branding?.colors?.background || "var(--mantine-color-brand-6)";
 
+  // 🔽 Nuevo: alturas/paddings compactos para mobile
+  const heroMinHeight = isMobile ? 220 : 420;
+  const cardMaxWidth = isMobile ? "92vw" : 760;
+  const cardFixedWidth = isMobile ? "100%" : 500;
+
   return (
     <Box
       style={{
@@ -282,9 +287,11 @@ function Hero({
         borderBottom: "1px solid var(--mantine-color-gray-3)",
         background: isMobile ? brandColor : "transparent",
         color: isMobile ? "white" : "inherit",
+        minHeight: heroMinHeight, // 🔽 limita la altura en mobile
+        display: "grid", // 🔽 evita crecer de más
       }}
     >
-      {/* Mostrar el banner solo en desktop */}
+      {/* Banner solo desktop */}
       {!isMobile && (
         <EventBanner
           imageUrl={heroImg}
@@ -297,47 +304,57 @@ function Hero({
       {/* Contenido principal */}
       <Container
         size="xl"
-        py={isMobile ? "xl" : 0}
+        // 🔽 menos padding vertical en mobile
+        py={isMobile ? 12 : 0}
         m="sm"
         style={{
           position: isMobile ? "relative" : "absolute",
           inset: isMobile ? "auto" : 0,
           display: "grid",
           placeItems: isMobile ? "center" : "end start",
-          padding: isMobile ? "32px 0" : "clamp(12px, 2vw, 24px)",
+          padding: isMobile ? "8px 0" : "clamp(12px, 2vw, 24px)", // 🔽 reduce padding en mobile
         }}
       >
         <Card
-          radius="lg"
-          p="lg"
-          mb="lg"
+          radius={isMobile ? "md" : "lg"} // 🔽 radio menor en mobile
+          p={isMobile ? "md" : "lg"} // 🔽 padding menor en mobile
+          mb={isMobile ? "sm" : "lg"} // 🔽 margen menor en mobile
           style={{
-            backdropFilter: "blur(6px)",
-            background: "rgba(255,255,255,0.85)",
-            maxWidth: 760,
-            width: isMobile ? "100%" : 500,
+            backdropFilter: isMobile ? "blur(2px)" : "blur(6px)", // 🔽 menos blur
+            background: isMobile
+              ? "rgba(255,255,255,0.80)"
+              : "rgba(255,255,255,0.85)",
+            maxWidth: cardMaxWidth,
+            width: cardFixedWidth,
             minWidth: isMobile ? "auto" : 500,
           }}
         >
-          <Stack gap="xs">
-            <Title order={1} style={{ lineHeight: 1.1 }}>
+          <Stack gap={isMobile ? 4 : "xs"}>
+            {" "}
+            {/* 🔽 gaps más chicos */}
+            <Title
+              order={isMobile ? 2 : 1} // 🔽 baja jerarquía en mobile
+              style={{ lineHeight: 1.1, fontSize: isMobile ? 22 : 32 }} // 🔽 fuente menor
+            >
               {title}
             </Title>
-            {org.description && <Text c="dimmed">{org.description}</Text>}
-            <Group gap="sm">
+            {org.description && (
+              <Text c="dimmed" size={isMobile ? "sm" : "md"} lineClamp={2}>
+                {/* 🔽 recorta a 2 líneas en mobile */}
+                {org.description}
+              </Text>
+            )}
+            <Group gap={isMobile ? 6 : "sm"} wrap="wrap">
               {nextEvent ? (
                 <Button
-                  size="md"
+                  size={isMobile ? "sm" : "md"} // 🔽 botón más pequeño
+                  fullWidth={isMobile} // 🔽 ocupa ancho en mobile
                   onClick={() =>
                     navigate(
                       `/org/${orgSlug}/event/${nextEvent.slug || nextEvent._id}`
                     )
                   }
-                  // onClick={() =>
-                  //   (window.location.href =
-                  //     "https://liveevents.geniality.com.co/68fcf6db6d9f9db64809e042")
-                  // }
-                  rightSection={<IconArrowRight size={18} />}
+                  rightSection={<IconArrowRight size={16} />} // 🔽 ícono más chico
                   variant="gradient"
                   gradient={{ from: "brand.7", to: "accent.6", deg: 135 }}
                 >
@@ -345,7 +362,8 @@ function Hero({
                 </Button>
               ) : (
                 <Button
-                  size="md"
+                  size={isMobile ? "sm" : "md"}
+                  fullWidth={isMobile}
                   variant="light"
                   component={Link}
                   to="/organizations"
