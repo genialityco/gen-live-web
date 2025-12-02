@@ -326,7 +326,7 @@ export default function EventLanding() {
         return "Registrarme para ver la información";
       case "upcoming":
       default:
-        return "Registrarme al evento";
+        return "Check in al evento";
     }
   };
 
