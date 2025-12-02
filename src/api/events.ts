@@ -240,6 +240,7 @@ export interface FindRegistrationData {
 export interface FoundRegistration {
   found: boolean;
   attendee?: {
+    name: string | undefined;
     _id: string;
     email: string;
     registrationData: Record<string, any>;

@@ -12,6 +12,7 @@ import {
   Text,
   NumberInput,
   Title,
+  Alert,
 } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { useState, useEffect, useMemo, useCallback, memo } from "react";
@@ -19,7 +20,10 @@ import {
   fetchRegistrationForm,
   registerOrgAttendeeAdvanced,
 } from "../../api/orgs";
-import { registerToEventWithFirebase } from "../../api/events";
+import {
+  checkOrgRegistrationByIdentifiers,
+  registerToEventWithFirebase,
+} from "../../api/events";
 import type { RegistrationForm, FormField } from "../../types";
 import { notifications } from "@mantine/notifications";
 import { useAuth } from "../../auth/AuthProvider";
@@ -212,6 +216,8 @@ const FormFieldComponent = memo(
   }) => {
     const helpText = field.helpText || undefined;
 
+    const isFieldDisabled = (field as any).autoCalculated === true;
+
     const commonProps = {
       key: field.id,
       label: field.label,
@@ -220,6 +226,7 @@ const FormFieldComponent = memo(
       style: { display: field.hidden ? "none" : "block" },
       size: "sm" as const,
       description: helpText,
+      disabled: isFieldDisabled,
     };
 
     switch (field.type) {
@@ -259,7 +266,6 @@ const FormFieldComponent = memo(
               },
             }}
             {...inputProps}
-            // 👇 Reemplazamos el label directo por un nodo HTML renderizado
             label={
               <span dangerouslySetInnerHTML={{ __html: field.label || "" }} />
             }
@@ -301,6 +307,27 @@ export function AdvancedRegistrationForm({
   const [formLoading, setFormLoading] = useState(true);
   const { createAnonymousSession } = useAuth();
 
+  const [checkingExisting, setCheckingExisting] = useState(false);
+  const [existingWarning, setExistingWarning] = useState<null | {
+    attendeeName?: string;
+  }>(null);
+
+  const form = useForm<FormValues>({
+    initialValues: {},
+    validate: {},
+  });
+
+  const sortedFields = useMemo(() => {
+    if (!formConfig) return [];
+    return [...formConfig.fields].sort((a, b) => a.order - b.order);
+  }, [formConfig]);
+
+  // Campos identificadores (los mismos que usas en OrgAccess)
+  const identifierFields = useMemo(
+    () => formConfig?.fields.filter((f) => f.isIdentifier) ?? [],
+    [formConfig]
+  );
+
   // Opciones de países precalculadas (value = isoCode, label = nombre)
   const countryOptions: SelectOption[] = useMemo(
     () =>
@@ -336,11 +363,6 @@ export function AdvancedRegistrationForm({
     loadForm();
   }, [orgSlug]);
 
-  const form = useForm<FormValues>({
-    initialValues: {},
-    validate: {},
-  });
-
   useEffect(() => {
     if (!formConfig) return;
 
@@ -360,10 +382,14 @@ export function AdvancedRegistrationForm({
     form.setValues(initialValues);
   }, [formConfig, existingData]);
 
-  const sortedFields = useMemo(() => {
-    if (!formConfig) return [];
-    return [...formConfig.fields].sort((a, b) => a.order - b.order);
-  }, [formConfig]);
+  useEffect(() => {
+    if (existingWarning) {
+      const el = document.getElementById("existing-warning");
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+    }
+  }, [existingWarning]);
 
   // --- IDs de campos especiales: país y código de país ---
   const countryFieldId = useMemo(() => {
@@ -416,7 +442,6 @@ export function AdvancedRegistrationForm({
     if (currentCode !== formatted) {
       form.setFieldValue(countryCodeFieldId, formatted);
     }
-    // 👇 escuchamos solo el valor del país y las refs necesarias
   }, [
     countryFieldId,
     countryCodeFieldId,
@@ -538,6 +563,51 @@ export function AdvancedRegistrationForm({
     [sortedFields, countryOptions]
   );
 
+  // Buscar si existe OrgAttendee cuando se llenan campos identificadores
+  async function checkExistingByIdentifiers() {
+    if (!orgId || !identifierFields.length) return;
+
+    // Construir solo los campos identificadores con valor
+    const payload: Record<string, any> = {};
+    identifierFields.forEach((field) => {
+      const value = form.values[field.id];
+      if (
+        value !== undefined &&
+        value !== null &&
+        String(value).trim() !== ""
+      ) {
+        payload[field.id] = String(value).trim();
+      }
+    });
+
+    // Si no hay ningún identificador lleno, no buscamos
+    if (Object.keys(payload).length === 0) {
+      setExistingWarning(null);
+      return;
+    }
+
+    console.log("🔍 Checking existing attendee with payload:", payload);
+
+    try {
+      setCheckingExisting(true);
+      const result = await checkOrgRegistrationByIdentifiers(orgId, payload);
+      console.log("🔍 checkOrgRegistrationByIdentifiers result:", result);
+
+      if (result?.found && result.orgAttendee) {
+        setExistingWarning({
+          attendeeName: result.orgAttendee.name,
+        });
+      } else {
+        setExistingWarning(null);
+      }
+    } catch (error) {
+      console.error("❌ Error checking existing org attendee:", error);
+      setExistingWarning(null);
+    } finally {
+      setCheckingExisting(false);
+    }
+  }
+
   const handleSubmit = async (values: FormValues) => {
     try {
       setLoading(true);
@@ -548,19 +618,19 @@ export function AdvancedRegistrationForm({
       // 2) Copia mutable que realmente vamos a enviar
       const processedValues: FormValues = { ...values };
 
-      // Limpiar valores de campos NO visibles (para no conservar datos viejos)
+      // Limpiar valores de campos NO visibles
       sortedFields.forEach((field) => {
         const visible = isFieldEffectivelyVisible(
           field,
-          visibilityValues, // 👈 usamos SIEMPRE la foto original
+          visibilityValues,
           sortedFields
         );
 
         if (!visible) {
           if (field.type === "checkbox") {
-            processedValues[field.id] = false; // sin marcar
+            processedValues[field.id] = false;
           } else {
-            processedValues[field.id] = ""; // o null si prefieres
+            processedValues[field.id] = "";
           }
         }
       });
@@ -661,7 +731,6 @@ export function AdvancedRegistrationForm({
           return;
         }
 
-        // actualizar también el OrgAttendee al mismo tiempo
         await registerOrgAttendeeAdvanced(orgId, {
           attendeeId: existingData?.attendeeId,
           email: emailValue,
@@ -670,7 +739,6 @@ export function AdvancedRegistrationForm({
           firebaseUID: userUID,
         });
 
-        // registrar al evento
         await registerToEventWithFirebase(eventId, {
           email: emailValue,
           name: nameValue,
@@ -748,6 +816,48 @@ export function AdvancedRegistrationForm({
           </Stack>
         )}
 
+        {/* Advertencia si ya existe un registro con los datos ingresados */}
+        {existingWarning && (
+          <Stack maw={600} mx="auto" w="100%">
+            <Alert
+              id="existing-warning"
+              color="yellow"
+              variant="light"
+              radius="md"
+              icon="⚠️"
+              title="Registro encontrado"
+              styles={{
+                title: { fontWeight: 700 },
+                root: { fontSize: "0.95rem" },
+              }}
+            >
+              {existingWarning.attendeeName
+                ? `Ya existe un registro a nombre de "${existingWarning.attendeeName}". `
+                : "Ya existe un registro con estos datos. "}
+              Si ya te habías registrado antes,&nbsp;
+              <Text
+                span
+                c="blue"
+                fw={600}
+                style={{
+                  textDecoration: "underline",
+                  cursor: "pointer",
+                }}
+                size="sm"
+                onClick={onCancel}
+              >
+                haz clic aquí para ingresar
+              </Text>
+              .
+              {checkingExisting && (
+                <Text mt={4} size="xs" c="dimmed">
+                  Verificando datos...
+                </Text>
+              )}
+            </Alert>
+          </Stack>
+        )}
+
         <Stack gap="sm" maw={600} mx="auto" w="100%">
           {sortedFields.map((field) => {
             const currentValues = form.values;
@@ -761,10 +871,23 @@ export function AdvancedRegistrationForm({
 
             const filteredOptions = getFilteredOptions(field, currentValues);
 
-            const inputProps =
+            const baseInputProps =
               field.type === "checkbox"
                 ? form.getInputProps(field.id, { type: "checkbox" })
                 : form.getInputProps(field.id);
+
+            //  si el campo es identificador, añadimos onBlur para disparar la búsqueda
+            const inputProps = field.isIdentifier
+              ? {
+                  ...baseInputProps,
+                  onBlur: (e: any) => {
+                    if (typeof baseInputProps.onBlur === "function") {
+                      baseInputProps.onBlur(e);
+                    }
+                    void checkExistingByIdentifiers();
+                  },
+                }
+              : baseInputProps;
 
             return (
               <FormFieldComponent
@@ -782,13 +905,13 @@ export function AdvancedRegistrationForm({
             {existingData
               ? "Actualizar información"
               : isOrgOnly
-              ? "Guardar registro"
-              : "Registrarme al evento"}
+              ? "Registrarme"
+              : "Registrarme"}
           </Button>
 
           {onCancel && (
             <Button variant="subtle" size="xs" onClick={onCancel} fullWidth>
-              Cancelar
+              Volver
             </Button>
           )}
         </Stack>
