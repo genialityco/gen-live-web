@@ -12,6 +12,7 @@ import {
   Box,
   Card,
   TextInput,
+  Affix,
 } from "@mantine/core";
 import {
   useParams,
@@ -49,6 +50,7 @@ import {
 } from "../../api/org-attendees";
 
 import { normalizeIdentifierValue } from "../../utils/normalizeByType";
+import { IconBrandWhatsapp } from "@tabler/icons-react";
 
 type FlowStep =
   | "loading"
@@ -98,6 +100,8 @@ export default function OrgAccess() {
     initialValues: {},
     validate: {},
   });
+
+  const whatsappHref = "https://wa.me/+573224387523?";
 
   useEffect(() => {
     const initFlow = async () => {
@@ -989,77 +993,101 @@ export default function OrgAccess() {
           )}
 
           {flowStep === "quick-login" && (
-            <Stack gap="md">
-              <RegistrationVerificationForm
-                orgSlug={slug!}
-                orgId={org._id}
-                eventId={event._id}
-                onVerificationComplete={(result: any) => {
-                  console.log(
-                    "🎯 OrgAccess(EventMode) verification result:",
-                    result
-                  );
+            <>
+              <Stack gap="md">
+                <RegistrationVerificationForm
+                  orgSlug={slug!}
+                  orgId={org._id}
+                  eventId={event._id}
+                  onVerificationComplete={(result: any) => {
+                    console.log(
+                      "🎯 OrgAccess(EventMode) verification result:",
+                      result
+                    );
 
-                  // 1) Campos inválidos: nos quedamos en quick-login
-                  if (result.status === "INVALID_FIELDS") {
-                    notifications.show({
-                      color: "orange",
-                      title: "Datos incorrectos",
-                      message:
-                        result.message ||
-                        "Algunos de los datos ingresados no coinciden con nuestro registro. Revisa la información e inténtalo nuevamente.",
-                    });
-                    // 👇 IMPORTANTE: NO cambiamos el flowStep,
-                    // así el usuario sigue viendo el formulario de verificación.
-                    return;
-                  }
+                    // 1) Campos inválidos: nos quedamos en quick-login
+                    if (result.status === "INVALID_FIELDS") {
+                      notifications.show({
+                        color: "orange",
+                        title: "Datos incorrectos",
+                        message:
+                          result.message ||
+                          "Algunos de los datos ingresados no coinciden con nuestro registro. Revisa la información e inténtalo nuevamente.",
+                      });
+                      // 👇 IMPORTANTE: NO cambiamos el flowStep,
+                      // así el usuario sigue viendo el formulario de verificación.
+                      return;
+                    }
 
-                  // 2) Usuario no encontrado explícitamente
-                  if (result.status === "USER_NOT_FOUND") {
-                    notifications.show({
-                      color: "red",
-                      title: "Usuario no encontrado",
-                      message:
-                        result.message ||
-                        "No encontramos ningún registro con estos datos en esta organización.",
-                    });
+                    // 2) Usuario no encontrado explícitamente
+                    if (result.status === "USER_NOT_FOUND") {
+                      notifications.show({
+                        color: "red",
+                        title: "Usuario no encontrado",
+                        message:
+                          result.message ||
+                          "No encontramos ningún registro con estos datos en esta organización.",
+                      });
 
-                    // Aquí decides si lo mandas a registro completo o lo dejas en quick-login.
-                    // Si quieres comportamiento igual al org-only, puedes dejar al usuario decidir
-                    // con el botón de "registrarme". Si quieres adelantarlo:
+                      // Aquí decides si lo mandas a registro completo o lo dejas en quick-login.
+                      // Si quieres comportamiento igual al org-only, puedes dejar al usuario decidir
+                      // con el botón de "registrarme". Si quieres adelantarlo:
+                      setFlowStep("full-registration");
+                      return;
+                    }
+
+                    // 3) Ya registrado al evento
+                    if (result.isRegistered && result.eventUser) {
+                      console.log(
+                        "✅ User already registered, redirecting to /attend"
+                      );
+                      handleSuccessEventMode();
+                      return;
+                    }
+
+                    // 4) Existe en la organización pero no en el evento
+                    if (result.orgAttendee && !result.isRegistered) {
+                      console.log(
+                        "📝 User exists in org, showing summary with option to update"
+                      );
+                      setFoundRegistration({
+                        found: true,
+                        attendee: result.orgAttendee,
+                      });
+                      setFlowStep("summary");
+                      return;
+                    }
+
+                    // 5) Caso residual: nuevo de verdad
+                    console.log("🆕 New user, showing full registration form");
                     setFlowStep("full-registration");
-                    return;
-                  }
+                  }}
+                  onNewRegistration={() => setFlowStep("full-registration")}
+                />
+              </Stack>
 
-                  // 3) Ya registrado al evento
-                  if (result.isRegistered && result.eventUser) {
-                    console.log(
-                      "✅ User already registered, redirecting to /attend"
-                    );
-                    handleSuccessEventMode();
-                    return;
-                  }
-
-                  // 4) Existe en la organización pero no en el evento
-                  if (result.orgAttendee && !result.isRegistered) {
-                    console.log(
-                      "📝 User exists in org, showing summary with option to update"
-                    );
-                    setFoundRegistration({
-                      found: true,
-                      attendee: result.orgAttendee,
-                    });
-                    setFlowStep("summary");
-                    return;
-                  }
-
-                  // 5) Caso residual: nuevo de verdad
-                  console.log("🆕 New user, showing full registration form");
-                  setFlowStep("full-registration");
-                }}
-                onNewRegistration={() => setFlowStep("full-registration")}
-              />
-            </Stack>
+              <Affix position={{ bottom: 20, right: 20 }}>
+                <Button
+                  component="a"
+                  href={whatsappHref}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  leftSection={<IconBrandWhatsapp size={18} />}
+                  color="green"
+                  radius="xl"
+                  size="md"
+                  variant="filled"
+                  styles={{
+                    root: {
+                      boxShadow: "0 10px 24px rgba(0,0,0,.12)",
+                      paddingInline: 16,
+                    },
+                  }}
+                >
+                  Soporte Técnico
+                </Button>
+              </Affix>
+            </>
           )}
 
           {flowStep === "summary" && foundRegistration && (
@@ -1072,24 +1100,47 @@ export default function OrgAccess() {
           )}
 
           {flowStep === "full-registration" && (
-            <AdvancedRegistrationForm
-              orgSlug={slug!}
-              orgId={org._id}
-              eventId={event._id}
-              registrationScope="org+event"
-              onSuccess={handleSuccessEventMode}
-              onCancel={() => {
-                const hasIdentifiers = formConfig?.fields.some(
-                  (f) => f.isIdentifier
-                );
-                if (hasIdentifiers) {
-                  setFlowStep("access-options");
-                } else {
-                  handleCancelEventMode();
-                }
-              }}
-              mode="page"
-            />
+            <>
+              <AdvancedRegistrationForm
+                orgSlug={slug!}
+                orgId={org._id}
+                eventId={event._id}
+                registrationScope="org+event"
+                onSuccess={handleSuccessEventMode}
+                onCancel={() => {
+                  const hasIdentifiers = formConfig?.fields.some(
+                    (f) => f.isIdentifier
+                  );
+                  if (hasIdentifiers) {
+                    setFlowStep("access-options");
+                  } else {
+                    handleCancelEventMode();
+                  }
+                }}
+                mode="page"
+              />
+              <Affix position={{ bottom: 20, right: 20 }}>
+                <Button
+                  component="a"
+                  href={whatsappHref}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  leftSection={<IconBrandWhatsapp size={18} />}
+                  color="green"
+                  radius="xl"
+                  size="md"
+                  variant="filled"
+                  styles={{
+                    root: {
+                      boxShadow: "0 10px 24px rgba(0,0,0,.12)",
+                      paddingInline: 16,
+                    },
+                  }}
+                >
+                  Soporte Técnico
+                </Button>
+              </Affix>
+            </>
           )}
 
           {flowStep === "update-registration" &&
