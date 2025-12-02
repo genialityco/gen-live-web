@@ -18,6 +18,7 @@ import {
   Image,
   ScrollArea,
   ThemeIcon,
+  Spoiler,
 } from "@mantine/core";
 import {
   IconCalendar,
@@ -339,10 +340,16 @@ function Hero({
               {title}
             </Title>
             {org.description && (
-              <Text c="dimmed" size={isMobile ? "sm" : "md"} lineClamp={2}>
-                {/* 🔽 recorta a 2 líneas en mobile */}
-                {org.description}
-              </Text>
+              <Spoiler
+                maxHeight={isMobile ? 30 : 50} // ~2-3 líneas
+                showLabel="Ver más"
+                hideLabel="Ver menos"
+                transitionDuration={200}
+              >
+                <Text c="dimmed" size={isMobile ? "sm" : "md"}>
+                  {org.description}
+                </Text>
+              </Spoiler>
             )}
             <Group gap={isMobile ? 6 : "sm"} wrap="wrap">
               {nextEvent ? (

@@ -306,6 +306,8 @@ export default function RegistrationFormBuilder({
         validation: {
           pattern: "^\\+\\d{1,4}$",
         },
+        readOnly: true,
+        disabled: true,
       });
 
       // 3. Campo Teléfono
