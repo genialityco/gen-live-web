@@ -58,6 +58,8 @@ export interface FormField {
   dependsOn?: string; // ID del campo padre (para cascada)
   conditionalLogic?: ConditionalLogic[]; // Reglas de visibilidad/habilitación
   isIdentifier?: boolean; // Campo usado para identificar registros únicos (evitar duplicados)
+  readOnly?: boolean; // Campo de solo lectura
+  disabled?: boolean; // Campo deshabilitado
 }
 
 export interface RegistrationForm {
