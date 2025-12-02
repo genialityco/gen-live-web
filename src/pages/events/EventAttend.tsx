@@ -243,7 +243,7 @@ export default function EventAttend() {
   const {
     resolved: realtimeEvent,
     status,
-    nowCount,
+    // nowCount,
     loading: eventLoading,
   } = useEventRealtime(eventSlugToUse);
 
@@ -581,12 +581,12 @@ export default function EventAttend() {
                       </Badge>
                     </Group>
 
-                    {nowCount > 0 && (
+                    {/* {nowCount > 0 && (
                       <Badge variant="light" color="gray" size="sm">
                         👥 {nowCount}{" "}
                         {nowCount === 1 ? "persona viendo" : "personas viendo"}
                       </Badge>
-                    )}
+                    )} */}
                   </Group>
 
                   {/* Fila 3: botón de control (solo owner) */}

@@ -1,13 +1,6 @@
 import { useState, useEffect } from "react";
 import { useParams, useLocation } from "react-router-dom";
-import {
-  Title,
-  Loader,
-  Center,
-  Container,
-  Paper,
-  Alert,
-} from "@mantine/core";
+import { Title, Loader, Center, Container, Paper, Alert } from "@mantine/core";
 import { fetchOrgBySlugForAdmin, type Org } from "../../api/orgs";
 import { AdminLayout } from "../../components/common";
 import { CreateOrganizationForm } from "../../components/organizations";
@@ -37,10 +30,9 @@ export default function OrganizationAdmin() {
     try {
       setLoading(true);
       setError(null);
-      
+
       const orgData = await fetchOrgBySlugForAdmin(slug);
       setOrg(orgData);
-      
     } catch (err) {
       console.error("Error loading organization data:", err);
       setError("No se pudo cargar la organización o no tienes permisos");
@@ -53,18 +45,28 @@ export default function OrganizationAdmin() {
     loadOrganizationData();
   }, [slug]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => {
+    if (org) {
+      document.title = `Administrador ${org.name}`;
+    }
+    return () => {
+      document.title = "Gen Live";
+    };
+  }, [org]);
   // Determinar qué vista mostrar basado en la ruta
   const getCurrentView = () => {
     if (!org) return null;
-    
+
     const path = location.pathname;
-    if (path.endsWith('/events')) {
+    if (path.endsWith("/events")) {
       return <AdminEventsView orgId={org._id} />;
-    } else if (path.endsWith('/attendees')) {
+    } else if (path.endsWith("/attendees")) {
       return <AdminAttendeesView orgId={org._id} orgName={org.name} />;
-    } else if (path.endsWith('/registration-form')) {
-      return <RegistrationFormBuilder org={org} onUpdate={loadOrganizationData} />;
-    } else if (path.endsWith('/settings')) {
+    } else if (path.endsWith("/registration-form")) {
+      return (
+        <RegistrationFormBuilder org={org} onUpdate={loadOrganizationData} />
+      );
+    } else if (path.endsWith("/settings")) {
       return <BrandingSettings org={org} onUpdate={loadOrganizationData} />;
     } else {
       // Vista por defecto (dashboard)
@@ -102,7 +104,7 @@ export default function OrganizationAdmin() {
           <Title order={1} mb="xl" ta="center">
             Crear Nueva Organización
           </Title>
-          <CreateOrganizationForm 
+          <CreateOrganizationForm
             onCreated={(newOrg) => {
               if (newOrg) {
                 window.location.href = `/org/${newOrg.domainSlug}/admin`;
@@ -126,9 +128,5 @@ export default function OrganizationAdmin() {
   }
 
   // Render con el nuevo AdminLayout
-  return (
-    <AdminLayout org={org}>
-      {getCurrentView()}
-    </AdminLayout>
-  );
+  return <AdminLayout org={org}>{getCurrentView()}</AdminLayout>;
 }

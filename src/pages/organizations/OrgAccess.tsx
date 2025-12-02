@@ -28,6 +28,7 @@ import {
   fetchEventsByOrg,
   type EventItem,
   checkOrgRegistrationByIdentifiers,
+  registerToEventWithFirebase,
 } from "../../api/events";
 import type { RegistrationForm } from "../../types";
 import type { FoundRegistration } from "../../api/events";
@@ -47,8 +48,6 @@ import {
   type OrgAttendee,
 } from "../../api/org-attendees";
 
-// 👇 import para crear EventUser desde OrgAttendee
-import { registerEventUserFromOrgAttendee } from "../../api/event-users";
 import { normalizeIdentifierValue } from "../../utils/normalizeByType";
 
 type FlowStep =
@@ -544,40 +543,70 @@ export default function OrgAccess() {
 
       const attendee = foundRegistration.attendee;
 
-      // 1) Sacar email del OrgAttendee (usando helper que ya tienes)
+      // 1) Sacar email del OrgAttendee
       const email =
         extractEmailFromOrgAttendee(attendee) ||
         user?.email ||
-        localStorage.getItem(user?.uid ? `uid-${user.uid}-email` : "") ||
+        (user?.uid ? localStorage.getItem(`uid-${user.uid}-email`) : null) ||
         localStorage.getItem("user-email") ||
         null;
 
       if (!email) {
-        console.warn(
-          "⚠️ handleContinueFromSummary: no email found for attendee, proceeding without email"
+        console.error(
+          "❌ handleContinueFromSummary: no email found for attendee"
         );
+        notifications.show({
+          color: "red",
+          title: "Error",
+          message:
+            "No se pudo identificar tu correo electrónico. Contacta al organizador.",
+        });
+        return;
       }
 
-      // 2) Asegurar sesión anónima en Firebase y persistir email
+      // 2) Asegurar sesión anónima y persistir email
       let firebaseUID = user?.uid;
 
-      if (!firebaseUID && email) {
+      if (!firebaseUID) {
+        console.log(
+          "🔐 handleContinueFromSummary: creating anonymous session for",
+          email
+        );
         firebaseUID = await createAnonymousSession(email);
         localStorage.setItem("user-email", email);
         localStorage.setItem(`uid-${firebaseUID}-email`, email);
       }
 
-      // 3) Guardar fallback específico para EventAttend (prioridad 3)
-      if (email) {
-        localStorage.setItem("last-registered-email", email);
-      }
+      // fallback para EventAttend
+      localStorage.setItem("last-registered-email", email);
 
-      // 4) Crear el EventUser a partir del OrgAttendee
-      await registerEventUserFromOrgAttendee(
-        attendee._id,
-        event._id,
-        firebaseUID
-      );
+      // 3) (opcional pero recomendado) comprobar si YA está registrado
+      try {
+        const { checkIfRegistered } = await import("../../api/events");
+        const status = await checkIfRegistered(event._id, email);
+
+        if (status.isRegistered) {
+          console.log(
+            "✅ handleContinueFromSummary: EventUser ya existe, redirigiendo a /attend"
+          );
+          handleSuccessEventMode();
+          return;
+        }
+      } catch (checkError) {
+        console.warn(
+          "⚠️ handleContinueFromSummary: error al verificar si ya estaba registrado",
+          checkError
+        );
+        // Si falla el check, seguimos igual y tratamos de registrarlo
+      }
+      console.log("attendee data:", attendee);
+      // 4) Crear/actualizar el EventUser usando la MISMA ruta que el auto-registro
+      await registerToEventWithFirebase(event._id, {
+        email,
+        name: attendee.name, // o intenta sacar el nombre de registrationData si ahí lo guardas
+        formData: attendee.registrationData,
+        firebaseUID,
+      });
 
       notifications.show({
         color: "green",
@@ -586,10 +615,27 @@ export default function OrgAccess() {
           "Tu registro a este evento está listo. Te estamos llevando al evento.",
       });
 
-      // 5) Ahora sí, ir a /attend
+      // 5) Ir al attend
       handleSuccessEventMode();
-    } catch (err) {
+    } catch (err: any) {
       console.error("❌ Error creando EventUser desde summary:", err);
+
+      const status = err?.response?.status;
+      const message: string | undefined = err?.response?.data?.message;
+
+      // Por si tu backend responde algo tipo "ya está registrado" con 400/409
+      if (
+        status === 409 ||
+        (typeof message === "string" &&
+          message.toLowerCase().includes("ya está registrado"))
+      ) {
+        console.warn(
+          "⚠️ handleContinueFromSummary: EventUser ya existía, redirigiendo igualmente a /attend"
+        );
+        handleSuccessEventMode();
+        return;
+      }
+
       notifications.show({
         color: "red",
         title: "Error",

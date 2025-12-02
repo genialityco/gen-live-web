@@ -45,7 +45,7 @@ export default function EventLanding() {
   const {
     resolved: event,
     status,
-    nowCount,
+    // nowCount,
     loading: eventLoading,
   } = useEventRealtimeData(eventSlugToUse);
 
@@ -463,12 +463,12 @@ export default function EventLanding() {
                     {status === "live" && "🔴 "}
                     {getStatusText(status)}
                   </Badge>
-                  {nowCount > 0 && (
+                  {/* {nowCount > 0 && (
                     <Badge variant="light" color="gray" size="lg" p="md">
                       👥 {nowCount}{" "}
                       {nowCount === 1 ? "persona viendo" : "personas viendo"}
                     </Badge>
-                  )}
+                  )} */}
                 </Group>
 
                 {/* Título */}
