@@ -7,7 +7,9 @@ import {
   Group,
   Box,
   SimpleGrid,
+  Affix,
 } from "@mantine/core";
+import { IconBrandWhatsapp } from "@tabler/icons-react";
 
 interface RegistrationAccessCardProps {
   formTitle?: string;
@@ -15,12 +17,14 @@ interface RegistrationAccessCardProps {
   onSelectLogin: () => void;
   onSelectRegister: () => void;
   onCancel: () => void;
+  whatsappHref?: string;
 }
 
 export function RegistrationAccessCard({
   onSelectLogin,
   onSelectRegister,
   onCancel,
+  whatsappHref = "https://wa.me/+573224387523?",
 }: RegistrationAccessCardProps) {
   return (
     <Card shadow="md" padding="xl" radius="lg" withBorder>
@@ -33,7 +37,14 @@ export function RegistrationAccessCard({
 
         <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="lg" w="100%" maw={600}>
           {/* Opción: Ya registrado */}
-          <Card withBorder shadow="sm" padding="lg" radius="md" style={{ cursor: 'pointer' }} onClick={onSelectLogin}>
+          <Card
+            withBorder
+            shadow="sm"
+            padding="lg"
+            radius="md"
+            style={{ cursor: "pointer" }}
+            onClick={onSelectLogin}
+          >
             <Stack gap="md" align="center" ta="center">
               <Text size="2rem">🔑</Text>
               <Stack gap="xs">
@@ -48,7 +59,14 @@ export function RegistrationAccessCard({
           </Card>
 
           {/* Opción: Primera vez */}
-          <Card withBorder shadow="sm" padding="lg" radius="md" style={{ cursor: 'pointer' }} onClick={onSelectRegister}>
+          <Card
+            withBorder
+            shadow="sm"
+            padding="lg"
+            radius="md"
+            style={{ cursor: "pointer" }}
+            onClick={onSelectRegister}
+          >
             <Stack gap="md" align="center" ta="center">
               <Text size="2rem">📝</Text>
               <Stack gap="xs">
@@ -64,14 +82,32 @@ export function RegistrationAccessCard({
         </SimpleGrid>
 
         <Group gap="sm" mt="md">
-          <Button
-            variant="subtle"
-            size="sm"
-            onClick={onCancel}
-          >
+          <Button variant="subtle" size="sm" onClick={onCancel}>
             ← Volver al evento
           </Button>
         </Group>
+
+        <Affix position={{ bottom: 20, right: 20 }}>
+          <Button
+            component="a"
+            href={whatsappHref}
+            target="_blank"
+            rel="noopener noreferrer"
+            leftSection={<IconBrandWhatsapp size={18} />}
+            color="green"
+            radius="xl"
+            size="md"
+            variant="filled"
+            styles={{
+              root: {
+                boxShadow: "0 10px 24px rgba(0,0,0,.12)",
+                paddingInline: 16,
+              },
+            }}
+          >
+            Soporte Técnico
+          </Button>
+        </Affix>
       </Stack>
     </Card>
   );
