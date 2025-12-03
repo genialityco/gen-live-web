@@ -754,16 +754,29 @@ export default function OrganizationLanding() {
     );
   }
 
-  // Base: solo futuros (>= ahora), excluye replay/ended
   const now = Date.now();
-  const futureEventsSorted = events
+
+  // 1) Eventos activos (no pasados tipo replay/ended)
+  const activeEvents = events.filter(
+    (e) => !["replay", "ended"].includes(e.status)
+  );
+
+  // 2) Eventos LIVE (deben seguir saliendo como "Próximo evento" aunque la hora ya haya pasado)
+  const liveEvents = activeEvents
+    .filter((e) => e.status === "live")
+    .sort(
+      (a, b) =>
+        new Date(a.schedule?.startsAt || 0).getTime() -
+        new Date(b.schedule?.startsAt || 0).getTime()
+    );
+
+  // 3) Eventos UPCOMING futuros
+  const upcomingBase = activeEvents
     .filter((e) => {
-      const ts = e.schedule?.startsAt
-        ? new Date(e.schedule.startsAt).getTime()
-        : NaN;
-      if (!ts || Number.isNaN(ts)) return false;
-      if (ts < now) return false; // fuera todo lo pasado
-      return !["replay", "ended"].includes(e.status); // solo live/upcoming
+      if (!e.schedule?.startsAt) return false;
+      const ts = new Date(e.schedule.startsAt).getTime();
+      if (Number.isNaN(ts)) return false;
+      return ts >= now && e.status === "upcoming";
     })
     .sort(
       (a, b) =>
@@ -771,18 +784,20 @@ export default function OrganizationLanding() {
         new Date(b.schedule!.startsAt!).getTime()
     );
 
-  // Próximo evento: el más cercano (puede ser live o upcoming)
-  const nextEvent = futureEventsSorted[0] ?? null;
+  // 4) Próximo evento:
+  //    - Si hay LIVE: tomamos el live más "cercano" (o el primero)
+  //    - Si no hay LIVE: tomamos el primer UPCOMING
+  const nextEvent =
+    (liveEvents[0] ?? upcomingBase[0]) ?? null;
 
-  // Lista para "Próximos eventos": futuros SOLO 'upcoming', excluyendo el próximo
-  const upcomingEvents = futureEventsSorted
-    .filter((e) => e.status === "upcoming")
-    .filter(
-      (e) =>
-        !nextEvent || (e._id ?? e.slug) !== (nextEvent._id ?? nextEvent.slug)
-    );
+  // 5) "Próximos Eventos": sólo UPCOMING, sin repetir el nextEvent
+  const upcomingEvents = upcomingBase.filter(
+    (e) =>
+      !nextEvent ||
+      (e._id ?? e.slug) !== (nextEvent._id ?? (nextEvent as any).slug)
+  );
 
-  // Eventos pasados (se mantiene igual)
+  // 6) Eventos pasados (puedes dejarlo igual que ya lo tenías)
   const pastEvents = events
     .filter((e) => e.status === "ended" || e.status === "replay")
     .sort(

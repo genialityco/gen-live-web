@@ -16,7 +16,7 @@ import { ref as r, onValue } from "firebase/database";
 
 // URL de emergencia a donde quieres mandar a TODOS
 const EMERGENCY_URL =
-  "https://liveevents.geniality.com.co/68fcf6db6d9f9db64809e042";
+  "https://gen-live-web.netlify.app/org/reddeexpertosdmace.com/event/respondiendo-desafio-diabete-2025";
 
 // Define estilos globales para notificaciones usando el tema de Mantine
 const theme = createTheme({
