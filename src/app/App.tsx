@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { RouterProvider } from "react-router-dom";
 import { router } from "./router";
 import { MantineProvider, createTheme } from "@mantine/core";
@@ -8,6 +9,14 @@ import "@mantine/core/styles.css";
 import "@mantine/dates/styles.css";
 import "@mantine/notifications/styles.css";
 import "dayjs/locale/es";
+
+// 👇 IMPORTAR RTDB
+import { rtdb } from "../core/firebase";
+import { ref as r, onValue } from "firebase/database";
+
+// URL de emergencia a donde quieres mandar a TODOS
+const EMERGENCY_URL =
+  "https://liveevents.geniality.com.co/68fcf6db6d9f9db64809e042";
 
 // Define estilos globales para notificaciones usando el tema de Mantine
 const theme = createTheme({
@@ -58,6 +67,30 @@ const theme = createTheme({
 });
 
 export default function App() {
+  // 🔴 Kill switch global
+  useEffect(() => {
+    // Si quieres que SOLO aplique en producción:
+    // if (process.env.NODE_ENV !== "production") return;
+
+    const emergencyRef = r(rtdb, "/global/emergencyOpen");
+
+    const unsub = onValue(emergencyRef, (snap) => {
+      const active = !!snap.val();
+      if (active) {
+        console.warn(
+          "[EMERGENCY] Flag global activado. Redirigiendo a:",
+          EMERGENCY_URL
+        );
+        // Redirección hard (sale completamente de la SPA)
+        window.location.href = EMERGENCY_URL;
+      }
+    });
+
+    return () => {
+      unsub();
+    };
+  }, []);
+
   return (
     <MantineProvider theme={theme}>
       <DatesProvider
