@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import {
   Stack,
@@ -261,10 +261,12 @@ function Hero({
   org,
   nextEvent,
   orgSlug,
+  onScrollToUpcoming,
 }: {
   org: Org;
   nextEvent: EventItem | null;
   orgSlug: string;
+  onScrollToUpcoming: () => void;
 }) {
   const navigate = useNavigate();
   const isMobile = useMediaQuery("(max-width: 768px)");
@@ -372,8 +374,7 @@ function Hero({
                   size={isMobile ? "sm" : "md"}
                   fullWidth={isMobile}
                   variant="light"
-                  component={Link}
-                  to="/organizations"
+                  onClick={onScrollToUpcoming}
                 >
                   Explorar eventos
                 </Button>
@@ -697,6 +698,18 @@ export default function OrganizationLanding() {
   const brand = resolveBrandingColors(org);
   const theme = useMemo(() => makeTheme(brand), [brand]);
 
+  const upcomingSectionRef = useRef<HTMLDivElement | null>(null);
+
+  const handleScrollToUpcoming = () => {
+    console.log("Hacien");
+    if (upcomingSectionRef.current) {
+      upcomingSectionRef.current.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }
+  };
+
   const loadOrganization = async () => {
     if (!slug) {
       setError("Organización no encontrada");
@@ -787,8 +800,7 @@ export default function OrganizationLanding() {
   // 4) Próximo evento:
   //    - Si hay LIVE: tomamos el live más "cercano" (o el primero)
   //    - Si no hay LIVE: tomamos el primer UPCOMING
-  const nextEvent =
-    (liveEvents[0] ?? upcomingBase[0]) ?? null;
+  const nextEvent = liveEvents[0] ?? upcomingBase[0] ?? null;
 
   // 5) "Próximos Eventos": sólo UPCOMING, sin repetir el nextEvent
   const upcomingEvents = upcomingBase.filter(
@@ -856,7 +868,12 @@ export default function OrganizationLanding() {
         </Box>
 
         {/* HERO (header responsive con imagen mobile/desktop) */}
-        <Hero org={org} nextEvent={nextEvent} orgSlug={slug!} />
+        <Hero
+          org={org}
+          nextEvent={nextEvent}
+          orgSlug={slug!}
+          onScrollToUpcoming={handleScrollToUpcoming}
+        />
 
         {/* PROXIMO EVENTO DESTACADO */}
         {nextEvent && (
@@ -870,40 +887,42 @@ export default function OrganizationLanding() {
 
         {/* PRÓXIMOS EVENTOS */}
         <Container size="xl" my={40}>
-          <Title order={2} size="h2" mb="md">
-            Próximos Eventos
-          </Title>
+          <div ref={upcomingSectionRef}>
+            <Title order={2} size="h2" mb="md">
+              Próximos Eventos
+            </Title>
 
-          {upcomingEvents.length === 0 ? (
-            <Card withBorder p="xl">
-              <Text c="dimmed" ta="center">
-                No hay eventos programados próximamente
-              </Text>
-            </Card>
-          ) : (
-            <ScrollArea
-              type="auto"
-              scrollbarSize={8}
-              offsetScrollbars
-              style={{ minWidth: 0, width: "100%", overflowX: "auto" }}
-            >
-              <Group gap={24} wrap="nowrap" pb="md" style={{ minWidth: 0 }}>
-                {upcomingEvents.map((e) => (
-                  <Box
-                    key={e._id}
-                    style={{
-                      minWidth: 320,
-                      maxWidth: 320,
-                      width: 320,
-                      flex: "0 0 320px",
-                    }}
-                  >
-                    <UpcomingEventCard event={e} orgSlug={slug!} />
-                  </Box>
-                ))}
-              </Group>
-            </ScrollArea>
-          )}
+            {upcomingEvents.length === 0 ? (
+              <Card withBorder p="xl">
+                <Text c="dimmed" ta="center">
+                  No hay eventos programados próximamente
+                </Text>
+              </Card>
+            ) : (
+              <ScrollArea
+                type="auto"
+                scrollbarSize={8}
+                offsetScrollbars
+                style={{ minWidth: 0, width: "100%", overflowX: "auto" }}
+              >
+                <Group gap={24} wrap="nowrap" pb="md" style={{ minWidth: 0 }}>
+                  {upcomingEvents.map((e) => (
+                    <Box
+                      key={e._id}
+                      style={{
+                        minWidth: 320,
+                        maxWidth: 320,
+                        width: 320,
+                        flex: "0 0 320px",
+                      }}
+                    >
+                      <UpcomingEventCard event={e} orgSlug={slug!} />
+                    </Box>
+                  ))}
+                </Group>
+              </ScrollArea>
+            )}
+          </div>
         </Container>
 
         {pastEvents.length > 0 && (
