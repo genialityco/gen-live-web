@@ -18,6 +18,7 @@ import {
   Grid,
   Image,
   MantineProvider,
+  Tabs,
 } from "@mantine/core";
 import { fetchOrgBySlug, type Org } from "../../api/orgs";
 import {
@@ -334,10 +335,7 @@ export default function EventAttend() {
           }
 
           if (result.orgAttendee?._id) {
-            console.log('[EventAttend] Setting attendeeId:', result.orgAttendee._id);
             setAttendeeId(result.orgAttendee._id);
-          } else {
-            console.log('[EventAttend] No orgAttendee._id found in result');
           }
 
           setIsRegistered(!!result.isRegistered);
@@ -378,6 +376,9 @@ export default function EventAttend() {
 
     if (!checkingRegistration && !loading && !eventLoading) {
       if (!isRegistered && !isOwner) {
+        console.log(
+          "🔒 EventAttend: User not registered, redirecting to event landing"
+        );
         navigate(`/org/${slug}/event/${eventSlug}`, { replace: true });
       }
     }
@@ -436,25 +437,16 @@ export default function EventAttend() {
     return () => clearInterval(id);
   }, [status, finalEvent?.schedule?.startsAt]);
 
+  // Tracking asistencia
   useEffect(() => {
-    // Necesitamos:
-    // - que exista el evento
-    // - que tengamos attendeeId
-    // - que ya sepamos que está registrado
     if (!event || !attendeeId || !isRegistered) return;
 
     const syncTracking = async () => {
       try {
-        // 1) Siempre: actualizar último login cuando entra a /attend
-        // await updateEventUserLastLogin(attendeeId, event._id);
-        // console.log("✅ Updated EventUser lastLoginAt");
-        // 2) Si el evento está EN VIVO en este momento, marcar asistencia
         if (status === "live") {
+          console.log("✅ Marking EventUser as attended");
           await markEventUserAsAttended(attendeeId, event._id);
         }
-
-        // Si quieres marcar solo la primera vez que pasa a live,
-        // puedes controlar con un flag local para no spamear el endpoint.
       } catch (err) {
         console.error("❌ Error syncing EventUser tracking:", err);
       }
@@ -539,7 +531,6 @@ export default function EventAttend() {
               {/* Header del evento (status + info básica) */}
               <Card shadow="sm" padding="lg" radius="lg" withBorder>
                 <Stack gap="xs">
-                  {/* Fila 1: TÍTULO (sin org, adaptativo) */}
                   <Title
                     order={2}
                     size={isMobile ? "h4" : "h3"}
@@ -547,12 +538,10 @@ export default function EventAttend() {
                       lineHeight: 1.2,
                       ...(isMobile
                         ? {
-                            // En mobile: puede saltar líneas
                             whiteSpace: "normal",
                             wordBreak: "break-word",
                           }
                         : {
-                            // En desktop: una línea con …
                             overflow: "hidden",
                             textOverflow: "ellipsis",
                             whiteSpace: "nowrap",
@@ -562,7 +551,6 @@ export default function EventAttend() {
                     {finalEvent.title}
                   </Title>
 
-                  {/* Fila 2: estado + viewers */}
                   <Group
                     justify="space-between"
                     align="center"
@@ -580,16 +568,8 @@ export default function EventAttend() {
                         {getStatusText(status)}
                       </Badge>
                     </Group>
-
-                    {/* {nowCount > 0 && (
-                      <Badge variant="light" color="gray" size="sm">
-                        👥 {nowCount}{" "}
-                        {nowCount === 1 ? "persona viendo" : "personas viendo"}
-                      </Badge>
-                    )} */}
                   </Group>
 
-                  {/* Fila 3: botón de control (solo owner) */}
                   {isOwner && slug && eventSlug && (
                     <Group justify="flex-end">
                       <Button
@@ -608,7 +588,6 @@ export default function EventAttend() {
               {/* Layout principal: video + chat */}
               <Grid gutter="lg">
                 <Grid.Col span={{ base: 12, md: 8 }}>
-                  {/* CONTENEDOR FULL PARA LA TRANSMISIÓN (sin bordes visibles) */}
                   <Box
                     style={{
                       borderRadius: 16,
@@ -676,7 +655,7 @@ export default function EventAttend() {
                             alignItems: "center",
                             justifyContent: "center",
                             padding: 24,
-                            backgroundColor: "#ffffff", // fondo blanco, sin degradado
+                            backgroundColor: "#ffffff",
                           }}
                         >
                           <Stack
@@ -684,12 +663,10 @@ export default function EventAttend() {
                             gap="sm"
                             style={{ maxWidth: 480, textAlign: "center" }}
                           >
-                            {/* Título principal */}
                             <Text size="xl" fw={800}>
                               🕒 El evento comenzará pronto
                             </Text>
 
-                            {/* Contador destacado */}
                             {timeLeft && (
                               <Box
                                 style={{
@@ -706,7 +683,6 @@ export default function EventAttend() {
                               </Box>
                             )}
 
-                            {/* Texto secundario */}
                             <Text size="sm" c="dimmed">
                               Mantén esta ventana abierta. La transmisión se
                               iniciará automáticamente cuando el anfitrión
@@ -723,7 +699,7 @@ export default function EventAttend() {
                             alignItems: "center",
                             justifyContent: "center",
                             padding: 24,
-                            backgroundColor: "#ffffff", // también blanco para el estado finalizado
+                            backgroundColor: "#ffffff",
                           }}
                         >
                           <Stack
@@ -731,7 +707,6 @@ export default function EventAttend() {
                             gap="sm"
                             style={{ maxWidth: 480, textAlign: "center" }}
                           >
-                            {/* Pill superior */}
                             <Box
                               style={{
                                 padding: "4px 12px",
@@ -746,18 +721,15 @@ export default function EventAttend() {
                               Evento finalizado
                             </Box>
 
-                            {/* Título principal */}
                             <Text size="xl" fw={800}>
                               📝 Gracias por asistir
                             </Text>
 
-                            {/* Texto secundario */}
                             <Text size="sm" c="dimmed">
                               Este evento ha terminado y en este momento no hay
                               transmisión disponible.
                             </Text>
 
-                            {/* Call to action */}
                             {slug && eventSlug && (
                               <Group gap="xs" mt="xs" justify="center">
                                 <Button
@@ -779,40 +751,86 @@ export default function EventAttend() {
 
                 <Grid.Col span={{ base: 12, md: 4 }}>
                   <Stack gap="lg">
-                    {/* Chat */}
+                    {/* Chat con tabs Chat/Preguntas */}
                     <Card shadow="md" padding="lg" radius="lg" withBorder>
                       <Stack gap="md">
                         <Title order={4}>💬 Chat del evento</Title>
+
                         {event?._id ? (
-                          <Box
-                            style={{
-                              height: 400,
-                              borderRadius: "12px",
-                              overflow: "hidden",
-                              border: "1px solid var(--mantine-color-gray-3)",
-                            }}
-                          >
-                            <iframe
-                              src={`https://chat-geniality.netlify.app?${new URLSearchParams(
-                                {
-                                  nombre: effectiveChatName,
-                                  chatid: event._id,
-                                  iduser: "",
-                                  eventid: event._id,
-                                  // anonimo: user?.isAnonymous ? "true" : "false",
-                                  message_highlighted: "",
-                                }
-                              ).toString()}`}
-                              width="100%"
-                              height="100%"
-                              style={{
-                                border: "none",
-                                borderRadius: "12px",
-                              }}
-                              title="Chat del evento"
-                              sandbox="allow-scripts allow-same-origin allow-forms"
-                            />
-                          </Box>
+                          <Tabs defaultValue="chat" keepMounted={false}>
+                            <Tabs.List>
+                              <Tabs.Tab value="chat">Chat en directo</Tabs.Tab>
+                              <Tabs.Tab value="questions">Preguntas</Tabs.Tab>
+                            </Tabs.List>
+
+                            <Tabs.Panel value="chat" pt="md">
+                              <Box
+                                style={{
+                                  height: 400,
+                                  borderRadius: "12px",
+                                  overflow: "hidden",
+                                  border:
+                                    "1px solid var(--mantine-color-gray-3)",
+                                }}
+                              >
+                                <iframe
+                                  key="chat"
+                                  src={`https://chat-geniality.netlify.app?${new URLSearchParams(
+                                    {
+                                      nombre: effectiveChatName,
+                                      chatid: event._id,
+                                      iduser: "",
+                                      eventid: event._id,
+                                      view: "chat",
+                                      message_highlighted: "",
+                                    }
+                                  ).toString()}`}
+                                  width="100%"
+                                  height="100%"
+                                  style={{
+                                    border: "none",
+                                    borderRadius: "12px",
+                                  }}
+                                  title="Chat en directo"
+                                  sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+                                />
+                              </Box>
+                            </Tabs.Panel>
+
+                            <Tabs.Panel value="questions" pt="md">
+                              <Box
+                                style={{
+                                  height: 400,
+                                  borderRadius: "12px",
+                                  overflow: "hidden",
+                                  border:
+                                    "1px solid var(--mantine-color-gray-3)",
+                                }}
+                              >
+                                <iframe
+                                  key="questions"
+                                  src={`https://chat-geniality.netlify.app?${new URLSearchParams(
+                                    {
+                                      nombre: effectiveChatName,
+                                      chatid: event._id,
+                                      iduser: "",
+                                      eventid: event._id,
+                                      view: "questions",
+                                      message_highlighted: "",
+                                    }
+                                  ).toString()}`}
+                                  width="100%"
+                                  height="100%"
+                                  style={{
+                                    border: "none",
+                                    borderRadius: "12px",
+                                  }}
+                                  title="Preguntas"
+                                  sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+                                />
+                              </Box>
+                            </Tabs.Panel>
+                          </Tabs>
                         ) : (
                           <Center h={200}>
                             <Text size="sm" c="dimmed" ta="center">
@@ -823,39 +841,6 @@ export default function EventAttend() {
                         )}
                       </Stack>
                     </Card>
-
-                    {/* Tablón de anuncios */}
-                    {/* <Card shadow="sm" padding="md" radius="lg" withBorder>
-                      <Stack gap="sm">
-                        <Title order={5}>📌 Tablón de anuncios</Title>
-                        {event?.description ? (
-                          <Text size="sm" c="dimmed" lineClamp={4}>
-                            {event.description}
-                          </Text>
-                        ) : (
-                          <Text size="xs" c="dimmed">
-                            Aquí verás mensajes importantes, enlaces o
-                            instrucciones que el anfitrión comparta durante el
-                            evento.
-                          </Text>
-                        )}
-                        {(event?.startDate || event?.schedule?.startsAt) && (
-                          <Text size="xs" c="dimmed">
-                            📅{" "}
-                            {new Date(
-                              event.startDate || event.schedule?.startsAt || ""
-                            ).toLocaleDateString("es-ES", {
-                              weekday: "long",
-                              year: "numeric",
-                              month: "long",
-                              day: "numeric",
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            })}
-                          </Text>
-                        )}
-                      </Stack>
-                    </Card> */}
                   </Stack>
                 </Grid.Col>
               </Grid>
@@ -865,14 +850,12 @@ export default function EventAttend() {
 
         {/* Live Poll Viewer - Drawer de encuestas en tiempo real */}
         {slug && eventSlug && event?._id && (
-          <>
-            <LivePollViewer
-              orgSlug={slug}
-              eventSlug={eventSlug}
-              eventId={event._id}
-              orgAttendeeId={attendeeId}
-            />
-          </>
+          <LivePollViewer
+            orgSlug={slug}
+            eventSlug={eventSlug}
+            eventId={event._id}
+            orgAttendeeId={attendeeId}
+          />
         )}
       </Box>
     </MantineProvider>
