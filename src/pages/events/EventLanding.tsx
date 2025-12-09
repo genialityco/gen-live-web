@@ -330,6 +330,28 @@ export default function EventLanding() {
     }
   };
 
+  // Devuelve la fecha del evento formateada en la hora local del usuario
+  const userTimeZone =
+    Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+
+  const formatEventDateForUser = (dateInput?: string | null): string | null => {
+    if (!dateInput) return null;
+
+    const date = new Date(dateInput);
+
+    if (Number.isNaN(date.getTime())) return null;
+
+    return new Intl.DateTimeFormat("es-ES", {
+      weekday: "long",
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      timeZone: userTimeZone,
+    }).format(date);
+  };
+
   // Tiempo restante para eventos próximos
   const getTimeUntilEvent = () => {
     if (status !== "upcoming" || !eventData?.startDate) return null;
@@ -412,7 +434,7 @@ export default function EventLanding() {
       }
     : {};
 
-    console.log(eventBranding)
+  console.log(eventBranding);
 
   return (
     <MantineProvider theme={customTheme}>
@@ -489,19 +511,17 @@ export default function EventLanding() {
                     <Stack gap="xs" align="center">
                       <Text size="lg" fw={600} ta="center">
                         📅{" "}
-                        {new Date(
+                        {formatEventDateForUser(
                           eventData.startDate ||
                             eventData.schedule?.startsAt ||
-                            ""
-                        ).toLocaleDateString("es-ES", {
-                          weekday: "long",
-                          year: "numeric",
-                          month: "long",
-                          day: "numeric",
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
+                            null
+                        )}
                       </Text>
+
+                      <Text size="xs" c="dimmed" ta="center">
+                        Hora mostrada según tu zona horaria ({userTimeZone})
+                      </Text>
+
                       {timeUntilEvent && (
                         <Text size="md" c="dimmed" ta="center">
                           ⏰ Faltan {timeUntilEvent} para el inicio

@@ -137,18 +137,41 @@ const getEventGradient = (status: string) => {
   }
 };
 
-const formatShortDate = (date: Date) =>
-  date.toLocaleDateString("es-ES", {
+// Zona horaria detectada del navegador del usuario
+const userTimeZone =
+  typeof Intl !== "undefined" &&
+  Intl.DateTimeFormat().resolvedOptions().timeZone
+    ? Intl.DateTimeFormat().resolvedOptions().timeZone
+    : "UTC";
+
+const parseDateSafe = (value?: string | Date | null) => {
+  if (!value) return null;
+  const d = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(d.getTime()) ? null : d;
+};
+
+const formatShortDate = (value: string | Date) => {
+  const d = parseDateSafe(value);
+  if (!d) return "";
+  return new Intl.DateTimeFormat("es-ES", {
     weekday: "short",
     day: "numeric",
     month: "short",
-  });
-const formatTime = (date: Date) =>
-  date.toLocaleTimeString("es-ES", {
+    timeZone: userTimeZone,
+  }).format(d);
+};
+
+const formatTime = (value: string | Date) => {
+  const d = parseDateSafe(value);
+  if (!d) return "";
+  return new Intl.DateTimeFormat("es-ES", {
     hour: "numeric",
     minute: "2-digit",
     hour12: true,
-  });
+    timeZone: userTimeZone,
+  }).format(d);
+};
+
 // const formatLongDate = (date: Date) =>
 //   date.toLocaleDateString("es-ES", {
 //     weekday: "long",
@@ -389,20 +412,20 @@ function Hero({
 
 function InfoRow({ date }: { date?: string | null }) {
   if (!date) return null;
-  const d = new Date(date);
+
   return (
     <Group gap={8} wrap="nowrap">
       <ThemeIcon variant="light" size="sm">
         <IconCalendar size={16} />
       </ThemeIcon>
       <Text size="sm" fw={600}>
-        {formatShortDate(d)}
+        {formatShortDate(date)}
       </Text>
       <ThemeIcon variant="light" size="sm">
         <IconClock size={16} />
       </ThemeIcon>
       <Text size="sm" c="var(--mantine-color-brand-7)" fw={700}>
-        {formatTime(d)}
+        {formatTime(date)}
       </Text>
     </Group>
   );
@@ -428,17 +451,23 @@ function NextEventSection({
 
     const tick = () => {
       if (!event.schedule?.startsAt) return;
+      const startDate = parseDateSafe(event.schedule.startsAt);
+      if (!startDate) return;
+
       const now = Date.now();
-      const start = new Date(event.schedule.startsAt).getTime();
+      const start = startDate.getTime();
       const diff = start - now;
+
       if (diff <= 0) {
         setTimeLeft("¡El evento ha comenzado!");
         return;
       }
+
       const days = Math.floor(diff / 86400000);
       const hours = Math.floor((diff % 86400000) / 3600000);
       const minutes = Math.floor((diff % 3600000) / 60000);
       const seconds = Math.floor((diff % 60000) / 1000);
+
       setTimeLeft(`${days}d ${hours}h ${minutes}m ${seconds}s`);
     };
 
@@ -482,6 +511,9 @@ function NextEventSection({
                 {event.title}
               </Title>
               <InfoRow date={event.schedule?.startsAt || null} />
+              <Text size="xs" c="dimmed">
+                Hora según tu zona horaria ({userTimeZone})
+              </Text>
             </Stack>
           </Grid.Col>
 
