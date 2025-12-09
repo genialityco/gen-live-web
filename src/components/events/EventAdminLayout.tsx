@@ -94,6 +94,12 @@ export default function EventAdminLayout({
       description: "Gestionar participantes",
     },
     {
+      label: "Encuestas",
+      icon: "📋",
+      href: `/org/${slug}/event/${eventSlug}/admin/polls`,
+      description: "Crear y gestionar encuestas en vivo",
+    },
+    {
       label: "Configuración",
       icon: "⚙️",
       href: `/org/${slug}/event/${eventSlug}/admin/settings`,

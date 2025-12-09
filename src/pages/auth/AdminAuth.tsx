@@ -6,7 +6,6 @@ import {
   TextInput,
   PasswordInput,
   Button,
-  Divider,
   Group,
   Alert,
 } from "@mantine/core";
@@ -14,8 +13,6 @@ import {
   getAuth,
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
-  GoogleAuthProvider,
-  signInWithPopup,
 } from "firebase/auth";
 import { useNavigate } from "react-router-dom";
 import { api } from "../../core/api";
@@ -25,13 +22,15 @@ export default function AdminAuth() {
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [pass, setPass] = useState("");
-  const [loading, setLoading] = useState<"login" | "signup" | "google" | null>(
+  // Simplificamos el estado de carga ya que solo tendremos dos acciones
+  const [loading, setLoading] = useState<"login" | "signup" | null>(
     null
   );
   const [error, setError] = useState<string | null>(null);
 
   const bootstrap = async () => {
-    await api.post("/auth/bootstrap"); // crea/actualiza UserAccount en Mongo
+    // crea/actualiza UserAccount en Mongo (idempotente)
+    await api.post("/auth/bootstrap");
   };
 
   const goHome = () => {
@@ -43,6 +42,7 @@ export default function AdminAuth() {
     setError(String(msg));
   };
 
+  // La lógica de validación se mantiene
   const canSubmit = email.trim().length > 3 && pass.length >= 6;
 
   const doSignup = async () => {
@@ -50,7 +50,9 @@ export default function AdminAuth() {
     if (!canSubmit) return setError("Completa email y contraseña (mín. 6)");
     try {
       setLoading("signup");
+      // Intenta crear la cuenta en Firebase
       await createUserWithEmailAndPassword(auth, email.trim(), pass);
+      // Si tiene éxito, sincroniza o crea el usuario en la DB (Mongo)
       await bootstrap();
       // Pequeño delay para que Firebase procese el estado
       setTimeout(() => goHome(), 100);
@@ -66,8 +68,10 @@ export default function AdminAuth() {
     if (!canSubmit) return setError("Completa email y contraseña (mín. 6)");
     try {
       setLoading("login");
+      // Intenta iniciar sesión en Firebase
       await signInWithEmailAndPassword(auth, email.trim(), pass);
-      await bootstrap(); 
+      // Si tiene éxito, sincroniza o crea el usuario en la DB (Mongo)
+      await bootstrap();
       // Pequeño delay para que Firebase procese el estado
       setTimeout(() => goHome(), 100);
     } catch (e) {
@@ -78,21 +82,7 @@ export default function AdminAuth() {
     }
   };
 
-  const doGoogle = async () => {
-    setError(null);
-    try {
-      setLoading("google");
-      const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth, provider);
-      await bootstrap(); // idempotente
-      // Pequeño delay para que Firebase procese el estado
-      setTimeout(() => goHome(), 100);
-    } catch (e) {
-      handleError(e);
-    } finally {
-      setLoading(null);
-    }
-  };
+  // Se elimina la función doGoogle
 
   return (
     <Stack maw={420} mx="auto" gap="md">
@@ -128,15 +118,8 @@ export default function AdminAuth() {
         </Button>
       </Group>
 
-      <Divider label="o" />
+      {/* Se eliminan el Divider y el botón de Google */}
 
-      <Button
-        variant="default"
-        onClick={doGoogle}
-        loading={loading === "google"}
-      >
-        Continuar con Google
-      </Button>
     </Stack>
   );
 }

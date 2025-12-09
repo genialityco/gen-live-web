@@ -186,19 +186,12 @@ export default function EventAdminAttendees({
         if (!key) return true; // si no hay nada con qué deduplicar, lo dejamos pasar
 
         if (seenEventUsers.has(key)) {
-          console.log("Duplicado detectado (eventUser)", {
-            duplicatedKey: key,
-            eventUser: eu,
-          });
           return false;
         }
 
         seenEventUsers.add(key);
         return true;
       });
-
-      console.log("EventUsers raw data:", eventUsersResponse.data);
-      console.log("Valid EventUsers (dedup):", validEventUsers);
 
       // ---------- LIVE ATTENDEES ----------
       const validLiveAttendeesRaw = liveAttendeesResponse.data.filter(
@@ -233,9 +226,6 @@ export default function EventAdminAttendees({
           return true;
         }
       );
-
-      console.log("LiveAttendees raw data:", liveAttendeesResponse.data);
-      console.log("Valid LiveAttendees (dedup):", validLiveAttendees);
 
       setEventUsers(validEventUsers);
       setEventUsersStats({ total: validEventUsers.length });

@@ -701,7 +701,6 @@ export default function OrganizationLanding() {
   const upcomingSectionRef = useRef<HTMLDivElement | null>(null);
 
   const handleScrollToUpcoming = () => {
-    console.log("Hacien");
     if (upcomingSectionRef.current) {
       upcomingSectionRef.current.scrollIntoView({
         behavior: "smooth",

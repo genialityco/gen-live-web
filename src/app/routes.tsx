@@ -164,6 +164,14 @@ export const routes = [
           </Layout>
         ),
       },
+      {
+        path: "/org/:slug/event/:eventSlug/admin/polls",
+        element: (
+          <Layout>
+            <EventAdmin />
+          </Layout>
+        ),
+      }
     ],
   },
 ];

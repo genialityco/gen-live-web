@@ -20,6 +20,7 @@ import {
   EventAdminMetrics,
 } from "../../components/events";
 import { EventAdminChat } from "../../components/events/EventAdminChat";
+import EventAdminPolls from "../../components/events/EventAdminPolls";
 
 export default function EventAdmin() {
   const { slug, eventSlug } = useParams<{ slug: string; eventSlug: string }>();
@@ -86,6 +87,8 @@ export default function EventAdmin() {
       return <EventAdminSettings event={event} />;
     } else if( path.endsWith('/chat')) {
       return <EventAdminChat event={event} />;
+    } else if (path.endsWith('/polls')) {
+      return <EventAdminPolls />;
     } else {
       return <EventAdminOverview org={org} event={event} />;
     }

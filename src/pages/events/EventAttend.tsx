@@ -32,6 +32,7 @@ import { useEventRealtime } from "../../hooks/useEventRealtime";
 import UserSession from "../../components/auth/UserSession";
 import { useMediaQuery } from "@mantine/hooks";
 import { markEventUserAsAttended } from "../../api/event-users";
+import LivePollViewer from "../../components/events/LivePollViewer";
 
 // --------------------------------------------------------------
 // Branding Helpers (mismos que en OrganizationLanding)
@@ -333,7 +334,10 @@ export default function EventAttend() {
           }
 
           if (result.orgAttendee?._id) {
+            console.log('[EventAttend] Setting attendeeId:', result.orgAttendee._id);
             setAttendeeId(result.orgAttendee._id);
+          } else {
+            console.log('[EventAttend] No orgAttendee._id found in result');
           }
 
           setIsRegistered(!!result.isRegistered);
@@ -374,9 +378,6 @@ export default function EventAttend() {
 
     if (!checkingRegistration && !loading && !eventLoading) {
       if (!isRegistered && !isOwner) {
-        console.log(
-          "🔒 EventAttend: User not registered, redirecting to event landing"
-        );
         navigate(`/org/${slug}/event/${eventSlug}`, { replace: true });
       }
     }
@@ -449,7 +450,6 @@ export default function EventAttend() {
         // console.log("✅ Updated EventUser lastLoginAt");
         // 2) Si el evento está EN VIVO en este momento, marcar asistencia
         if (status === "live") {
-          console.log("✅ Marking EventUser as attended");
           await markEventUserAsAttended(attendeeId, event._id);
         }
 
@@ -861,6 +861,18 @@ export default function EventAttend() {
               </Grid>
             </Stack>
           </Container>
+        )}
+
+        {/* Live Poll Viewer - Drawer de encuestas en tiempo real */}
+        {slug && eventSlug && event?._id && (
+          <>
+            <LivePollViewer
+              orgSlug={slug}
+              eventSlug={eventSlug}
+              eventId={event._id}
+              orgAttendeeId={attendeeId}
+            />
+          </>
         )}
       </Box>
     </MantineProvider>
