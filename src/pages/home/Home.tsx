@@ -1,106 +1,99 @@
 import { Link } from "react-router-dom";
-import { Button, Group, Stack, TextInput, Title, Text, Card, Container, Divider } from "@mantine/core";
-import { useState } from "react";
+import {
+  Button,
+  Group,
+  Stack,
+  Title,
+  Text,
+  Card,
+  Container,
+  Loader,
+} from "@mantine/core";
+import { useAuth } from "../../auth/AuthProvider";
 
 export default function Home() {
-  const [slug, setSlug] = useState("demo");
-  
+  const { user, loading } = useAuth();
+  const isAdmin = !!user && !user.isAnonymous;
+
   return (
-    <Container size="md">
+    <Container size="sm">
       <Stack gap="xl" py="xl">
-        {/* Hero Section */}
-        <Stack align="center" gap="lg" ta="center">
-          <Title order={1} size="3rem" c="blue">LiveEvents</Title>
-          <Text size="xl" c="dimmed" maw={600}>
-            Plataforma para gestionar y transmitir eventos en vivo. 
-            Crea organizaciones, configura eventos y comparte con tu audiencia.
+        {/* Hero / branding */}
+        <Stack align="center" gap="sm" ta="center">
+          <Title order={1} size="3rem" c="blue">
+            Gen Live
+          </Title>
+          <Text size="md" c="dimmed" maw={520}>
+            Plataforma para crear organizaciones y gestionar eventos en vivo,
+            con accesos simples para tu audiencia y panel para administradores.
           </Text>
         </Stack>
 
-        {/* Quick Actions */}
-        <Card withBorder radius="lg" p="xl">
-          <Stack gap="lg">
-            <Title order={2} ta="center">¿Qué quieres hacer?</Title>
-            
-            <Group grow>
-              <Button 
-                component={Link} 
-                to="/organizations"
-                size="lg"
-                variant="light"
-              >
-                📋 Ver organizaciones
-              </Button>
-              <Button 
-                component={Link} 
-                to="/admin-auth"
-                size="lg"
-                variant="filled"
-              >
-                👤 Soy administrador
-              </Button>
-            </Group>
-
-            <Divider label="o" labelPosition="center" />
-
-            {/* Legacy event access */}
+        {/* Contenido según sesión */}
+        {loading ? (
+          <Card withBorder radius="lg" p="xl">
+            <Stack align="center" gap="md">
+              <Loader size="sm" />
+              <Text size="sm" c="dimmed">
+                Cargando sesión...
+              </Text>
+            </Stack>
+          </Card>
+        ) : isAdmin ? (
+          // Vista cuando hay sesión de administrador
+          <Card withBorder radius="lg" p="xl">
             <Stack gap="md">
-              <Title order={4} ta="center" c="dimmed">Acceso directo a evento (legacy)</Title>
-              <Group align="end">
-                <TextInput
-                  label="Slug del evento"
-                  placeholder="demo"
-                  value={slug}
-                  onChange={(e) => setSlug(e.target.value)}
-                  style={{ flex: 1 }}
-                />
-                <Button 
-                  component={Link} 
-                  to={`/e/${encodeURIComponent(slug)}`}
-                  disabled={!slug.trim()}
+              <Title order={3}>Acceso administrador</Title>
+              <Text size="sm" c="dimmed">
+                Gestiona tus organizaciones, configura eventos y controla tus
+                transmisiones en tiempo real.
+              </Text>
+
+              <Group>
+                <Button
+                  component={Link}
+                  to="/organizations"
+                  size="md"
+                  variant="filled"
                 >
-                  Abrir evento
+                  📋 Ver organizaciones
                 </Button>
               </Group>
             </Stack>
-          </Stack>
-        </Card>
+          </Card>
+        ) : (
+          // Vista pública (usuario anónimo)
+          <Card withBorder radius="lg" p="xl">
+            <Stack gap="md">
+              <Title order={3}>¿Qué es Gen Live?</Title>
+              <Text size="sm" c="dimmed">
+                Gen Live centraliza tus eventos en vivo en un solo lugar: creas
+                una organización, configuras tus eventos y compartes enlaces
+                simples con tus asistentes.
+              </Text>
 
-        {/* Features */}
-        <Stack gap="lg">
-          <Title order={2} ta="center">Características principales</Title>
-          <Group grow>
-            <Card withBorder radius="lg" p="lg" ta="center">
-              <Stack gap="md">
-                <Text size="2rem">🏢</Text>
-                <Title order={4}>Organizaciones</Title>
+              <Stack gap={4}>
+                <Text size="sm">Con Gen Live puedes:</Text>
                 <Text size="sm" c="dimmed">
-                  Crea y gestiona organizaciones con sus propias páginas y eventos
+                  • Crear organizaciones con su propia página. <br />
+                  • Configurar eventos en vivo y su estado. <br />
+                  • Compartir enlaces simples para tu audiencia.
                 </Text>
               </Stack>
-            </Card>
-            
-            <Card withBorder radius="lg" p="lg" ta="center">
-              <Stack gap="md">
-                <Text size="2rem">🎥</Text>
-                <Title order={4}>Eventos en vivo</Title>
-                <Text size="sm" c="dimmed">
-                  Transmite eventos en tiempo real y gestiona el estado de cada uno
-                </Text>
-              </Stack>
-            </Card>
-            
-            <Card withBorder radius="lg" p="lg" ta="center">
-              <Stack gap="md">
-                <Text size="2rem">📱</Text>
-                <Title order={4}>Responsive</Title>
-                <Text size="sm" c="dimmed">
-                  Acceso desde cualquier dispositivo con un diseño adaptativo
-                </Text>
-              </Stack>
-            </Card>
-          </Group>
-        </Stack>
+
+              <Group>
+                <Button
+                  component={Link}
+                  to="/admin-auth"
+                  size="md"
+                  variant="filled"
+                >
+                  👤 Soy administrador
+                </Button>
+              </Group>
+            </Stack>
+          </Card>
+        )}
       </Stack>
     </Container>
   );

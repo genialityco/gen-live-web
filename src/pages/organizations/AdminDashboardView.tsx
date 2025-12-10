@@ -211,17 +211,17 @@ export default function AdminDashboardView({ orgId, orgName }: AdminDashboardVie
                 variant="light"
                 fullWidth
               >
-                👥 Ver asistentes
+                👥 Base de registros
               </Button>
             </Grid.Col>
-            <Grid.Col span={{ base: 12, sm: 6, md: 3 }}>
+                        <Grid.Col span={{ base: 12, sm: 6, md: 3 }}>
               <Button 
                 component={Link}
-                to={`/org/${slug}`}
+                to={`/org/${slug}/admin/registration-form`}
                 variant="light"
                 fullWidth
               >
-                🌐 Landing pública
+                📋 Formulario de registro
               </Button>
             </Grid.Col>
             <Grid.Col span={{ base: 12, sm: 6, md: 3 }}>
@@ -230,7 +230,6 @@ export default function AdminDashboardView({ orgId, orgName }: AdminDashboardVie
                 to={`/org/${slug}/admin/settings`}
                 variant="light"
                 fullWidth
-                disabled
               >
                 ⚙️ Configuración
               </Button>

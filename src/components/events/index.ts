@@ -6,7 +6,7 @@ export { default as EventStreamForm } from './EventStreamForm';
 export { default as OrgEventsTable } from './OrgEventsTable';
 
 // Event Admin components
-export { default as EventAdminLayout } from './EventAdminLayout';
+export { default as EventAdminLayout } from '../common/EventAdminLayout';
 export { default as EventAdminOverview } from './EventAdminOverview';
 export { default as EventAdminControl } from './EventAdminControl';
 export { default as EventAdminAttendees } from './EventAdminAttendees';

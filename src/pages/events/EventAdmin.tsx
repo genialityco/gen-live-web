@@ -11,7 +11,7 @@ import {
 } from "@mantine/core";
 import { fetchOrgBySlugForAdmin, type Org } from "../../api/orgs";
 import { fetchEventsByOrgPrivate, type EventItem } from "../../api/events";
-import { 
+import {
   EventAdminLayout,
   EventAdminOverview,
   EventAdminControl,
@@ -40,25 +40,22 @@ export default function EventAdmin() {
     try {
       setLoading(true);
       setError(null);
-      
+
       // Cargar organización con permisos de admin
       const orgData = await fetchOrgBySlugForAdmin(slug);
       setOrg(orgData);
-      
-      // El backend ya verificó permisos en fetchOrgBySlugForAdmin
-      // No necesitamos verificar aquí
-      
+
       // Cargar eventos y encontrar el específico
       const eventsData = await fetchEventsByOrgPrivate(orgData._id);
-      const foundEvent = eventsData.find(e => e.slug === eventSlug || e._id === eventSlug);
-
-      console.log("Loaded events:", foundEvent);
+      const foundEvent = eventsData.find(
+        (e) => e.slug === eventSlug || e._id === eventSlug
+      );
 
       if (!foundEvent) {
         setError("Evento no encontrado");
         return;
       }
-      
+
       setEvent(foundEvent);
     } catch (err) {
       console.error("Error loading event data:", err);
@@ -72,26 +69,38 @@ export default function EventAdmin() {
     loadEventData();
   }, [slug, eventSlug]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Determinar qué vista mostrar basado en la ruta
+  // Determinar qué vista mostrar basado en la ruta (ordenado por flujo de uso)
   const getCurrentView = () => {
     if (!org || !event) return null;
-    
+
     const path = location.pathname;
-    if (path.endsWith('/control')) {
+
+    if (path.endsWith("/control")) {
       return <EventAdminControl event={event} onEventUpdate={setEvent} />;
-    } else if (path.endsWith('/attendees')) {
-      return <EventAdminAttendees org={org} event={event} />;
-    } else if (path.endsWith('/metrics')) {
-      return <EventAdminMetrics event={event} />;
-    } else if (path.endsWith('/settings')) {
-      return <EventAdminSettings event={event} />;
-    } else if( path.endsWith('/chat')) {
-      return <EventAdminChat event={event} />;
-    } else if (path.endsWith('/polls')) {
-      return <EventAdminPolls />;
-    } else {
-      return <EventAdminOverview org={org} event={event} />;
     }
+
+    if (path.endsWith("/metrics")) {
+      return <EventAdminMetrics event={event} />;
+    }
+
+    if (path.endsWith("/attendees")) {
+      return <EventAdminAttendees org={org} event={event} />;
+    }
+
+    if (path.endsWith("/polls")) {
+      return <EventAdminPolls />;
+    }
+
+    if (path.endsWith("/chat")) {
+      return <EventAdminChat event={event} />;
+    }
+
+    if (path.endsWith("/settings")) {
+      return <EventAdminSettings event={event} />;
+    }
+
+    // Ruta base: /org/:slug/event/:eventSlug/admin
+    return <EventAdminOverview org={org} event={event} />;
   };
 
   // Loading state
@@ -118,7 +127,11 @@ export default function EventAdmin() {
               <Button component={Link} to={`/org/${slug}/admin/events`}>
                 ← Eventos
               </Button>
-              <Button component={Link} to={`/org/${slug}/admin`} variant="light">
+              <Button
+                component={Link}
+                to={`/org/${slug}/admin`}
+                variant="light"
+              >
                 Panel admin
               </Button>
             </Group>
@@ -128,7 +141,7 @@ export default function EventAdmin() {
     );
   }
 
-  // Render con el nuevo EventAdminLayout
+  // Render con el EventAdminLayout
   return (
     <EventAdminLayout org={org} event={event}>
       {getCurrentView()}
