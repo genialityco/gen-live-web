@@ -17,8 +17,11 @@ import {
   Tooltip,
   Modal,
   Divider,
+  Pagination,
+  Select,
 } from "@mantine/core";
-import { IconEye } from "@tabler/icons-react";
+import { IconEye, IconFileSpreadsheet } from "@tabler/icons-react";
+import * as XLSX from "xlsx";
 import { type Org } from "../../api/orgs";
 import { type EventItem } from "../../api/events";
 import { api } from "../../core/api";
@@ -97,6 +100,11 @@ export default function EventAdminAttendees({
     total: number;
   } | null>(null);
 
+  // Paginación
+  const [registeredPage, setRegisteredPage] = useState(1);
+  const [livePage, setLivePage] = useState(1);
+  const [pageSize, setPageSize] = useState<number>(10);
+
   // Modal de visualización
   const [viewModalOpen, setViewModalOpen] = useState(false);
   const [selectedData, setSelectedData] = useState<any>(null);
@@ -138,6 +146,174 @@ export default function EventAdminAttendees({
     }
 
     return String(value);
+  };
+
+  // ============================
+  // EXPORTAR EXCEL (3 HOJAS)
+  // ============================
+  const handleExportExcel = () => {
+    try {
+      const allFields = registrationForm?.fields ?? [];
+
+      // ---------- 1) ORDENAMOS POR ÚLTIMO ACCESO ----------
+      const registeredForExport = [...eventUsers].sort((a, b) => {
+        const aTime = a.lastLoginAt ? new Date(a.lastLoginAt).getTime() : 0;
+        const bTime = b.lastLoginAt ? new Date(b.lastLoginAt).getTime() : 0;
+        return bTime - aTime; // descendente
+      });
+
+      // ---------- 2) DETERMINAR FIN DEL EN VIVO ----------
+      // Usamos el último lastHeartbeat de liveAttendees
+      const liveEndTimestamp = (() => {
+        const timestamps = liveAttendees
+          .map((la) => la.viewingStats?.lastHeartbeat)
+          .filter((ts): ts is string => Boolean(ts))
+          .map((ts) => new Date(ts).getTime())
+          .filter((ms) => !Number.isNaN(ms) && ms > 0);
+
+        if (timestamps.length === 0) return null;
+        return Math.max(...timestamps);
+      })();
+
+      // ---------- 3) CLASIFICAR: ASISTENTES / INSCRITOS / DIFERIDOS ----------
+      const asistentes: EventUser[] = [];
+      const inscritos: EventUser[] = [];
+      const diferidos: EventUser[] = [];
+
+      registeredForExport.forEach((eu) => {
+        const registeredMs = new Date(eu.registeredAt).getTime();
+        const isRegisteredMsValid = !Number.isNaN(registeredMs);
+
+        // Asistentes: status === "attended"
+        if (eu.status === "attended") {
+          asistentes.push(eu);
+          return;
+        }
+
+        // Si no tenemos liveEnd, todo lo NO attended va a "Inscritos"
+        if (!liveEndTimestamp || !isRegisteredMsValid) {
+          inscritos.push(eu);
+          return;
+        }
+
+        // Diferidos: registrados DESPUÉS de terminado el evento
+        if (registeredMs > liveEndTimestamp) {
+          diferidos.push(eu);
+        } else {
+          // Inscritos: registrados antes/durante el evento (y que no asistieron)
+          inscritos.push(eu);
+        }
+      });
+
+      // ---------- 4) HEADER COMÚN ----------
+      const commonHeader: (string | number)[] = [
+        "Tipo",
+        "Email",
+        ...allFields.map((f) => f.label),
+        "Estado",
+        "Registrado en",
+        "Último acceso",
+        "Check-in",
+        "Check-in en vivo",
+        "Firebase UID",
+      ];
+
+      // Helper para construir filas de EventUser
+      const buildRowsForEventUsers = (
+        users: EventUser[],
+        tipoLabel: string
+      ): (string | number)[][] => {
+        const rows: (string | number)[][] = [];
+
+        users.forEach((eu) => {
+          const attendee =
+            typeof eu.attendeeId === "object" && eu.attendeeId !== null
+              ? eu.attendeeId
+              : null;
+
+          const email = (attendee as any)?.email ?? "-";
+
+          const rowFields = allFields.map((field) =>
+            attendee
+              ? formatFieldValue(
+                  field.id,
+                  (attendee as any).registrationData?.[field.id]
+                )
+              : "-"
+          );
+
+          const statusLabel =
+            eu.status === "attended"
+              ? "Asistió en vivo"
+              : eu.status === "cancelled"
+              ? "Cancelado"
+              : "Registrado";
+
+          const registeredAtStr = eu.registeredAt
+            ? new Date(eu.registeredAt).toLocaleString("es-ES")
+            : "";
+
+          const lastLoginStr = eu.lastLoginAt
+            ? new Date(eu.lastLoginAt).toLocaleString("es-ES")
+            : "Nunca";
+
+          const checkedInLabel = eu.checkedIn ? "Sí" : "No";
+          const checkedInAtStr = eu.checkedInAt
+            ? new Date(eu.checkedInAt).toLocaleString("es-ES")
+            : "";
+
+          rows.push([
+            tipoLabel,
+            email,
+            ...rowFields,
+            statusLabel,
+            registeredAtStr,
+            lastLoginStr,
+            checkedInLabel,
+            checkedInAtStr,
+            eu.firebaseUID ?? "",
+          ]);
+        });
+
+        return rows;
+      };
+
+      // ---------- 5) ARMAR LAS 3 HOJAS ----------
+      const asistentesSheetData: (string | number)[][] = [
+        commonHeader,
+        ...buildRowsForEventUsers(asistentes, "Asistente"),
+      ];
+
+      const inscritosSheetData: (string | number)[][] = [
+        commonHeader,
+        ...buildRowsForEventUsers(inscritos, "Inscrito"),
+      ];
+
+      const diferidosSheetData: (string | number)[][] = [
+        commonHeader,
+        ...buildRowsForEventUsers(diferidos, "Diferido"),
+      ];
+
+      // ---------- 6) CREAR WORKBOOK Y GUARDAR ----------
+      const wb = XLSX.utils.book_new();
+
+      const wsAsistentes = XLSX.utils.aoa_to_sheet(asistentesSheetData);
+      XLSX.utils.book_append_sheet(wb, wsAsistentes, "Asistentes");
+
+      const wsInscritos = XLSX.utils.aoa_to_sheet(inscritosSheetData);
+      XLSX.utils.book_append_sheet(wb, wsInscritos, "Inscritos");
+
+      const wsDiferidos = XLSX.utils.aoa_to_sheet(diferidosSheetData);
+      XLSX.utils.book_append_sheet(wb, wsDiferidos, "Diferidos");
+
+      const safeTitle = event.title
+        ? event.title.replace(/[\\/:*?"<>|]/g, "_")
+        : "evento";
+
+      XLSX.writeFile(wb, `asistentes_${safeTitle}.xlsx`);
+    } catch (err) {
+      console.error("Error exporting to Excel:", err);
+    }
   };
 
   const loadData = useCallback(async () => {
@@ -234,6 +410,10 @@ export default function EventAdminAttendees({
       setLiveAttendeesStats({ total: validLiveAttendees.length });
 
       setRegistrationForm(formResponse.data);
+
+      // resetear página al recargar datos
+      setRegisteredPage(1);
+      setLivePage(1);
     } catch (err) {
       console.error("Error loading attendees:", err);
       setError("No se pudieron cargar los datos de asistentes");
@@ -267,14 +447,46 @@ export default function EventAdminAttendees({
     );
   }
 
+  // Datos paginados
+  const totalRegisteredPages = Math.max(
+    1,
+    Math.ceil(eventUsers.length / pageSize)
+  );
+  const totalLivePages = Math.max(
+    1,
+    Math.ceil(liveAttendees.length / pageSize)
+  );
+
+  const registeredStartIndex = (registeredPage - 1) * pageSize;
+  const liveStartIndex = (livePage - 1) * pageSize;
+
+  const registeredPaginated = eventUsers.slice(
+    registeredStartIndex,
+    registeredStartIndex + pageSize
+  );
+  const livePaginated = liveAttendees.slice(
+    liveStartIndex,
+    liveStartIndex + pageSize
+  );
+
   return (
     <Stack gap="xl">
-      <div>
-        <Title order={1}>Asistentes</Title>
-        <Text c="dimmed" size="lg">
-          Gestiona los participantes de {event.title}
-        </Text>
-      </div>
+      <Group justify="space-between" align="flex-start">
+        <div>
+          <Title order={1}>Asistentes</Title>
+          <Text c="dimmed" size="lg">
+            Gestiona los participantes de {event.title}
+          </Text>
+        </div>
+
+        <Button
+          variant="light"
+          leftSection={<IconFileSpreadsheet size={16} />}
+          onClick={handleExportExcel}
+        >
+          Exportar a Excel
+        </Button>
+      </Group>
 
       <Tabs defaultValue="registered">
         <Tabs.List>
@@ -313,7 +525,7 @@ export default function EventAdminAttendees({
                 </Table.Thead>
 
                 <Table.Tbody>
-                  {eventUsers.map((eventUser) => {
+                  {registeredPaginated.map((eventUser) => {
                     const attendee =
                       typeof eventUser.attendeeId === "object"
                         ? eventUser.attendeeId
@@ -339,7 +551,7 @@ export default function EventAdminAttendees({
                             <Text size="sm">
                               {attendee
                                 ? getFieldValue(
-                                    attendee.registrationData,
+                                    (attendee as any).registrationData,
                                     field.id
                                   )
                                 : "-"}
@@ -423,6 +635,43 @@ export default function EventAdminAttendees({
                   })}
                 </Table.Tbody>
               </Table>
+
+              <Group justify="space-between" p="md">
+                <Text size="xs" c="dimmed">
+                  Mostrando{" "}
+                  {eventUsers.length === 0 ? 0 : registeredStartIndex + 1} –{" "}
+                  {Math.min(registeredStartIndex + pageSize, eventUsers.length)}{" "}
+                  de {eventUsers.length}
+                </Text>
+
+                <Group gap="xs">
+                  <Select
+                    size="xs"
+                    w={140}
+                    data={[
+                      { value: "5", label: "5 por página" },
+                      { value: "10", label: "10 por página" },
+                      { value: "20", label: "20 por página" },
+                      { value: "50", label: "50 por página" },
+                    ]}
+                    value={String(pageSize)}
+                    onChange={(value) => {
+                      if (!value) return;
+                      const newSize = Number(value);
+                      setPageSize(newSize);
+                      setRegisteredPage(1);
+                      setLivePage(1);
+                    }}
+                  />
+
+                  <Pagination
+                    size="sm"
+                    value={registeredPage}
+                    onChange={setRegisteredPage}
+                    total={totalRegisteredPages}
+                  />
+                </Group>
+              </Group>
             </Card>
           )}
         </Tabs.Panel>
@@ -452,7 +701,7 @@ export default function EventAdminAttendees({
                   </Table.Tr>
                 </Table.Thead>
                 <Table.Tbody>
-                  {liveAttendees.map((eventUser) => {
+                  {livePaginated.map((eventUser) => {
                     const attendee =
                       typeof eventUser.attendeeId === "object"
                         ? eventUser.attendeeId
@@ -470,7 +719,7 @@ export default function EventAdminAttendees({
                             <Text size="sm">
                               {attendee
                                 ? getFieldValue(
-                                    attendee.registrationData,
+                                    (attendee as any).registrationData,
                                     field.id
                                   )
                                 : "-"}
@@ -524,6 +773,43 @@ export default function EventAdminAttendees({
                   })}
                 </Table.Tbody>
               </Table>
+
+              <Group justify="space-between" p="md">
+                <Text size="xs" c="dimmed">
+                  Mostrando{" "}
+                  {liveAttendees.length === 0 ? 0 : liveStartIndex + 1} –{" "}
+                  {Math.min(liveStartIndex + pageSize, liveAttendees.length)} de{" "}
+                  {liveAttendees.length}
+                </Text>
+
+                <Group gap="xs">
+                  <Select
+                    size="xs"
+                    w={140}
+                    data={[
+                      { value: "5", label: "5 por página" },
+                      { value: "10", label: "10 por página" },
+                      { value: "20", label: "20 por página" },
+                      { value: "50", label: "50 por página" },
+                    ]}
+                    value={String(pageSize)}
+                    onChange={(value) => {
+                      if (!value) return;
+                      const newSize = Number(value);
+                      setPageSize(newSize);
+                      setRegisteredPage(1);
+                      setLivePage(1);
+                    }}
+                  />
+
+                  <Pagination
+                    size="sm"
+                    value={livePage}
+                    onChange={setLivePage}
+                    total={totalLivePages}
+                  />
+                </Group>
+              </Group>
             </Card>
           )}
         </Tabs.Panel>
