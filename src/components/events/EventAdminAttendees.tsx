@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import {
   Stack,
   Title,
@@ -103,11 +103,63 @@ export default function EventAdminAttendees({
   // Paginación
   const [registeredPage, setRegisteredPage] = useState(1);
   const [livePage, setLivePage] = useState(1);
+  const [deferredPage, setDeferredPage] = useState(1);
   const [pageSize, setPageSize] = useState<number>(10);
 
   // Modal de visualización
   const [viewModalOpen, setViewModalOpen] = useState(false);
   const [selectedData, setSelectedData] = useState<any>(null);
+
+  // ========= Helpers =========
+  const getAttendeeObj = (attendeeId: any) =>
+    typeof attendeeId === "object" && attendeeId !== null ? attendeeId : null;
+
+  const getAttendeeKey = (attendee: any) => attendee?._id || attendee?.email;
+
+  // Fin del evento: endedAt (preferido) o schedule.endsAt
+  const eventEndMs = useMemo(() => {
+    const endedAtRaw = (event as any)?.endedAt;
+    const scheduleEndsAtRaw = (event as any)?.schedule?.endsAt;
+
+    const ended = endedAtRaw ? new Date(endedAtRaw).getTime() : NaN;
+    if (!Number.isNaN(ended) && ended > 0) return ended;
+
+    const schedEnd = scheduleEndsAtRaw
+      ? new Date(scheduleEndsAtRaw).getTime()
+      : NaN;
+    if (!Number.isNaN(schedEnd) && schedEnd > 0) return schedEnd;
+
+    return null;
+  }, [event]);
+
+  const eventEndLabel = useMemo(() => {
+    if (!eventEndMs) return "Sin fecha de finalización";
+    return new Date(eventEndMs).toLocaleString("es-ES");
+  }, [eventEndMs]);
+
+  // Set de asistentes (liveAttendees) para excluirlos de diferidos
+  const asistentesKeySet = useMemo(() => {
+    const keys = liveAttendees
+      .map((la) => getAttendeeKey(getAttendeeObj(la.attendeeId)))
+      .filter(Boolean) as string[];
+    return new Set(keys);
+  }, [liveAttendees]);
+
+  // Diferidos: eventUsers cuyo lastLoginAt > fin del evento
+  const deferredUsers = useMemo(() => {
+    if (!eventEndMs) return [];
+
+    return eventUsers.filter((eu) => {
+      const attendee = getAttendeeObj(eu.attendeeId);
+      const key = attendee ? getAttendeeKey(attendee) : null;
+
+      // si fue asistente en vivo, no lo contamos como diferido
+      if (key && asistentesKeySet.has(key)) return false;
+
+      const loginMs = eu.lastLoginAt ? new Date(eu.lastLoginAt).getTime() : NaN;
+      return !Number.isNaN(loginMs) && loginMs > eventEndMs;
+    });
+  }, [eventEndMs, eventUsers, asistentesKeySet]);
 
   // Obtener campos identificadores
   const getIdentifierFields = () => {
@@ -155,57 +207,10 @@ export default function EventAdminAttendees({
     try {
       const allFields = registrationForm?.fields ?? [];
 
-      // ---------- 1) ORDENAMOS POR ÚLTIMO ACCESO ----------
-      const registeredForExport = [...eventUsers].sort((a, b) => {
-        const aTime = a.lastLoginAt ? new Date(a.lastLoginAt).getTime() : 0;
-        const bTime = b.lastLoginAt ? new Date(b.lastLoginAt).getTime() : 0;
-        return bTime - aTime; // descendente
-      });
+      const inscritos = [...eventUsers];
+      const asistentes = [...liveAttendees];
+      const diferidos = [...deferredUsers];
 
-      // ---------- 2) DETERMINAR FIN DEL EN VIVO ----------
-      // Usamos el último lastHeartbeat de liveAttendees
-      const liveEndTimestamp = (() => {
-        const timestamps = liveAttendees
-          .map((la) => la.viewingStats?.lastHeartbeat)
-          .filter((ts): ts is string => Boolean(ts))
-          .map((ts) => new Date(ts).getTime())
-          .filter((ms) => !Number.isNaN(ms) && ms > 0);
-
-        if (timestamps.length === 0) return null;
-        return Math.max(...timestamps);
-      })();
-
-      // ---------- 3) CLASIFICAR: ASISTENTES / INSCRITOS / DIFERIDOS ----------
-      const asistentes: EventUser[] = [];
-      const inscritos: EventUser[] = [];
-      const diferidos: EventUser[] = [];
-
-      registeredForExport.forEach((eu) => {
-        const registeredMs = new Date(eu.registeredAt).getTime();
-        const isRegisteredMsValid = !Number.isNaN(registeredMs);
-
-        // Asistentes: status === "attended"
-        if (eu.status === "attended") {
-          asistentes.push(eu);
-          return;
-        }
-
-        // Si no tenemos liveEnd, todo lo NO attended va a "Inscritos"
-        if (!liveEndTimestamp || !isRegisteredMsValid) {
-          inscritos.push(eu);
-          return;
-        }
-
-        // Diferidos: registrados DESPUÉS de terminado el evento
-        if (registeredMs > liveEndTimestamp) {
-          diferidos.push(eu);
-        } else {
-          // Inscritos: registrados antes/durante el evento (y que no asistieron)
-          inscritos.push(eu);
-        }
-      });
-
-      // ---------- 4) HEADER COMÚN ----------
       const commonHeader: (string | number)[] = [
         "Tipo",
         "Email",
@@ -216,20 +221,16 @@ export default function EventAdminAttendees({
         "Check-in",
         "Check-in en vivo",
         "Firebase UID",
+        "Tiempo en vivo (min)",
+        "Última actividad (heartbeat)",
       ];
 
-      // Helper para construir filas de EventUser
       const buildRowsForEventUsers = (
         users: EventUser[],
         tipoLabel: string
       ): (string | number)[][] => {
-        const rows: (string | number)[][] = [];
-
-        users.forEach((eu) => {
-          const attendee =
-            typeof eu.attendeeId === "object" && eu.attendeeId !== null
-              ? eu.attendeeId
-              : null;
+        return users.map((eu) => {
+          const attendee = getAttendeeObj(eu.attendeeId);
 
           const email = (attendee as any)?.email ?? "-";
 
@@ -242,13 +243,6 @@ export default function EventAdminAttendees({
               : "-"
           );
 
-          const statusLabel =
-            eu.status === "attended"
-              ? "Asistió en vivo"
-              : eu.status === "cancelled"
-              ? "Cancelado"
-              : "Registrado";
-
           const registeredAtStr = eu.registeredAt
             ? new Date(eu.registeredAt).toLocaleString("es-ES")
             : "";
@@ -257,36 +251,72 @@ export default function EventAdminAttendees({
             ? new Date(eu.lastLoginAt).toLocaleString("es-ES")
             : "Nunca";
 
-          const checkedInLabel = eu.checkedIn ? "Sí" : "No";
-          const checkedInAtStr = eu.checkedInAt
-            ? new Date(eu.checkedInAt).toLocaleString("es-ES")
-            : "";
-
-          rows.push([
+          return [
             tipoLabel,
             email,
             ...rowFields,
-            statusLabel,
             registeredAtStr,
             lastLoginStr,
-            checkedInLabel,
-            checkedInAtStr,
+            eu.checkedIn ? "Sí" : "No",
             eu.firebaseUID ?? "",
-          ]);
+            "", // Tiempo en vivo (min)
+            "", // Última actividad (heartbeat)
+          ];
         });
-
-        return rows;
       };
 
-      // ---------- 5) ARMAR LAS 3 HOJAS ----------
-      const asistentesSheetData: (string | number)[][] = [
-        commonHeader,
-        ...buildRowsForEventUsers(asistentes, "Asistente"),
-      ];
+      const buildRowsForLiveAttendees = (
+        users: LiveAttendee[]
+      ): (string | number)[][] => {
+        return users.map((eu) => {
+          const attendee = getAttendeeObj(eu.attendeeId);
+
+          const email = (attendee as any)?.email ?? "-";
+
+          const rowFields = allFields.map((field) =>
+            attendee
+              ? formatFieldValue(
+                  field.id,
+                  (attendee as any).registrationData?.[field.id]
+                )
+              : "-"
+          );
+
+          const registeredAtStr = eu.registeredAt
+            ? new Date(eu.registeredAt).toLocaleString("es-ES")
+            : "";
+
+          const lastLoginStr = ""; // LiveAttendee no trae lastLoginAt
+          const liveMinutes = eu.viewingStats
+            ? Math.floor(eu.viewingStats.liveWatchTimeSeconds / 60)
+            : 0;
+
+          const lastHeartbeatStr = eu.viewingStats?.lastHeartbeat
+            ? new Date(eu.viewingStats.lastHeartbeat).toLocaleString("es-ES")
+            : "Nunca";
+
+          return [
+            "Asistente",
+            email,
+            ...rowFields,
+            registeredAtStr,
+            lastLoginStr,
+            eu.checkedIn ? "Sí" : "No",
+            "", // Firebase UID no viene aquí
+            liveMinutes,
+            lastHeartbeatStr,
+          ];
+        });
+      };
 
       const inscritosSheetData: (string | number)[][] = [
         commonHeader,
         ...buildRowsForEventUsers(inscritos, "Inscrito"),
+      ];
+
+      const asistentesSheetData: (string | number)[][] = [
+        commonHeader,
+        ...buildRowsForLiveAttendees(asistentes),
       ];
 
       const diferidosSheetData: (string | number)[][] = [
@@ -294,17 +324,23 @@ export default function EventAdminAttendees({
         ...buildRowsForEventUsers(diferidos, "Diferido"),
       ];
 
-      // ---------- 6) CREAR WORKBOOK Y GUARDAR ----------
       const wb = XLSX.utils.book_new();
 
-      const wsAsistentes = XLSX.utils.aoa_to_sheet(asistentesSheetData);
-      XLSX.utils.book_append_sheet(wb, wsAsistentes, "Asistentes");
-
-      const wsInscritos = XLSX.utils.aoa_to_sheet(inscritosSheetData);
-      XLSX.utils.book_append_sheet(wb, wsInscritos, "Inscritos");
-
-      const wsDiferidos = XLSX.utils.aoa_to_sheet(diferidosSheetData);
-      XLSX.utils.book_append_sheet(wb, wsDiferidos, "Diferidos");
+      XLSX.utils.book_append_sheet(
+        wb,
+        XLSX.utils.aoa_to_sheet(inscritosSheetData),
+        "Inscritos"
+      );
+      XLSX.utils.book_append_sheet(
+        wb,
+        XLSX.utils.aoa_to_sheet(asistentesSheetData),
+        "Asistentes"
+      );
+      XLSX.utils.book_append_sheet(
+        wb,
+        XLSX.utils.aoa_to_sheet(diferidosSheetData),
+        "Diferidos"
+      );
 
       const safeTitle = event.title
         ? event.title.replace(/[\\/:*?"<>|]/g, "_")
@@ -327,15 +363,12 @@ export default function EventAdminAttendees({
 
       const [eventUsersResponse, liveAttendeesResponse, formResponse] =
         await Promise.all([
-          // EventUsers (inscritos)
           api
             .get(`/event-users/event/${event._id}`)
             .catch(() => ({ data: [] })),
-          // Live attendees (asistieron en vivo basado en ViewingSession)
           api
             .get(`/event-users/event/${event._id}/live-attendees`)
             .catch(() => ({ data: [] })),
-          // Formulario de registro
           api
             .get(`/orgs/slug/${orgSlug}/registration-form`)
             .catch(() => ({ data: null })),
@@ -349,21 +382,13 @@ export default function EventAdminAttendees({
 
       const seenEventUsers = new Set<string>();
       const validEventUsers = validEventUsersRaw.filter((eu: EventUser) => {
-        const attendee =
-          typeof eu.attendeeId === "object" && eu.attendeeId !== null
-            ? eu.attendeeId
-            : null;
-
+        const attendee = getAttendeeObj(eu.attendeeId);
         if (!attendee) return false;
 
-        const attendeeObj = attendee as { _id?: string; email?: string };
+        const key = getAttendeeKey(attendee) || null;
+        if (!key) return true;
 
-        const key = attendeeObj._id || attendeeObj.email || null;
-        if (!key) return true; // si no hay nada con qué deduplicar, lo dejamos pasar
-
-        if (seenEventUsers.has(key)) {
-          return false;
-        }
+        if (seenEventUsers.has(key)) return false;
 
         seenEventUsers.add(key);
         return true;
@@ -378,25 +403,13 @@ export default function EventAdminAttendees({
       const seenLive = new Set<string>();
       const validLiveAttendees = validLiveAttendeesRaw.filter(
         (eu: LiveAttendee) => {
-          const attendee =
-            typeof eu.attendeeId === "object" && eu.attendeeId !== null
-              ? eu.attendeeId
-              : null;
-
+          const attendee = getAttendeeObj(eu.attendeeId);
           if (!attendee) return false;
 
-          const attendeeObj = attendee as { _id?: string; email?: string };
-
-          const key = attendeeObj._id || attendeeObj.email || null;
+          const key = getAttendeeKey(attendee) || null;
           if (!key) return true;
 
-          if (seenLive.has(key)) {
-            console.log("Duplicado detectado (liveAttendee)", {
-              duplicatedKey: key,
-              eventUser: eu,
-            });
-            return false;
-          }
+          if (seenLive.has(key)) return false;
 
           seenLive.add(key);
           return true;
@@ -411,9 +424,10 @@ export default function EventAdminAttendees({
 
       setRegistrationForm(formResponse.data);
 
-      // resetear página al recargar datos
+      // resetear páginas al recargar datos
       setRegisteredPage(1);
       setLivePage(1);
+      setDeferredPage(1);
     } catch (err) {
       console.error("Error loading attendees:", err);
       setError("No se pudieron cargar los datos de asistentes");
@@ -447,7 +461,7 @@ export default function EventAdminAttendees({
     );
   }
 
-  // Datos paginados
+  // ============ Paginación ============
   const totalRegisteredPages = Math.max(
     1,
     Math.ceil(eventUsers.length / pageSize)
@@ -456,17 +470,28 @@ export default function EventAdminAttendees({
     1,
     Math.ceil(liveAttendees.length / pageSize)
   );
+  const totalDeferredPages = Math.max(
+    1,
+    Math.ceil(deferredUsers.length / pageSize)
+  );
 
   const registeredStartIndex = (registeredPage - 1) * pageSize;
   const liveStartIndex = (livePage - 1) * pageSize;
+  const deferredStartIndex = (deferredPage - 1) * pageSize;
 
   const registeredPaginated = eventUsers.slice(
     registeredStartIndex,
     registeredStartIndex + pageSize
   );
+
   const livePaginated = liveAttendees.slice(
     liveStartIndex,
     liveStartIndex + pageSize
+  );
+
+  const deferredPaginated = deferredUsers.slice(
+    deferredStartIndex,
+    deferredStartIndex + pageSize
   );
 
   return (
@@ -476,6 +501,9 @@ export default function EventAdminAttendees({
           <Title order={1}>Asistentes</Title>
           <Text c="dimmed" size="lg">
             Gestiona los participantes de {event.title}
+          </Text>
+          <Text c="dimmed" size="sm" mt={4}>
+            Fin del evento (endedAt / schedule.endsAt): {eventEndLabel}
           </Text>
         </div>
 
@@ -494,11 +522,16 @@ export default function EventAdminAttendees({
             📝 Inscritos ({eventUsersStats?.total || 0})
           </Tabs.Tab>
           <Tabs.Tab value="live">
-            🎥 Asistieron en vivo ({liveAttendeesStats?.total || 0})
+            🎥 Asistentes ({liveAttendeesStats?.total || 0})
+          </Tabs.Tab>
+          <Tabs.Tab value="deferred">
+            📼 Diferidos ({deferredUsers.length})
           </Tabs.Tab>
         </Tabs.List>
 
+        {/* ========================= */}
         {/* Tab de inscritos */}
+        {/* ========================= */}
         <Tabs.Panel value="registered" pt="lg">
           {eventUsers.length === 0 ? (
             <Alert variant="light" color="blue">
@@ -526,10 +559,7 @@ export default function EventAdminAttendees({
 
                 <Table.Tbody>
                   {registeredPaginated.map((eventUser) => {
-                    const attendee =
-                      typeof eventUser.attendeeId === "object"
-                        ? eventUser.attendeeId
-                        : null;
+                    const attendee = getAttendeeObj(eventUser.attendeeId);
 
                     const lastLogin = eventUser.lastLoginAt
                       ? new Date(eventUser.lastLoginAt).toLocaleString(
@@ -661,6 +691,7 @@ export default function EventAdminAttendees({
                       setPageSize(newSize);
                       setRegisteredPage(1);
                       setLivePage(1);
+                      setDeferredPage(1);
                     }}
                   />
 
@@ -700,12 +731,11 @@ export default function EventAdminAttendees({
                     <Table.Th>Acciones</Table.Th>
                   </Table.Tr>
                 </Table.Thead>
+
                 <Table.Tbody>
                   {livePaginated.map((eventUser) => {
-                    const attendee =
-                      typeof eventUser.attendeeId === "object"
-                        ? eventUser.attendeeId
-                        : null;
+                    const attendee = getAttendeeObj(eventUser.attendeeId);
+
                     const liveMinutes = eventUser.viewingStats
                       ? Math.floor(
                           eventUser.viewingStats.liveWatchTimeSeconds / 60
@@ -728,7 +758,7 @@ export default function EventAdminAttendees({
                         ))}
 
                         <Table.Td>
-                          <Badge color="blue" variant="light" size="sm">
+                          <Badge variant="light" size="sm">
                             {liveMinutes} min
                           </Badge>
                         </Table.Td>
@@ -738,7 +768,7 @@ export default function EventAdminAttendees({
                             {eventUser.viewingStats?.lastHeartbeat
                               ? new Date(
                                   eventUser.viewingStats.lastHeartbeat
-                                ).toLocaleDateString("es-ES", {
+                                ).toLocaleString("es-ES", {
                                   month: "short",
                                   day: "numeric",
                                   hour: "2-digit",
@@ -799,6 +829,7 @@ export default function EventAdminAttendees({
                       setPageSize(newSize);
                       setRegisteredPage(1);
                       setLivePage(1);
+                      setDeferredPage(1);
                     }}
                   />
 
@@ -807,6 +838,146 @@ export default function EventAdminAttendees({
                     value={livePage}
                     onChange={setLivePage}
                     total={totalLivePages}
+                  />
+                </Group>
+              </Group>
+            </Card>
+          )}
+        </Tabs.Panel>
+
+        {/* ========================= */}
+        {/* Tab de diferidos */}
+        {/* ========================= */}
+        <Tabs.Panel value="deferred" pt="lg">
+          {deferredUsers.length === 0 ? (
+            <Alert variant="light" color="blue">
+              <Text>No hay diferidos detectados.</Text>
+              <Text size="sm" c="dimmed" mt="xs">
+                Se consideran diferidos quienes ingresaron después del fin del
+                evento (endedAt / schedule.endsAt), usando lastLoginAt.
+              </Text>
+            </Alert>
+          ) : (
+            <Card withBorder radius="lg" p={0}>
+              <Table striped highlightOnHover>
+                <Table.Thead>
+                  <Table.Tr>
+                    {getIdentifierFields().map((field) => (
+                      <Table.Th key={field.id}>{field.label}</Table.Th>
+                    ))}
+                    <Table.Th>Tipo</Table.Th>
+                    <Table.Th>Último acceso</Table.Th>
+                    <Table.Th>Acciones</Table.Th>
+                  </Table.Tr>
+                </Table.Thead>
+
+                <Table.Tbody>
+                  {deferredPaginated.map((eventUser) => {
+                    const attendee = getAttendeeObj(eventUser.attendeeId);
+
+                    const lastLogin = eventUser.lastLoginAt
+                      ? new Date(eventUser.lastLoginAt).toLocaleString(
+                          "es-ES",
+                          {
+                            day: "2-digit",
+                            month: "2-digit",
+                            year: "2-digit",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          }
+                        )
+                      : "Nunca";
+
+                    return (
+                      <Table.Tr key={eventUser._id}>
+                        {getIdentifierFields().map((field) => (
+                          <Table.Td key={field.id}>
+                            <Text size="sm">
+                              {attendee
+                                ? getFieldValue(
+                                    (attendee as any).registrationData,
+                                    field.id
+                                  )
+                                : "-"}
+                            </Text>
+                          </Table.Td>
+                        ))}
+
+                        <Table.Td>
+                          <Badge variant="light" size="sm">
+                            Diferido
+                          </Badge>
+                        </Table.Td>
+
+                        <Table.Td>
+                          <Text size="xs" c="dimmed">
+                            {lastLogin}
+                          </Text>
+                        </Table.Td>
+
+                        <Table.Td>
+                          {attendee ? (
+                            <Tooltip label="Ver datos completos">
+                              <ActionIcon
+                                variant="light"
+                                color="blue"
+                                onClick={() => {
+                                  setSelectedData(attendee);
+                                  setViewModalOpen(true);
+                                }}
+                              >
+                                <IconEye size={16} />
+                              </ActionIcon>
+                            </Tooltip>
+                          ) : (
+                            <Text size="xs" c="dimmed">
+                              Sin datos
+                            </Text>
+                          )}
+                        </Table.Td>
+                      </Table.Tr>
+                    );
+                  })}
+                </Table.Tbody>
+              </Table>
+
+              <Group justify="space-between" p="md">
+                <Text size="xs" c="dimmed">
+                  Mostrando{" "}
+                  {deferredUsers.length === 0 ? 0 : deferredStartIndex + 1} –{" "}
+                  {Math.min(
+                    deferredStartIndex + pageSize,
+                    deferredUsers.length
+                  )}{" "}
+                  de {deferredUsers.length}
+                </Text>
+
+                <Group gap="xs">
+                  <Select
+                    size="xs"
+                    w={140}
+                    data={[
+                      { value: "5", label: "5 por página" },
+                      { value: "10", label: "10 por página" },
+                      { value: "20", label: "20 por página" },
+                      { value: "50", label: "50 por página" },
+                    ]}
+                    value={String(pageSize)}
+                    onChange={(value) => {
+                      if (!value) return;
+                      const newSize = Number(value);
+                      setPageSize(newSize);
+                      setRegisteredPage(1);
+                      setLivePage(1);
+                      setDeferredPage(1);
+                    }}
+                  />
+
+                  <Pagination
+                    size="sm"
+                    value={deferredPage}
+                    onChange={setDeferredPage}
+                    total={totalDeferredPages}
                   />
                 </Group>
               </Group>
@@ -842,12 +1013,7 @@ export default function EventAdminAttendees({
                           const label = getFieldLabelById(fieldId);
                           const formattedValue = formatFieldValue(
                             fieldId,
-                            value as
-                              | string
-                              | number
-                              | boolean
-                              | null
-                              | undefined
+                            value as any
                           );
 
                           return (
