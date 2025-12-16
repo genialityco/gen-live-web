@@ -215,10 +215,8 @@ export default function EventAdminAttendees({
         "Tipo",
         "Email",
         ...allFields.map((f) => f.label),
-        "Estado",
         "Registrado en",
         "Último acceso",
-        "Check-in",
         "Check-in en vivo",
         "Firebase UID",
         "Tiempo en vivo (min)",
@@ -589,7 +587,6 @@ export default function EventAdminAttendees({
                           </Table.Td>
                         ))}
 
-                        {/* Estado general */}
                         <Table.Td>
                           <Badge
                             color={
@@ -610,7 +607,6 @@ export default function EventAdminAttendees({
                           </Badge>
                         </Table.Td>
 
-                        {/* Fecha de inscripción */}
                         <Table.Td>
                           <Text size="xs" c="dimmed">
                             {new Date(
@@ -619,14 +615,12 @@ export default function EventAdminAttendees({
                           </Text>
                         </Table.Td>
 
-                        {/* Último acceso (live o replay) */}
                         <Table.Td>
                           <Text size="xs" c="dimmed">
                             {lastLogin}
                           </Text>
                         </Table.Td>
 
-                        {/* Check-in en vivo */}
                         <Table.Td>
                           <Badge
                             color={eventUser.checkedIn ? "green" : "gray"}
@@ -639,7 +633,6 @@ export default function EventAdminAttendees({
                           </Badge>
                         </Table.Td>
 
-                        {/* Acciones */}
                         <Table.Td>
                           {attendee ? (
                             <Tooltip label="Ver datos completos">
@@ -707,7 +700,9 @@ export default function EventAdminAttendees({
           )}
         </Tabs.Panel>
 
-        {/* Tab de asistieron en vivo */}
+        {/* ========================= */}
+        {/* Tab de asistentes en vivo */}
+        {/* ========================= */}
         <Tabs.Panel value="live" pt="lg">
           {liveAttendees.length === 0 ? (
             <Alert variant="light" color="blue">
