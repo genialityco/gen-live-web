@@ -227,6 +227,7 @@ const FormFieldComponent = memo(
       size: "sm" as const,
       description: helpText,
       disabled: isFieldDisabled,
+      autoComplete: "new-password",
     };
 
     switch (field.type) {
