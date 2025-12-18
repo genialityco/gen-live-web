@@ -3,6 +3,9 @@ import AdminRoute from "../auth/guards/AdminRoute";
 import PublicAnonGate from "../auth/guards/PublicAnonGate";
 import Layout from "../components/common/Layout";
 import OrgAccess from "../pages/organizations/OrgAccess";
+import { StudioPage } from "../pages/studio/StudioPage";
+import { LiveViewerPage } from "../pages/viewer/LiveViewerPage";
+import EventAttendGcore from "../pages/events/EventAttendGcore";
 
 // Lazy imports
 const Home = lazy(() => import("../pages/home/Home"));
@@ -18,7 +21,7 @@ const OrganizationAdmin = lazy(
 );
 const EventAdmin = lazy(() => import("../pages/events/EventAdmin"));
 const EventLanding = lazy(() => import("../pages/events/EventLanding"));
-const EventAttend = lazy(() => import("../pages/events/EventAttend"));
+// const EventAttend = lazy(() => import("../pages/events/EventAttend"));
 
 export const routes = [
   {
@@ -45,9 +48,7 @@ export const routes = [
   },
   {
     path: "/org/:slug/access",
-    element: (
-        <OrgAccess />
-    ),
+    element: <OrgAccess />,
   },
   {
     path: "/org/:slug/event/:eventSlug",
@@ -55,7 +56,11 @@ export const routes = [
   },
   {
     path: "/org/:slug/event/:eventSlug/attend",
-    element: <EventAttend />,
+    element: <EventAttendGcore />,
+  },
+  {
+    path: "/org/:slug/event/:eventSlug/live",
+    element: <LiveViewerPage />,
   },
   {
     path: "/admin-auth",
@@ -171,7 +176,15 @@ export const routes = [
             <EventAdmin />
           </Layout>
         ),
-      }
+      },
+      {
+        path: "/org/:slug/event/:eventSlug/admin/studio",
+        element: (
+          <Layout>
+            <StudioPage />
+          </Layout>
+        ),
+      },
     ],
   },
 ];

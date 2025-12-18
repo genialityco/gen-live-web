@@ -122,6 +122,12 @@ export default function EventAdminLayout({
       href: `/org/${slug}/event/${eventSlug}/admin/settings`,
       description: "Editar detalles del evento",
     },
+    {
+      label: "Estudio de transmisión",
+      icon: "🎥",
+      href: `/org/${slug}/event/${eventSlug}/admin/studio`,
+      description: "Acceder al estudio de LiveKit",
+    }
   ];
 
   return (

@@ -12,6 +12,8 @@
   "dependencies": {
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.1",
+    "@livekit/components-react": "^2.9.17",
+    "@livekit/components-styles": "^1.2.0",
     "@mantine/core": "^8.3.5",
     "@mantine/dates": "^8.3.7",
     "@mantine/form": "^8.3.6",
@@ -24,6 +26,8 @@
     "country-state-city": "^3.2.1",
     "dayjs": "^1.11.19",
     "firebase": "^12.4.0",
+    "hls.js": "^1.6.15",
+    "livekit-client": "^2.16.1",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "react-router-dom": "^7.9.4",

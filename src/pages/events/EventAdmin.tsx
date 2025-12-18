@@ -21,6 +21,7 @@ import {
 } from "../../components/events";
 import { EventAdminChat } from "../../components/events/EventAdminChat";
 import EventAdminPolls from "../../components/events/EventAdminPolls";
+import { StudioPage } from "../studio/StudioPage";
 
 export default function EventAdmin() {
   const { slug, eventSlug } = useParams<{ slug: string; eventSlug: string }>();
@@ -97,6 +98,10 @@ export default function EventAdmin() {
 
     if (path.endsWith("/settings")) {
       return <EventAdminSettings event={event} />;
+    }
+
+    if (path.endsWith("/studio")) {
+      return (<StudioPage />);
     }
 
     // Ruta base: /org/:slug/event/:eventSlug/admin
