@@ -5,6 +5,7 @@ import Layout from "../components/common/Layout";
 import OrgAccess from "../pages/organizations/OrgAccess";
 import { StudioPage } from "../pages/studio/StudioPage";
 import { LiveViewerPage } from "../pages/viewer/LiveViewerPage";
+import EventAttendGcore from "../pages/events/EventAttendGcore";
 
 // Lazy imports
 const Home = lazy(() => import("../pages/home/Home"));
@@ -55,7 +56,7 @@ export const routes = [
   },
   {
     path: "/org/:slug/event/:eventSlug/attend",
-    element: <EventAttend />,
+    element: <EventAttendGcore />,
   },
   {
     path: "/org/:slug/event/:eventSlug/live",

@@ -1,5 +1,5 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 // src/StudioView.tsx
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { useEffect, useState } from "react";
 import {
   ensureRoom,
@@ -12,13 +12,8 @@ import {
   LiveKitRoom,
   ControlBar,
   RoomAudioRenderer,
-  FocusLayout,
-  ParticipantTile,
-  GridLayout,
-  useTracks,
 } from "@livekit/components-react";
 import "@livekit/components-styles";
-import { Track } from "livekit-client";
 import {
   Box,
   Text,
@@ -28,12 +23,22 @@ import {
   Paper,
   Stack,
   Grid,
-  SegmentedControl,
   Switch,
   Divider,
 } from "@mantine/core";
 import { LIVEKIT_WS_URL } from "../../core/livekitConfig";
 import { LiveConfigPanel } from "./LiveConfigPanel";
+import { JoinRequestsPanel } from "./JoinRequestsPanel";
+import { ParticipantsPanel } from "./ParticipantsPanel";
+
+import { LiveMonitor } from "./LiveMonitor"; // ajusta ruta
+import { useStage } from "../../hooks/useStage";
+import {
+  setOnStage,
+  setActiveUid,
+  setProgramMode,
+  type ProgramMode,
+} from "../../api/live-stage-service";
 
 type Role = "host" | "speaker";
 
@@ -45,82 +50,6 @@ interface StudioViewProps {
   showFrame?: boolean;
 }
 
-function LiveMonitor({
-  layoutMode,
-  showFrame,
-}: {
-  layoutMode: "speaker" | "grid";
-  showFrame: boolean;
-  eventSlug?: string;
-}) {
-  const tracks = useTracks(
-    [
-      { source: Track.Source.ScreenShare, withPlaceholder: false },
-      { source: Track.Source.Camera, withPlaceholder: true },
-    ],
-    { onlySubscribed: false }
-  );
-
-  // Elegimos el "focus" track:
-  // - Prioriza screenshare si existe
-  // - Si no, usa el primer track disponible
-  const focusTrack =
-    tracks.find((t) => t.source === Track.Source.ScreenShare) ??
-    tracks.find((t) => t.source === Track.Source.Camera) ??
-    tracks[0];
-
-  return (
-    <Box
-      style={{
-        position: "relative",
-        width: "100%",
-        aspectRatio: "16 / 9",
-        background: "#000",
-        overflow: "hidden",
-        borderRadius: 8,
-      }}
-    >
-      {/* MARCO */}
-      {showFrame && (
-        <Box
-          style={{
-            position: "absolute",
-            inset: 0,
-            zIndex: 20,
-            pointerEvents: "none",
-          }}
-        >
-          <img
-            src="/cortinilla-marco.png"
-            alt="Marco"
-            style={{ width: "100%", height: "100%", objectFit: "cover" }}
-          />
-          <Badge
-            color="red"
-            size="md"
-            style={{ position: "absolute", top: 16, left: 16 }}
-          >
-            EN VIVO
-          </Badge>
-        </Box>
-      )}
-
-      {/* VIDEO */}
-      <Box style={{ position: "absolute", inset: 0, zIndex: 1 }}>
-        {layoutMode === "grid" ? (
-          <GridLayout tracks={tracks}>
-            <ParticipantTile />
-          </GridLayout>
-        ) : focusTrack ? (
-          <FocusLayout trackRef={focusTrack}>
-            <ParticipantTile trackRef={focusTrack} />
-          </FocusLayout>
-        ) : null}
-      </Box>
-    </Box>
-  );
-}
-
 export const StudioView: React.FC<StudioViewProps> = ({
   eventSlug,
   role,
@@ -129,13 +58,17 @@ export const StudioView: React.FC<StudioViewProps> = ({
 }) => {
   const [token, setToken] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [layoutMode, setLayoutMode] = useState<"speaker" | "grid">("speaker");
+
   const [showFrame, setShowFrame] = useState(true);
+
   const [egressId, setEgressId] = useState<string | null>(null);
   const [isTransmitting, setIsTransmitting] = useState(false);
-
   const [egressStatus, setEgressStatus] = useState<string | null>(null);
 
+  // ✅ single source of truth
+  const stage = useStage(eventSlug);
+
+  // ----- egress status poll -----
   useEffect(() => {
     if (!egressId) {
       setEgressStatus(null);
@@ -163,7 +96,6 @@ export const StudioView: React.FC<StudioViewProps> = ({
     };
   }, [egressId]);
 
-  // Iniciar transmisión
   const handleStartTransmission = async () => {
     setError(null);
     setIsTransmitting(true);
@@ -181,7 +113,6 @@ export const StudioView: React.FC<StudioViewProps> = ({
     }
   };
 
-  // Detener transmisión
   const handleStopTransmission = async () => {
     if (!egressId) return;
     setError(null);
@@ -200,6 +131,7 @@ export const StudioView: React.FC<StudioViewProps> = ({
     }
   };
 
+  // ----- token -----
   useEffect(() => {
     const run = async () => {
       setError(null);
@@ -223,6 +155,38 @@ export const StudioView: React.FC<StudioViewProps> = ({
     void run();
   }, [eventSlug, role, displayName, identity]);
 
+  // ----- stage handlers (pro) -----
+  const handleToggleStage = async (uid: string, next: boolean) => {
+    await setOnStage(eventSlug, uid, next);
+
+    // UX: si lo subes y no hay pin, pínalo automáticamente en speaker mode
+    if (next && !stage.activeUid) {
+      await setActiveUid(eventSlug, uid);
+      await setProgramMode(eventSlug, "speaker");
+    }
+
+    // si lo bajas y estaba pineado, quita pin
+    if (!next && stage.activeUid === uid) {
+      await setActiveUid(eventSlug, "");
+    }
+  };
+
+  const handlePin = async (uid: string) => {
+    await setActiveUid(eventSlug, uid);
+    await setProgramMode(eventSlug, "speaker");
+    if (!stage.onStage[uid]) {
+      await setOnStage(eventSlug, uid, true);
+    }
+  };
+
+  const handleUnpin = async () => {
+    await setActiveUid(eventSlug, "");
+  };
+
+  const handleSetMode = async (m: ProgramMode) => {
+    await setProgramMode(eventSlug, m);
+  };
+
   if (error) return <Text c="red">{error}</Text>;
   if (!token)
     return (
@@ -233,94 +197,160 @@ export const StudioView: React.FC<StudioViewProps> = ({
 
   return (
     <LiveKitRoom token={token} serverUrl={LIVEKIT_WS_URL} connect video audio>
-      <Stack h="100%" gap="xs">
-        {/* Botón de transmisión */}
-        <Box mb="xs">
-          {egressId ? (
-            <>
-              <Badge color="green" mr="sm">
-                Transmisión activa
-              </Badge>
+      <Box
+        style={{
+          height: "100%",
+          display: "flex",
+          flexDirection: "column",
+          minHeight: 0,
+        }}
+      >
+        {/* HEADER */}
+        <Paper
+          p="sm"
+          radius={0}
+          style={{ borderBottom: "1px solid rgba(255,255,255,0.08)" }}
+        >
+          <Box style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            {egressId ? (
+              <>
+                <Badge color="green">Transmisión activa</Badge>
+                <button
+                  onClick={handleStopTransmission}
+                  disabled={isTransmitting}
+                >
+                  Detener transmisión
+                </button>
+              </>
+            ) : (
               <button
-                onClick={handleStopTransmission}
+                onClick={handleStartTransmission}
                 disabled={isTransmitting}
-                style={{ marginLeft: 8 }}
               >
-                Detener transmisión
+                Iniciar transmisión
               </button>
-            </>
-          ) : (
-            <button onClick={handleStartTransmission} disabled={isTransmitting}>
-              Iniciar transmisión
-            </button>
-          )}
-          {egressId && (
-            <Badge variant="light" ml="sm">
-              Estado: {egressStatus ?? "…"}
-            </Badge>
-          )}
-        </Box>
-        {/* ZONA CENTRAL */}
-        <Grid gutter="md" style={{ flex: 1 }}>
-          {/* MONITOR */}
-          <Grid.Col span={9}>
-            <LiveMonitor
-              layoutMode={layoutMode}
-              showFrame={showFrame}
-              eventSlug={eventSlug}
-            />
-          </Grid.Col>
+            )}
 
-          {/* PANEL DERECHO */}
-          <Grid.Col span={3}>
-            <Stack gap="md" h="100%">
-              <LiveConfigPanel
-                eventSlug={eventSlug}
-                disabled={!!egressId || isTransmitting}
-              />
-              <Paper p="sm" radius="md" bg="dark.7" h="100%">
-                <Stack gap="sm">
-                  <Text fw={500}>Producción</Text>
+            {egressId && (
+              <Badge variant="light" ml="sm">
+                Estado: {egressStatus ?? "…"}
+              </Badge>
+            )}
 
-                  <SegmentedControl
-                    fullWidth
-                    value={layoutMode}
-                    onChange={(v) => setLayoutMode(v as any)}
-                    data={[
-                      { label: "Speaker", value: "speaker" },
-                      { label: "Mosaico", value: "grid" },
-                    ]}
+            <Box style={{ marginLeft: "auto" }} />
+          </Box>
+        </Paper>
+
+        {/* BODY */}
+        <Box style={{ flex: 1, minHeight: 0, padding: 12 }}>
+          <Grid gutter="md" style={{ height: "100%", margin: 0 }}>
+            {/* IZQUIERDA */}
+            <Grid.Col span={9} style={{ height: "100%", minHeight: 0 }}>
+              <Box
+                style={{
+                  height: "100%",
+                  minHeight: 0,
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 12,
+                }}
+              >
+                {/* Monitor grande (PROGRAMA: solo onStage) */}
+                <Box style={{ flex: 1, minHeight: 360 }}>
+                  <LiveMonitor showFrame={showFrame} stage={stage} />
+                </Box>
+
+                {/* Dock participantes */}
+                <Paper
+                  radius="md"
+                  p="sm"
+                  bg="dark.7"
+                  style={{
+                    height: 240,
+                    overflow: "auto",
+                  }}
+                >
+                  <ParticipantsPanel
+                    eventSlug={eventSlug}
+                    stage={stage}
+                    onToggleStage={handleToggleStage}
+                    onPin={handlePin}
+                    onUnpin={handleUnpin}
+                    onSetMode={handleSetMode}
                   />
+                </Paper>
+              </Box>
+            </Grid.Col>
 
-                  <Switch
-                    checked={showFrame}
-                    onChange={(e) => setShowFrame(e.currentTarget.checked)}
-                    label="Marco activo"
-                  />
+            {/* DERECHA */}
+            <Grid.Col span={3} style={{ height: "100%", minHeight: 0 }}>
+              <Box
+                style={{
+                  height: "100%",
+                  minHeight: 0,
+                  position: "sticky",
+                  top: 12,
+                }}
+              >
+                <Stack
+                  gap="md"
+                  style={{
+                    height: "100%",
+                    minHeight: 0,
+                    overflow: "hidden",
+                  }}
+                >
+                  <Box style={{ flex: 1, minHeight: 0, overflow: "auto" }}>
+                    <Stack gap="md">
+                      <LiveConfigPanel
+                        eventSlug={eventSlug}
+                        disabled={!!egressId || isTransmitting}
+                      />
 
-                  <Divider />
+                      <JoinRequestsPanel eventSlug={eventSlug} />
 
-                  <Text size="sm" c="dimmed">
-                    Próximo:
-                  </Text>
-                  <Text size="xs">• Requests</Text>
-                  <Text size="xs">• Chat</Text>
-                  <Text size="xs">• Escenas</Text>
+                      <Paper p="sm" radius="md" bg="dark.7">
+                        <Stack gap="sm">
+                          <Text fw={500}>Producción</Text>
+
+                          <Switch
+                            checked={showFrame}
+                            onChange={(e) =>
+                              setShowFrame(e.currentTarget.checked)
+                            }
+                            label="Marco activo"
+                          />
+
+                          <Divider />
+
+                          <Text size="xs" c="dimmed">
+                            Tip pro: el monitor muestra SOLO los que están “En
+                            escena”. Los demás están en “Backstage”.
+                          </Text>
+                        </Stack>
+                      </Paper>
+                    </Stack>
+                  </Box>
                 </Stack>
-              </Paper>
-            </Stack>
-          </Grid.Col>
-        </Grid>
+              </Box>
+            </Grid.Col>
+          </Grid>
+        </Box>
 
-        {/* CONTROLES */}
-        <Paper p="sm" bg="dark.8">
+        {/* FOOTER */}
+        <Paper
+          p="sm"
+          radius={0}
+          bg="dark.8"
+          style={{ borderTop: "1px solid rgba(255,255,255,0.08)" }}
+        >
           <Center>
             <ControlBar variation="minimal" />
           </Center>
         </Paper>
 
         <RoomAudioRenderer />
-      </Stack>
+      </Box>
     </LiveKitRoom>
   );
 };
