@@ -21,7 +21,7 @@ const OrganizationAdmin = lazy(
 );
 const EventAdmin = lazy(() => import("../pages/events/EventAdmin"));
 const EventLanding = lazy(() => import("../pages/events/EventLanding"));
-const EventAttend = lazy(() => import("../pages/events/EventAttend"));
+// const EventAttend = lazy(() => import("../pages/events/EventAttend"));
 
 export const routes = [
   {
