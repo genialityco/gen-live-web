@@ -1,14 +1,7 @@
 // src/ParticipantsPanel.tsx
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useParticipants } from "@livekit/components-react";
-import {
-  Stack,
-  Text,
-  Button,
-  Group,
-  Badge,
-  SegmentedControl,
-} from "@mantine/core";
+import { Stack, Text, Button, Group, Badge } from "@mantine/core";
 import { useMemo, useState } from "react";
 import { auth } from "../../core/firebase";
 import { kickSpeaker } from "../../api/live-join-service";
@@ -31,7 +24,6 @@ export function ParticipantsPanel({
   onToggleStage,
   onPin,
   onUnpin,
-  onSetMode,
 }: Props) {
   const participants = useParticipants();
   const [kicking, setKicking] = useState<string | null>(null);
@@ -73,16 +65,6 @@ export function ParticipantsPanel({
     <Stack gap="xs">
       <Group justify="space-between" align="center">
         <Text fw={600}>Participantes ({participants.length})</Text>
-
-        <SegmentedControl
-          size="xs"
-          value={stage.programMode}
-          onChange={(v) => onSetMode(v as ProgramMode)}
-          data={[
-            { label: "Speaker", value: "speaker" },
-            { label: "Grid", value: "grid" },
-          ]}
-        />
       </Group>
 
       {stage.activeUid ? (
