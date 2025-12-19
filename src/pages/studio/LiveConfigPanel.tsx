@@ -6,7 +6,6 @@ import {
   Group,
   Loader,
   Paper,
-  SegmentedControl,
   Stack,
   Text,
   TextInput,
@@ -39,7 +38,6 @@ export const LiveConfigPanel: React.FC<Props> = ({ eventSlug, disabled }) => {
       rtmpStreamKey: "",
       srtIngestUrl: "",
       playbackHlsUrl: "",
-      layout: "grid" as "grid" | "speaker",
       maxParticipants: 20,
     },
     validate: {
@@ -72,7 +70,6 @@ export const LiveConfigPanel: React.FC<Props> = ({ eventSlug, disabled }) => {
           rtmpStreamKey: cfg.rtmpStreamKey ?? "",
           srtIngestUrl: cfg.srtIngestUrl ?? "",
           playbackHlsUrl: cfg.playbackHlsUrl ?? "",
-          layout: (cfg.layout as any) ?? "grid",
           maxParticipants: cfg.maxParticipants ?? 20,
         });
       } catch (e: any) {
@@ -155,17 +152,6 @@ export const LiveConfigPanel: React.FC<Props> = ({ eventSlug, disabled }) => {
           <Badge variant="light">eventSlug: {eventSlug}</Badge>
         </Group>
 
-        <SegmentedControl
-          fullWidth
-          disabled={disabled}
-          value={form.values.ingestProtocol}
-          onChange={(v) => form.setFieldValue("ingestProtocol", v as any)}
-          data={[
-            { label: "RTMP", value: "rtmp" },
-            { label: "SRT", value: "srt" },
-          ]}
-        />
-
         {ingestProtocol === "rtmp" ? (
           <>
             <TextInput
@@ -205,15 +191,6 @@ export const LiveConfigPanel: React.FC<Props> = ({ eventSlug, disabled }) => {
         />
 
         <Group grow>
-          <SegmentedControl
-            disabled={disabled}
-            value={form.values.layout}
-            onChange={(v) => form.setFieldValue("layout", v as any)}
-            data={[
-              { label: "Grid", value: "grid" },
-              { label: "Speaker", value: "speaker" },
-            ]}
-          />
           <NumberInput
             disabled={disabled}
             label="Max participantes"

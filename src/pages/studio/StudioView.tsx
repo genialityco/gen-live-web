@@ -17,7 +17,6 @@ import "@livekit/components-styles";
 import {
   Box,
   Text,
-  Badge,
   Center,
   Loader,
   Paper,
@@ -39,6 +38,7 @@ import {
   setProgramMode,
   type ProgramMode,
 } from "../../api/live-stage-service";
+import { StudioToolbar } from "./StudioToolbar";
 
 type Role = "host" | "speaker";
 
@@ -212,33 +212,20 @@ export const StudioView: React.FC<StudioViewProps> = ({
           style={{ borderBottom: "1px solid rgba(255,255,255,0.08)" }}
         >
           <Box style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            {egressId ? (
-              <>
-                <Badge color="green">Transmisión activa</Badge>
-                <button
-                  onClick={handleStopTransmission}
-                  disabled={isTransmitting}
-                >
-                  Detener transmisión
-                </button>
-              </>
-            ) : (
-              <button
-                onClick={handleStartTransmission}
-                disabled={isTransmitting}
-              >
-                Iniciar transmisión
-              </button>
-            )}
-
-            {egressId && (
-              <Badge variant="light" ml="sm">
-                Estado: {egressStatus ?? "…"}
-              </Badge>
-            )}
 
             <Box style={{ marginLeft: "auto" }} />
           </Box>
+          <StudioToolbar
+            egressId={egressId}
+            isBusy={isTransmitting}
+            egressStatus={egressStatus}
+            stage={stage}
+            showFrame={showFrame}
+            onToggleFrame={setShowFrame}
+            onStart={handleStartTransmission}
+            onStop={handleStopTransmission}
+            onMode={handleSetMode}
+          />
         </Paper>
 
         {/* BODY */}

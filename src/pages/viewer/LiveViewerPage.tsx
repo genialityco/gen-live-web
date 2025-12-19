@@ -159,7 +159,12 @@ export const LiveViewerPage: React.FC = () => {
 
         <Paper p="sm" radius="lg" withBorder>
           {mode === "hls" ? (
-            <ViewerHlsPlayer src={playbackUrl} />
+            <ViewerHlsPlayer
+              src={playbackUrl}
+              targetLatencySec={3}
+              maxBehindSec={6}
+              showGoLiveButton
+            />
           ) : (
             <LiveKitRoom
               token={speakerToken!}
