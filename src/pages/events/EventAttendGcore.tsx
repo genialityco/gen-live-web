@@ -55,9 +55,7 @@ import { Track } from "livekit-client";
 
 function SpeakerPreview() {
   const tracks = useTracks(
-    [
-      { source: Track.Source.Camera, withPlaceholder: true },
-    ],
+    [{ source: Track.Source.Camera, withPlaceholder: true }],
     { onlySubscribed: false }
   );
 
@@ -594,6 +592,7 @@ const handleJoinRequest = async () => {
     (user?.email ? user.email.split("@")[0] : null) ||
     "Usuario";
 
+  const scale = 0.8;
   return (
     <MantineProvider theme={theme} withCssVariables>
       <Box style={cssVars(brand)} bg="var(--bg-color)" c="var(--text-color)">
@@ -949,7 +948,11 @@ const handleJoinRequest = async () => {
                                   height="100%"
                                   style={{
                                     border: "none",
-                                    borderRadius: "12px",
+                                    borderRadius: 12,
+                                    width: `${100 / scale}%`,
+                                    height: `${100 / scale}%`,
+                                    transform: `scale(${scale})`,
+                                    transformOrigin: "0 0",
                                   }}
                                   title="Chat en directo"
                                   sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
@@ -983,7 +986,11 @@ const handleJoinRequest = async () => {
                                   height="100%"
                                   style={{
                                     border: "none",
-                                    borderRadius: "12px",
+                                    borderRadius: 12,
+                                    width: `${100 / scale}%`,
+                                    height: `${100 / scale}%`,
+                                    transform: `scale(${scale})`,
+                                    transformOrigin: "0 0",
                                   }}
                                   title="Preguntas"
                                   sandbox="allow-scripts allow-same-origin allow-forms allow-popups"

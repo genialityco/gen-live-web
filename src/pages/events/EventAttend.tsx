@@ -256,6 +256,7 @@ export default function EventAttend() {
   // Branding: aunque org sea null, usamos defaults
   const brand = resolveBrandingColors(org);
   const theme = useMemo(() => makeTheme(brand), [brand]);
+  const scale = 0.8;
 
   // 1) Cargar datos de organización y evento
   useEffect(() => {
@@ -789,7 +790,11 @@ export default function EventAttend() {
                                   height="100%"
                                   style={{
                                     border: "none",
-                                    borderRadius: "12px",
+                                    borderRadius: 12,
+                                    width: `${100 / scale}%`,
+                                    height: `${100 / scale}%`,
+                                    transform: `scale(${scale})`,
+                                    transformOrigin: "0 0",
                                   }}
                                   title="Chat en directo"
                                   sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
@@ -823,7 +828,11 @@ export default function EventAttend() {
                                   height="100%"
                                   style={{
                                     border: "none",
-                                    borderRadius: "12px",
+                                    borderRadius: 12,
+                                    width: `${100 / scale}%`,
+                                    height: `${100 / scale}%`,
+                                    transform: `scale(${scale})`,
+                                    transformOrigin: "0 0",
                                   }}
                                   title="Preguntas"
                                   sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
