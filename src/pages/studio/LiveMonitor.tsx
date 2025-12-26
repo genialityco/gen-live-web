@@ -12,10 +12,11 @@ import type { StageState } from "../../hooks/useStage";
 
 type Props = {
   showFrame: boolean;
+  frameUrl: string;
   stage: StageState;
 };
 
-export function LiveMonitor({ showFrame, stage }: Props) {
+export function LiveMonitor({ showFrame, frameUrl, stage }: Props) {
   const tracks = useTracks(
     [
       { source: Track.Source.ScreenShare, withPlaceholder: false },
@@ -72,7 +73,7 @@ export function LiveMonitor({ showFrame, stage }: Props) {
       }}
     >
       {/* MARCO */}
-      {showFrame && (
+      {showFrame && frameUrl && (
         <Box
           style={{
             position: "absolute",
@@ -82,7 +83,7 @@ export function LiveMonitor({ showFrame, stage }: Props) {
           }}
         >
           <img
-            src="/cortinilla-marco.png"
+            src={frameUrl}
             alt="Marco"
             style={{ width: "100%", height: "100%", objectFit: "cover" }}
           />

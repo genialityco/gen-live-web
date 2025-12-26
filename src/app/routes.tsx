@@ -6,6 +6,7 @@ import OrgAccess from "../pages/organizations/OrgAccess";
 import { StudioPage } from "../pages/studio/StudioPage";
 import { LiveViewerPage } from "../pages/viewer/LiveViewerPage";
 import EventAttendGcore from "../pages/events/EventAttendGcore";
+import LkEgressProgram from "../pages/studio/LkEgressProgram";
 
 // Lazy imports
 const Home = lazy(() => import("../pages/home/Home"));
@@ -34,6 +35,10 @@ export const routes = [
       </Layout>
     ),
   },
+{
+  path: "/lk-egress",
+  element: <LkEgressProgram />,
+},
   {
     path: "/organizations",
     element: (

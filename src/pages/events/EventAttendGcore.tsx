@@ -34,7 +34,7 @@ import UserSession from "../../components/auth/UserSession";
 import { useMediaQuery } from "@mantine/hooks";
 import { markEventUserAsAttended } from "../../api/event-users";
 import LivePollViewer from "../../components/events/LivePollViewer";
-import { ensureRoom, getPlayback } from "../../api/livekit-service";
+import { ensureRoom, getPlayback, getLiveConfig } from "../../api/livekit-service";
 import {
   requestToJoin,
   subscribeJoinDecision,
@@ -300,6 +300,9 @@ export default function EventAttendGcore() {
 
   const [mode, setMode] = useState<"hls" | "studio">("hls");
   const [speakerToken, setSpeakerToken] = useState<string | null>(null);
+
+  const [showFrame, setShowFrame] = useState(false);
+  const [frameUrl, setFrameUrl] = useState("");
 
   // 1) Cargar datos de organización y evento
   useEffect(() => {
@@ -581,6 +584,36 @@ const handleJoinRequest = async () => {
   }
 };
 
+  // Poll frame config every 2s
+  useEffect(() => {
+    if (!eventSlugToUse) return;
+
+    let alive = true;
+
+    const pollConfig = async () => {
+      try {
+        const cfg = await getLiveConfig(eventSlugToUse);
+        if (!alive) return;
+        console.log("🖼️ Frame config:", {
+          showFrame: cfg.showFrame,
+          frameUrl: cfg.frameUrl,
+        });
+        setShowFrame(!!cfg.showFrame);
+        setFrameUrl(cfg.frameUrl || "");
+      } catch (err) {
+        console.error("❌ Error polling frame config:", err);
+      }
+    };
+
+    void pollConfig();
+    const interval = setInterval(() => void pollConfig(), 2000);
+
+    return () => {
+      alive = false;
+      clearInterval(interval);
+    };
+  }, [eventSlugToUse]);
+
 
   // ----------------------------------------------------------
   // Render con MantineProvider + branding
@@ -774,7 +807,41 @@ const handleJoinRequest = async () => {
                               </Stack>
                             </LiveKitRoom>
                           ) : playbackUrl ? (
-                            <ViewerHlsPlayer src={playbackUrl} />
+                            <>
+                              <ViewerHlsPlayer src={playbackUrl} />
+                              {/* Frame overlay */}
+                              {/* {showFrame && frameUrl && (
+                                <Box
+                                  style={{
+                                    position: "absolute",
+                                    inset: 0,
+                                    zIndex: 10,
+                                    pointerEvents: "none",
+                                  }}
+                                >
+                                  <img
+                                    src={frameUrl}
+                                    alt="Marco"
+                                    crossOrigin="anonymous"
+                                    onLoad={() =>
+                                      console.log("✅ Frame loaded:", frameUrl)
+                                    }
+                                    onError={(e) =>
+                                      console.error(
+                                        "❌ Frame failed to load:",
+                                        frameUrl,
+                                        e
+                                      )
+                                    }
+                                    style={{
+                                      width: "100%",
+                                      height: "100%",
+                                      objectFit: "cover",
+                                    }}
+                                  />
+                                </Box>
+                              )} */}
+                            </>
                           ) : (
                             <Center h="100%">
                               <Stack align="center" gap="xs">

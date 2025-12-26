@@ -1,5 +1,5 @@
-// src/StudioView.tsx
 /* eslint-disable @typescript-eslint/no-explicit-any */
+// src/StudioView.tsx
 import React, { useEffect, useState } from "react";
 import {
   ensureRoom,
@@ -7,6 +7,7 @@ import {
   startLiveRtmp,
   stopLive,
   getEgressStatus,
+  getLiveConfig,
 } from "../../api/livekit-service";
 import {
   LiveKitRoom,
@@ -22,15 +23,15 @@ import {
   Paper,
   Stack,
   Grid,
-  Switch,
   Divider,
 } from "@mantine/core";
 import { LIVEKIT_WS_URL } from "../../core/livekitConfig";
 import { LiveConfigPanel } from "./LiveConfigPanel";
 import { JoinRequestsPanel } from "./JoinRequestsPanel";
 import { ParticipantsPanel } from "./ParticipantsPanel";
+import { FrameControls } from "../../components/FrameControls";
 
-import { LiveMonitor } from "./LiveMonitor"; // ajusta ruta
+import { LiveMonitor } from "./LiveMonitor";
 import { useStage } from "../../hooks/useStage";
 import {
   setOnStage,
@@ -47,7 +48,18 @@ interface StudioViewProps {
   role: Role;
   displayName?: string;
   identity?: string;
-  showFrame?: boolean;
+}
+
+function normalizeStatus(s: any): string {
+  if (!s) return "";
+  if (typeof s === "string") return s.toLowerCase();
+  if (typeof s === "number") return String(s);
+  return String(s).toLowerCase();
+}
+
+function isTerminalEgressStatus(status: string) {
+  // ajusta si tu API devuelve otros strings
+  return ["complete", "completed", "ended", "failed", "aborted", "stopped"].includes(status);
 }
 
 export const StudioView: React.FC<StudioViewProps> = ({
@@ -59,16 +71,18 @@ export const StudioView: React.FC<StudioViewProps> = ({
   const [token, setToken] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const [showFrame, setShowFrame] = useState(true);
+  const [showFrame, setShowFrame] = useState(false);
+  const [frameUrl, setFrameUrl] = useState("");
 
   const [egressId, setEgressId] = useState<string | null>(null);
-  const [isTransmitting, setIsTransmitting] = useState(false);
+  const [startingEgress, setStartingEgress] = useState(false);
+  const [stoppingEgress, setStoppingEgress] = useState(false);
   const [egressStatus, setEgressStatus] = useState<string | null>(null);
 
   // ✅ single source of truth
   const stage = useStage(eventSlug);
 
-  // ----- egress status poll -----
+  // ----- egress status poll (adaptativo) -----
   useEffect(() => {
     if (!egressId) {
       setEgressStatus(null);
@@ -76,29 +90,46 @@ export const StudioView: React.FC<StudioViewProps> = ({
     }
 
     let alive = true;
+    let timer: number | null = null;
+
     const tick = async () => {
       try {
         const s = await getEgressStatus(egressId);
         if (!alive) return;
-        setEgressStatus(String(s.status ?? ""));
-        if (s.error) setError(s.error);
+
+        const st = normalizeStatus(s.status);
+        setEgressStatus(st || "");
+
+        if (s.error) setError(String(s.error));
+
+        // terminal => stop polling
+        if (st && isTerminalEgressStatus(st)) {
+          if (timer) window.clearTimeout(timer);
+          timer = null;
+          return;
+        }
+
+        const delay =
+          st === "starting" || st === "pending" ? 1000 : 3500;
+
+        timer = window.setTimeout(() => void tick(), delay);
       } catch {
-        // no bloquees UI si status falla
+        if (!alive) return;
+        timer = window.setTimeout(() => void tick(), 3500);
       }
     };
 
     void tick();
-    const id = window.setInterval(() => void tick(), 2500);
 
     return () => {
       alive = false;
-      window.clearInterval(id);
+      if (timer) window.clearTimeout(timer);
     };
   }, [egressId]);
 
   const handleStartTransmission = async () => {
     setError(null);
-    setIsTransmitting(true);
+    setStartingEgress(true);
     try {
       const data = await startLiveRtmp(eventSlug);
       setEgressId(data.egressId);
@@ -109,17 +140,18 @@ export const StudioView: React.FC<StudioViewProps> = ({
           "Error iniciando transmisión"
       );
     } finally {
-      setIsTransmitting(false);
+      setStartingEgress(false);
     }
   };
 
   const handleStopTransmission = async () => {
     if (!egressId) return;
     setError(null);
-    setIsTransmitting(true);
+    setStoppingEgress(true);
     try {
       await stopLive(egressId);
       setEgressId(null);
+      setEgressStatus(null);
     } catch (err: any) {
       setError(
         err?.response?.data?.message ||
@@ -127,7 +159,7 @@ export const StudioView: React.FC<StudioViewProps> = ({
           "Error deteniendo transmisión"
       );
     } finally {
-      setIsTransmitting(false);
+      setStoppingEgress(false);
     }
   };
 
@@ -187,6 +219,22 @@ export const StudioView: React.FC<StudioViewProps> = ({
     await setProgramMode(eventSlug, m);
   };
 
+  const fetchConfig = async () => {
+    try {
+      const cfg = await getLiveConfig(eventSlug);
+      setShowFrame(!!cfg.showFrame);
+      setFrameUrl(cfg.frameUrl || "");
+    } catch (err) {
+      console.error("Error fetching config:", err);
+    }
+  };
+
+  // fetch initial config
+  useEffect(() => {
+    void fetchConfig();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [eventSlug]);
+
   if (error) return <Text c="red">{error}</Text>;
   if (!token)
     return (
@@ -194,6 +242,8 @@ export const StudioView: React.FC<StudioViewProps> = ({
         <Loader color="blue" />
       </Center>
     );
+
+  const isBusy = startingEgress || stoppingEgress;
 
   return (
     <LiveKitRoom token={token} serverUrl={LIVEKIT_WS_URL} connect video audio>
@@ -211,13 +261,9 @@ export const StudioView: React.FC<StudioViewProps> = ({
           radius={0}
           style={{ borderBottom: "1px solid rgba(255,255,255,0.08)" }}
         >
-          <Box style={{ display: "flex", alignItems: "center", gap: 12 }}>
-
-            <Box style={{ marginLeft: "auto" }} />
-          </Box>
           <StudioToolbar
             egressId={egressId}
-            isBusy={isTransmitting}
+            isBusy={isBusy}
             egressStatus={egressStatus}
             stage={stage}
             showFrame={showFrame}
@@ -244,7 +290,11 @@ export const StudioView: React.FC<StudioViewProps> = ({
               >
                 {/* Monitor grande (PROGRAMA: solo onStage) */}
                 <Box style={{ flex: 1, minHeight: 360 }}>
-                  <LiveMonitor showFrame={showFrame} stage={stage} />
+                  <LiveMonitor
+                    showFrame={showFrame}
+                    frameUrl={frameUrl}
+                    stage={stage}
+                  />
                 </Box>
 
                 {/* Dock participantes */}
@@ -291,21 +341,20 @@ export const StudioView: React.FC<StudioViewProps> = ({
                     <Stack gap="md">
                       <LiveConfigPanel
                         eventSlug={eventSlug}
-                        disabled={!!egressId || isTransmitting}
+                        disabled={!!egressId || isBusy}
                       />
 
                       <JoinRequestsPanel eventSlug={eventSlug} />
 
                       <Paper p="sm" radius="md" bg="dark.7">
                         <Stack gap="sm">
-                          <Text fw={500}>Producción</Text>
+                          <Text fw={500}>Marco gráfico</Text>
 
-                          <Switch
-                            checked={showFrame}
-                            onChange={(e) =>
-                              setShowFrame(e.currentTarget.checked)
-                            }
-                            label="Marco activo"
+                          <FrameControls
+                            eventSlug={eventSlug}
+                            showFrame={showFrame}
+                            frameUrl={frameUrl}
+                            onUpdate={fetchConfig}
                           />
 
                           <Divider />

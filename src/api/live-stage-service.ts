@@ -37,6 +37,7 @@ export function subscribeStageState(
 
   const handler = (snap: DataSnapshot) => {
     const val = snap.val() ?? {};
+    console.log(`🔥 Firebase RTDB - /live/${eventSlug}/stage:`, val);
     cb({
       onStage: val.onStage ?? {},
       programMode: (val.programMode as ProgramMode) ?? "speaker",

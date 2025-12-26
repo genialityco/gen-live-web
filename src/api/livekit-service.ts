@@ -16,6 +16,8 @@ export interface LiveConfig {
   status?: string;
   activeEgressId?: string;
   lastError?: string;
+  showFrame?: boolean;
+  frameUrl?: string;
 }
 
 export interface EnsureRoomResponse {
@@ -124,4 +126,25 @@ export async function updateLiveConfig(
 ) {
   const { data } = await api.put(`/livekit/config`, payload);
   return data as { ok: boolean; id: string };
+}
+
+export async function uploadFrame(eventSlug: string, file: File) {
+  const formData = new FormData();
+  formData.append("eventSlug", eventSlug);
+  formData.append("frame", file);
+  const { data } = await api.post<{ ok: boolean; frameUrl: string }>(
+    "/livekit/frame/upload",
+    formData,
+    {
+      headers: { "Content-Type": "multipart/form-data" },
+    }
+  );
+  return data;
+}
+
+export async function deleteFrame(eventSlug: string) {
+  const { data } = await api.delete<{ ok: boolean }>("/livekit/frame", {
+    params: { eventSlug },
+  });
+  return data;
 }
