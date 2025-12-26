@@ -301,8 +301,8 @@ export default function EventAttendGcore() {
   const [mode, setMode] = useState<"hls" | "studio">("hls");
   const [speakerToken, setSpeakerToken] = useState<string | null>(null);
 
-  const [showFrame, setShowFrame] = useState(false);
-  const [frameUrl, setFrameUrl] = useState("");
+  const [, setShowFrame] = useState(false);
+  const [, setFrameUrl] = useState("");
 
   // 1) Cargar datos de organización y evento
   useEffect(() => {
