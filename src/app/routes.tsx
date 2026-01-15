@@ -4,6 +4,7 @@ import PublicAnonGate from "../auth/guards/PublicAnonGate";
 import Layout from "../components/common/Layout";
 import OrgAccess from "../pages/organizations/OrgAccess";
 import { StudioPage } from "../pages/studio/StudioPage";
+import { SpeakerInvitePage } from "../pages/studio/SpeakerInvitePage";
 import { LiveViewerPage } from "../pages/viewer/LiveViewerPage";
 import EventAttendGcore from "../pages/events/EventAttendGcore";
 import LkEgressProgram from "../pages/studio/LkEgressProgram";
@@ -35,10 +36,14 @@ export const routes = [
       </Layout>
     ),
   },
-{
-  path: "/lk-egress",
-  element: <LkEgressProgram />,
-},
+  {
+    path: "/lk-egress",
+    element: <LkEgressProgram />,
+  },
+  {
+    path: "/studio/:eventSlug/speaker/:inviteToken",
+    element: <SpeakerInvitePage />,
+  },
   {
     path: "/organizations",
     element: (

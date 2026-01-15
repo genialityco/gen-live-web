@@ -8,12 +8,15 @@ import {
   stopLive,
   getEgressStatus,
   getLiveConfig,
+  updateLiveConfig,
 } from "../../api/livekit-service";
 import {
   LiveKitRoom,
   ControlBar,
   RoomAudioRenderer,
+  useLocalParticipant,
 } from "@livekit/components-react";
+
 import "@livekit/components-styles";
 import {
   Box,
@@ -21,25 +24,44 @@ import {
   Center,
   Loader,
   Paper,
+  AppShell,
+  ScrollArea,
+  Drawer,
+  Container,
+  Group,
+  Badge,
+  Button,
   Stack,
-  Grid,
-  Divider,
+  Alert,
+  Affix,
+  ActionIcon,
+  Indicator,
 } from "@mantine/core";
+import {
+  IconAlertTriangle,
+  IconMessageCircle,
+  IconX,
+} from "@tabler/icons-react";
 import { LIVEKIT_WS_URL } from "../../core/livekitConfig";
-import { LiveConfigPanel } from "./LiveConfigPanel";
-import { JoinRequestsPanel } from "./JoinRequestsPanel";
 import { ParticipantsPanel } from "./ParticipantsPanel";
-import { FrameControls } from "../../components/FrameControls";
-
 import { LiveMonitor } from "./LiveMonitor";
 import { useStage } from "../../hooks/useStage";
 import {
   setOnStage,
   setActiveUid,
   setProgramMode,
+  setLayoutMode,
+  setEgressState,
   type ProgramMode,
 } from "../../api/live-stage-service";
 import { StudioToolbar } from "./StudioToolbar";
+import { StudioSidePanel } from "./StudioSidePanel";
+import type { LayoutMode } from "../../types";
+import {
+  emergencyResetEventState,
+  validateEgressState,
+} from "../../api/emergency-reset-service";
+import { StudioChatPanel } from "./StudioChatPanel";
 
 type Role = "host" | "speaker";
 
@@ -59,33 +81,122 @@ function normalizeStatus(s: any): string {
 
 function isTerminalEgressStatus(status: string) {
   // ajusta si tu API devuelve otros strings
-  return ["complete", "completed", "ended", "failed", "aborted", "stopped"].includes(status);
+  return [
+    "complete",
+    "completed",
+    "ended",
+    "failed",
+    "aborted",
+    "stopped",
+  ].includes(status);
+}
+
+function StudioRoomUI(props: {
+  chatOpen: boolean;
+  setChatOpen: React.Dispatch<React.SetStateAction<boolean>>;
+  unread: number;
+  setUnread: React.Dispatch<React.SetStateAction<number>>;
+}) {
+  const { localParticipant } = useLocalParticipant();
+  const myId = localParticipant?.identity;
+
+  return (
+    <>
+      <Drawer
+        opened={props.chatOpen}
+        onClose={() => props.setChatOpen(false)}
+        position="right"
+        size={420}
+        overlayProps={{ opacity: 0.35, blur: 2 }}
+        withCloseButton
+        keepMounted
+      >
+        <StudioChatPanel
+          chatOpen={props.chatOpen}
+          setUnread={props.setUnread}
+          myId={myId}
+        />
+      </Drawer>
+
+      <Affix position={{ bottom: 20, right: 20 }}>
+        <Indicator
+          disabled={props.unread === 0}
+          label={props.unread > 99 ? "99+" : props.unread}
+          size={18}
+          processing 
+        >
+          <ActionIcon
+            size="xl"
+            radius="xl"
+            variant="filled"
+            onClick={() => props.setChatOpen((v) => !v)}
+            aria-label={props.chatOpen ? "Cerrar chat" : "Abrir chat"}
+            style={{ boxShadow: "0 10px 30px rgba(0,0,0,.25)" }}
+          >
+            {props.chatOpen ? (
+              <IconX size={22} />
+            ) : (
+              <IconMessageCircle size={22} />
+            )}
+          </ActionIcon>
+        </Indicator>
+      </Affix>
+    </>
+  );
 }
 
 export const StudioView: React.FC<StudioViewProps> = ({
   eventSlug,
   role,
-  displayName,
+  displayName: initialDisplayName,
   identity,
 }) => {
   const [token, setToken] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [skipLiveKit, setSkipLiveKit] = useState(false);
+  const [resetting, setResetting] = useState(false);
+  const [stateWarning, setStateWarning] = useState<string | null>(null);
 
   const [showFrame, setShowFrame] = useState(false);
   const [frameUrl, setFrameUrl] = useState("");
 
-  const [egressId, setEgressId] = useState<string | null>(null);
   const [startingEgress, setStartingEgress] = useState(false);
   const [stoppingEgress, setStoppingEgress] = useState(false);
-  const [egressStatus, setEgressStatus] = useState<string | null>(null);
 
-  // ✅ single source of truth
+  // Nombre por defecto: "Producción" para host
+  const displayName =
+    initialDisplayName || (role === "host" ? "Producción" : undefined);
+
+  // Estado para nombres personalizados de participantes (identity -> nombre)
+  const [customNames, setCustomNames] = useState<Record<string, string>>({});
+
+  // single source of truth
   const stage = useStage(eventSlug);
 
-  // ----- egress status poll (adaptativo) -----
+  // Usar egressId y egressStatus del stage (sincronizado via RTDB)
+  const egressId = stage.egressId ?? null;
+  const egressStatus = stage.egressStatus ?? null;
+
+  const [panelOpen, setPanelOpen] = useState(false);
+
+  const [chatOpen, setChatOpen] = useState(false);
+  const [unread, setUnread] = useState(0);
+
+
+  // Guardar layout en RTDB (tiempo real) y backend
+  const handleLayoutModeChange = async (mode: LayoutMode) => {
+    try {
+      await setLayoutMode(eventSlug, mode);
+      await updateLiveConfig({ eventSlug, layout: mode });
+    } catch (err) {
+      console.error("Error updating layout:", err);
+    }
+  };
+
+  // ----- egress status poll (adaptativo) - solo para host -----
   useEffect(() => {
-    if (!egressId) {
-      setEgressStatus(null);
+    // Solo el host hace polling del estado
+    if (role !== "host" || !egressId) {
       return;
     }
 
@@ -98,7 +209,9 @@ export const StudioView: React.FC<StudioViewProps> = ({
         if (!alive) return;
 
         const st = normalizeStatus(s.status);
-        setEgressStatus(st || "");
+
+        // Sincronizar estado en RTDB para que todos lo vean
+        await setEgressState(eventSlug, egressId, st || "");
 
         if (s.error) setError(String(s.error));
 
@@ -109,8 +222,7 @@ export const StudioView: React.FC<StudioViewProps> = ({
           return;
         }
 
-        const delay =
-          st === "starting" || st === "pending" ? 1000 : 3500;
+        const delay = st === "starting" || st === "pending" ? 1000 : 3500;
 
         timer = window.setTimeout(() => void tick(), delay);
       } catch {
@@ -125,14 +237,15 @@ export const StudioView: React.FC<StudioViewProps> = ({
       alive = false;
       if (timer) window.clearTimeout(timer);
     };
-  }, [egressId]);
+  }, [egressId, role, eventSlug]);
 
   const handleStartTransmission = async () => {
     setError(null);
     setStartingEgress(true);
     try {
       const data = await startLiveRtmp(eventSlug);
-      setEgressId(data.egressId);
+      // Sincronizar en RTDB para que todos vean el estado
+      await setEgressState(eventSlug, data.egressId, "starting");
     } catch (err: any) {
       setError(
         err?.response?.data?.message ||
@@ -150,8 +263,8 @@ export const StudioView: React.FC<StudioViewProps> = ({
     setStoppingEgress(true);
     try {
       await stopLive(egressId);
-      setEgressId(null);
-      setEgressStatus(null);
+      // Limpiar estado en RTDB
+      await setEgressState(eventSlug, null, null);
     } catch (err: any) {
       setError(
         err?.response?.data?.message ||
@@ -179,9 +292,19 @@ export const StudioView: React.FC<StudioViewProps> = ({
 
         setToken(token);
       } catch (err: any) {
-        setError(
-          err?.response?.data?.message || err.message || "Error inesperado"
-        );
+        const errorMsg =
+          err?.response?.data?.message || err.message || "Error inesperado";
+        setError(errorMsg);
+
+        // Permitir continuar sin LiveKit para hosts después de 3 segundos
+        if (role === "host") {
+          setTimeout(() => {
+            setStateWarning(
+              "LiveKit no disponible. Modo de emergencia activado."
+            );
+            setSkipLiveKit(true);
+          }, 3000);
+        }
       }
     };
     void run();
@@ -219,6 +342,59 @@ export const StudioView: React.FC<StudioViewProps> = ({
     await setProgramMode(eventSlug, m);
   };
 
+  const handleChangeParticipantName = (identity: string, newName: string) => {
+    setCustomNames((prev) => ({
+      ...prev,
+      [identity]: newName,
+    }));
+  };
+
+  // Función de reset de emergencia
+  const handleEmergencyReset = async () => {
+    if (
+      !confirm(
+        "¿Estás seguro de resetear todo el estado? Esto detendrá cualquier transmisión activa."
+      )
+    ) {
+      return;
+    }
+
+    setResetting(true);
+    try {
+      const result = await emergencyResetEventState(eventSlug);
+      if (result.success) {
+        setStateWarning(null);
+        alert("Estado reseteado exitosamente. Recarga la página.");
+        window.location.reload();
+      } else {
+        alert(`Error al resetear: ${result.message}`);
+      }
+    } catch (err: any) {
+      alert(`Error: ${err.message}`);
+    } finally {
+      setResetting(false);
+    }
+  };
+
+  // Validar estado del egress al montar
+  useEffect(() => {
+    const validateState = async () => {
+      if (!egressId || role !== "host") return;
+
+      const validation = await validateEgressState(egressId);
+      if (!validation.exists) {
+        setStateWarning(
+          `Egress ${egressId.slice(
+            0,
+            8
+          )}... no existe. El estado puede estar desincronizado.`
+        );
+      }
+    };
+
+    void validateState();
+  }, [egressId, role]);
+
   const fetchConfig = async () => {
     try {
       const cfg = await getLiveConfig(eventSlug);
@@ -235,158 +411,329 @@ export const StudioView: React.FC<StudioViewProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [eventSlug]);
 
-  if (error) return <Text c="red">{error}</Text>;
-  if (!token)
+  // Mostrar error solo si no es host o si aún no se activa modo emergencia
+  if (error && !skipLiveKit) {
+    return (
+      <Center h="100vh">
+        <Stack gap="md" align="center">
+          <Alert
+            icon={<IconAlertTriangle />}
+            title="Error de conexión"
+            color="red"
+            maw={500}
+          >
+            {error}
+          </Alert>
+          {role === "host" && (
+            <Text size="sm" c="dimmed">
+              Activando modo de emergencia en 3 segundos...
+            </Text>
+          )}
+        </Stack>
+      </Center>
+    );
+  }
+
+  if (!token && !skipLiveKit) {
     return (
       <Center h="100%">
         <Loader color="blue" />
       </Center>
     );
+  }
 
   const isBusy = startingEgress || stoppingEgress;
 
-  return (
-    <LiveKitRoom token={token} serverUrl={LIVEKIT_WS_URL} connect video audio>
-      <Box
-        style={{
-          height: "100%",
-          display: "flex",
-          flexDirection: "column",
-          minHeight: 0,
-        }}
-      >
-        {/* HEADER */}
-        <Paper
-          p="sm"
-          radius={0}
-          style={{ borderBottom: "1px solid rgba(255,255,255,0.08)" }}
-        >
-          <StudioToolbar
-            egressId={egressId}
-            isBusy={isBusy}
-            egressStatus={egressStatus}
-            stage={stage}
-            showFrame={showFrame}
-            onToggleFrame={setShowFrame}
-            onStart={handleStartTransmission}
-            onStop={handleStopTransmission}
-            onMode={handleSetMode}
-          />
-        </Paper>
+  // Modo emergencia: solo controles sin LiveKit
+  if (skipLiveKit && role === "host") {
+    return (
+      <Container fluid p="md">
+        <Stack gap="md">
+          <Alert
+            icon={<IconAlertTriangle />}
+            title="Modo de Emergencia"
+            color="yellow"
+          >
+            LiveKit no está disponible. Solo puedes gestionar el estado de la
+            transmisión.
+          </Alert>
 
-        {/* BODY */}
-        <Box style={{ flex: 1, minHeight: 0, padding: 12 }}>
-          <Grid gutter="md" style={{ height: "100%", margin: 0 }}>
-            {/* IZQUIERDA */}
-            <Grid.Col span={9} style={{ height: "100%", minHeight: 0 }}>
-              <Box
-                style={{
-                  height: "100%",
-                  minHeight: 0,
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 12,
-                }}
-              >
-                {/* Monitor grande (PROGRAMA: solo onStage) */}
-                <Box style={{ flex: 1, minHeight: 360 }}>
-                  <LiveMonitor
-                    showFrame={showFrame}
-                    frameUrl={frameUrl}
-                    stage={stage}
-                  />
-                </Box>
+          {stateWarning && (
+            <Alert
+              icon={<IconAlertTriangle />}
+              title="Advertencia de Estado"
+              color="orange"
+            >
+              {stateWarning}
+            </Alert>
+          )}
 
-                {/* Dock participantes */}
-                <Paper
-                  radius="md"
-                  p="sm"
-                  bg="dark.7"
-                  style={{
-                    height: 240,
-                    overflow: "auto",
-                  }}
+          <Paper p="lg" withBorder>
+            <Stack gap="md">
+              <Group justify="space-between">
+                <div>
+                  <Text fw={600} size="lg">
+                    Estado de la Transmisión
+                  </Text>
+                  <Text size="sm" c="dimmed">
+                    Evento: {eventSlug}
+                  </Text>
+                </div>
+                {egressId && egressStatus && (
+                  <Badge color={egressStatus === "active" ? "green" : "gray"}>
+                    {egressStatus}
+                  </Badge>
+                )}
+              </Group>
+
+              <Group>
+                <Button
+                  color="blue"
+                  disabled={!!egressId || isBusy}
+                  loading={startingEgress}
+                  onClick={handleStartTransmission}
                 >
+                  Iniciar Transmisión
+                </Button>
+
+                <Button
+                  color="red"
+                  disabled={!egressId || isBusy}
+                  loading={stoppingEgress}
+                  onClick={handleStopTransmission}
+                >
+                  Detener Transmisión
+                </Button>
+
+                <Button
+                  color="orange"
+                  variant="light"
+                  loading={resetting}
+                  onClick={handleEmergencyReset}
+                >
+                  Resetear Estado
+                </Button>
+              </Group>
+
+              {egressId && (
+                <Text size="sm" c="dimmed">
+                  Egress ID: {egressId}
+                </Text>
+              )}
+            </Stack>
+          </Paper>
+
+          <Alert color="blue" title="Instrucciones">
+            <ul style={{ margin: 0, paddingLeft: 20 }}>
+              <li>Si la transmisión está bloqueada, usa "Resetear Estado"</li>
+              <li>
+                Esto detendrá cualquier transmisión activa y limpiará el estado
+              </li>
+              <li>
+                Después del reset, recarga la página para reconectar LiveKit
+              </li>
+            </ul>
+          </Alert>
+        </Stack>
+      </Container>
+    );
+  }
+
+  // Renderizado normal con LiveKit
+  return (
+    <Container>
+      <LiveKitRoom
+        token={token!}
+        serverUrl={LIVEKIT_WS_URL}
+        connect
+        video
+        audio
+        // data-lk-theme="default"
+      >
+        <AppShell
+          header={{ height: 64 }}
+          padding="md"
+          styles={{
+            main: {
+              display: "flex",
+              flexDirection: "column",
+              minHeight: "calc(100dvh - 60px)",
+            },
+          }}
+        >
+          {/* HEADER */}
+          <AppShell.Header>
+            <Paper
+              h="100%"
+              px="md"
+              radius={0}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                borderBottom: "1px solid var(--mantine-color-dark-4)",
+              }}
+            >
+              <Group gap="xs">
+                {displayName && (
+                  <Group gap="xs">
+                    <Badge
+                      color={role === "host" ? "blue" : "green"}
+                      variant="dot"
+                    >
+                      {role === "host" ? "Host" : "Speaker"}
+                    </Badge>
+                    <Text size="sm" fw={500}>
+                      {displayName}
+                    </Text>
+                  </Group>
+                )}
+              </Group>
+
+              <StudioToolbar
+                role={role}
+                egressId={egressId}
+                isBusy={isBusy}
+                egressStatus={egressStatus}
+                stage={stage}
+                showFrame={showFrame}
+                onToggleFrame={setShowFrame}
+                onStart={handleStartTransmission}
+                onStop={handleStopTransmission}
+                layoutMode={stage.layoutMode}
+                onLayoutMode={handleLayoutModeChange}
+                onMode={handleSetMode}
+                panelOpen={panelOpen}
+                onTogglePanel={() => setPanelOpen((v) => !v)}
+              />
+            </Paper>
+          </AppShell.Header>
+
+          {/* DRAWER */}
+          <Drawer
+            opened={panelOpen}
+            onClose={() => setPanelOpen(false)}
+            title="Panel del Studio"
+            position="right"
+            size={380}
+            overlayProps={{ opacity: 0.55, blur: 2 }}
+            withCloseButton
+          >
+            <StudioSidePanel
+              role={role}
+              eventSlug={eventSlug}
+              disabled={!!egressId || isBusy}
+              showFrame={showFrame}
+              frameUrl={frameUrl}
+              onRefreshFrameConfig={fetchConfig}
+            />
+          </Drawer>
+
+          {/* MAIN */}
+          <AppShell.Main>
+            <Box
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: 12,
+                flex: 1,
+                minHeight: 0,
+              }}
+            >
+              {/* Advertencia de estado */}
+              {stateWarning && role === "host" && (
+                <Alert
+                  icon={<IconAlertTriangle />}
+                  title="Advertencia de Estado"
+                  color="orange"
+                  withCloseButton
+                  onClose={() => setStateWarning(null)}
+                >
+                  <Stack gap="xs">
+                    <Text size="sm">{stateWarning}</Text>
+                    <Button
+                      size="xs"
+                      color="orange"
+                      variant="light"
+                      loading={resetting}
+                      onClick={handleEmergencyReset}
+                    >
+                      Resetear Estado
+                    </Button>
+                  </Stack>
+                </Alert>
+              )}
+
+              <Box style={{ flex: 1, minHeight: 320 }}>
+                <LiveMonitor
+                  showFrame={showFrame}
+                  frameUrl={frameUrl}
+                  stage={stage}
+                  layoutMode={stage.layoutMode}
+                />
+              </Box>
+              <Paper
+                mt="md"
+                p="sm"
+                withBorder
+                radius="md"
+                style={{ display: "flex", justifyContent: "center" }}
+              >
+                <ControlBar variation="minimal" />
+              </Paper>
+
+              <Paper p="sm" radius="md" withBorder>
+                <ScrollArea h="100%">
                   <ParticipantsPanel
+                    role={role}
                     eventSlug={eventSlug}
                     stage={stage}
+                    customNames={customNames}
+                    onChangeParticipantName={handleChangeParticipantName}
                     onToggleStage={handleToggleStage}
                     onPin={handlePin}
                     onUnpin={handleUnpin}
                     onSetMode={handleSetMode}
                   />
-                </Paper>
-              </Box>
-            </Grid.Col>
+                </ScrollArea>
+              </Paper>
+            </Box>
+            <RoomAudioRenderer />
 
-            {/* DERECHA */}
-            <Grid.Col span={3} style={{ height: "100%", minHeight: 0 }}>
-              <Box
-                style={{
-                  height: "100%",
-                  minHeight: 0,
-                  position: "sticky",
-                  top: 12,
-                }}
+            {/* DRAWER CHAT */}
+            <StudioRoomUI
+              chatOpen={chatOpen}
+              setChatOpen={setChatOpen}
+              unread={unread}
+              setUnread={setUnread}
+            />
+
+            {/* BOTÓN FLOTANTE */}
+            <Affix position={{ bottom: 20, right: 20 }}>
+              <Indicator
+                disabled={unread === 0}
+                label={unread > 99 ? "99+" : unread}
+                size={18}
               >
-                <Stack
-                  gap="md"
-                  style={{
-                    height: "100%",
-                    minHeight: 0,
-                    overflow: "hidden",
-                  }}
+                <ActionIcon
+                  size="xl"
+                  radius="xl"
+                  variant="filled"
+                  onClick={() => setChatOpen((v) => !v)}
+                  aria-label={chatOpen ? "Cerrar chat" : "Abrir chat"}
+                  style={{ boxShadow: "0 10px 30px rgba(0,0,0,.25)" }}
                 >
-                  <Box style={{ flex: 1, minHeight: 0, overflow: "auto" }}>
-                    <Stack gap="md">
-                      <LiveConfigPanel
-                        eventSlug={eventSlug}
-                        disabled={!!egressId || isBusy}
-                      />
-
-                      <JoinRequestsPanel eventSlug={eventSlug} />
-
-                      <Paper p="sm" radius="md" bg="dark.7">
-                        <Stack gap="sm">
-                          <Text fw={500}>Marco gráfico</Text>
-
-                          <FrameControls
-                            eventSlug={eventSlug}
-                            showFrame={showFrame}
-                            frameUrl={frameUrl}
-                            onUpdate={fetchConfig}
-                          />
-
-                          <Divider />
-
-                          <Text size="xs" c="dimmed">
-                            Tip pro: el monitor muestra SOLO los que están “En
-                            escena”. Los demás están en “Backstage”.
-                          </Text>
-                        </Stack>
-                      </Paper>
-                    </Stack>
-                  </Box>
-                </Stack>
-              </Box>
-            </Grid.Col>
-          </Grid>
-        </Box>
-
-        {/* FOOTER */}
-        <Paper
-          p="sm"
-          radius={0}
-          bg="dark.8"
-          style={{ borderTop: "1px solid rgba(255,255,255,0.08)" }}
-        >
-          <Center>
-            <ControlBar variation="minimal" />
-          </Center>
-        </Paper>
-
-        <RoomAudioRenderer />
-      </Box>
-    </LiveKitRoom>
+                  {chatOpen ? (
+                    <IconX size={22} />
+                  ) : (
+                    <IconMessageCircle size={22} />
+                  )}
+                </ActionIcon>
+              </Indicator>
+            </Affix>
+          </AppShell.Main>
+        </AppShell>
+      </LiveKitRoom>
+    </Container>
   );
 };

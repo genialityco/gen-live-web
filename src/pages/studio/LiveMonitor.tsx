@@ -1,6 +1,6 @@
 // src/components/live/LiveMonitor.tsx
 import { useMemo } from "react";
-import { Box, Badge, Center, Text } from "@mantine/core";
+import { Box, Center, Text } from "@mantine/core";
 import {
   FocusLayout,
   GridLayout,
@@ -10,13 +10,16 @@ import {
 import { Track } from "livekit-client";
 import type { StageState } from "../../hooks/useStage";
 
+import type { LayoutMode } from "../../types";
+
 type Props = {
   showFrame: boolean;
   frameUrl: string;
   stage: StageState;
+  layoutMode: LayoutMode;
 };
 
-export function LiveMonitor({ showFrame, frameUrl, stage }: Props) {
+export function LiveMonitor({ showFrame, frameUrl, stage, layoutMode }: Props) {
   const tracks = useTracks(
     [
       { source: Track.Source.ScreenShare, withPlaceholder: false },
@@ -56,7 +59,7 @@ export function LiveMonitor({ showFrame, frameUrl, stage }: Props) {
     return ss ?? cam ?? null;
   }, [stageTracks]);
 
-  const effectiveMode = stage.programMode ?? "speaker";
+  const effectiveMode = layoutMode;
   const focus = pinnedTrack ?? fallbackSpeaker;
 
   return (
@@ -68,7 +71,6 @@ export function LiveMonitor({ showFrame, frameUrl, stage }: Props) {
         height: "100%",
         background: "#000",
         overflow: "hidden",
-        borderRadius: 12,
         position: "relative",
       }}
     >
@@ -87,31 +89,332 @@ export function LiveMonitor({ showFrame, frameUrl, stage }: Props) {
             alt="Marco"
             style={{ width: "100%", height: "100%", objectFit: "cover" }}
           />
-          <Badge
+          {/* <Badge
             color="red"
             size="md"
             style={{ position: "absolute", top: 16, left: 16 }}
           >
             EN VIVO
-          </Badge>
+          </Badge> */}
         </Box>
       )}
 
       {/* VIDEO */}
       <Box style={{ position: "absolute", inset: 0, zIndex: 1 }}>
-        {effectiveMode === "grid" ? (
-          <GridLayout tracks={stageTracks}>
-            <ParticipantTile />
-          </GridLayout>
-        ) : focus ? (
-          <FocusLayout trackRef={focus}>
-            <ParticipantTile trackRef={focus} />
-          </FocusLayout>
-        ) : (
-          <Center h="100%">
-            <Text c="dimmed">Nadie en escena</Text>
-          </Center>
-        )}
+        {(() => {
+          switch (effectiveMode) {
+            case "grid":
+              return (
+                <GridLayout tracks={stageTracks}>
+                  <ParticipantTile />
+                </GridLayout>
+              );
+            case "speaker":
+              return focus ? (
+                <FocusLayout trackRef={focus}>
+                  <ParticipantTile trackRef={focus} />
+                </FocusLayout>
+              ) : (
+                <Center h="100%">
+                  <Text c="dimmed">Nadie en escena</Text>
+                </Center>
+              );
+            case "presentation":
+              // Layout: principal grande, otros en columna, cámaras centradas y proporcionadas
+              return focus ? (
+                <Box
+                  style={{
+                    width: "100%",
+                    height: "100%",
+                    display: "flex",
+                    flexDirection: "row",
+                  }}
+                >
+                  <Box
+                    style={{
+                      flex: 3,
+                      height: "100%",
+                      minWidth: 0,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    <Box
+                      style={{
+                        width: "100%",
+                        maxWidth: "100%",
+                        aspectRatio: "16/9",
+                        maxHeight: "100%",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      <ParticipantTile
+                        trackRef={focus}
+                        style={{
+                          width: "100%",
+                          height: "100%",
+                          objectFit: "contain",
+                        }}
+                      />
+                    </Box>
+                  </Box>
+                  <Box
+                    style={{
+                      flex: 1,
+                      height: "100%",
+                      minWidth: 0,
+                      background: "#111",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: 0,
+                      padding: 0,
+                    }}
+                  >
+                    {stageTracks
+                      .filter((t) => t !== focus)
+                      .map((t) => (
+                        <Box
+                          key={t.participant?.identity}
+                          style={{
+                            flex: 1,
+                            minHeight: 0,
+                            minWidth: 0,
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                          }}
+                        >
+                          <Box
+                            style={{
+                              width: "100%",
+                              maxWidth: "100%",
+                              aspectRatio: "16/9",
+                              maxHeight: "100%",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                            }}
+                          >
+                            <ParticipantTile
+                              trackRef={t}
+                              style={{
+                                width: "100%",
+                                height: "100%",
+                                objectFit: "contain",
+                              }}
+                            />
+                          </Box>
+                        </Box>
+                      ))}
+                  </Box>
+                </Box>
+              ) : (
+                <Center h="100%">
+                  <Text c="dimmed">Nadie en escena</Text>
+                </Center>
+              );
+            case "pip":
+              // Picture-in-Picture: focus grande centrado, los demás pequeños en esquina
+              return focus ? (
+                <Box
+                  style={{
+                    width: "100%",
+                    height: "100%",
+                    position: "relative",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <Box
+                    style={{
+                      width: "100%",
+                      maxWidth: "100%",
+                      aspectRatio: "16/9",
+                      maxHeight: "100%",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    <ParticipantTile
+                      trackRef={focus}
+                      style={{
+                        width: "100%",
+                        height: "100%",
+                        objectFit: "contain",
+                      }}
+                    />
+                  </Box>
+                  <Box
+                    style={{
+                      position: "absolute",
+                      bottom: 36,
+                      left: 36,
+                      display: "flex",
+                      gap: 8,
+                    }}
+                  >
+                    {stageTracks
+                      .filter((t) => t !== focus)
+                      .map((t) => (
+                        <Box
+                          key={t.participant?.identity}
+                          style={{
+                            width: 150,
+                            height: 92,
+                            background: "#222",
+                            borderRadius: 8,
+                            overflow: "hidden",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                          }}
+                        >
+                          <Box
+                            style={{
+                              width: "100%",
+                              height: "100%",
+                              aspectRatio: "16/9",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                            }}
+                          >
+                            <ParticipantTile
+                              trackRef={t}
+                              style={{
+                                width: "100%",
+                                height: "100%",
+                                objectFit: "contain",
+                              }}
+                            />
+                          </Box>
+                        </Box>
+                      ))}
+                  </Box>
+                </Box>
+              ) : (
+                <Center h="100%">
+                  <Text c="dimmed">Nadie en escena</Text>
+                </Center>
+              );
+            case "side_by_side": {
+              // Dos participantes principales lado a lado, cámaras centradas y proporcionadas
+              const [first, second] = stageTracks;
+              return first && second ? (
+                <Box style={{ width: "100%", height: "100%", display: "flex" }}>
+                  <Box
+                    style={{
+                      flex: 1,
+                      minWidth: 0,
+                      minHeight: 0,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    <Box
+                      style={{
+                        width: "100%",
+                        maxWidth: "100%",
+                        aspectRatio: "16/9",
+                        maxHeight: "100%",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      <ParticipantTile
+                        trackRef={first}
+                        style={{
+                          width: "100%",
+                          height: "100%",
+                          objectFit: "contain",
+                        }}
+                      />
+                    </Box>
+                  </Box>
+                  <Box
+                    style={{
+                      flex: 1,
+                      minWidth: 0,
+                      minHeight: 0,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    <Box
+                      style={{
+                        width: "100%",
+                        maxWidth: "100%",
+                        aspectRatio: "16/9",
+                        maxHeight: "100%",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      <ParticipantTile
+                        trackRef={second}
+                        style={{
+                          width: "100%",
+                          height: "100%",
+                          objectFit: "contain",
+                        }}
+                      />
+                    </Box>
+                  </Box>
+                </Box>
+              ) : first ? (
+                <Box
+                  style={{
+                    width: "100%",
+                    height: "100%",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <Box
+                    style={{
+                      width: "100%",
+                      maxWidth: "100%",
+                      aspectRatio: "16/9",
+                      maxHeight: "100%",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    <ParticipantTile
+                      trackRef={first}
+                      style={{
+                        width: "100%",
+                        height: "100%",
+                        objectFit: "contain",
+                      }}
+                    />
+                  </Box>
+                </Box>
+              ) : (
+                <Center h="100%">
+                  <Text c="dimmed">Nadie en escena</Text>
+                </Center>
+              );
+            }
+            default:
+              return (
+                <Center h="100%">
+                  <Text c="dimmed">Nadie en escena</Text>
+                </Center>
+              );
+          }
+        })()}
       </Box>
     </Box>
   );
