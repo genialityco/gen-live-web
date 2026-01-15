@@ -14,17 +14,10 @@ import {
   Group,
   Button,
 } from "@mantine/core";
-import { ensureRoom, getPlayback } from "../../api/livekit-service";
+import { getPlayback } from "../../api/livekit-service";
 import { ViewerHlsPlayer } from "./ViewerHlsPlayer";
-import {
-  requestToJoin,
-  subscribeJoinDecision,
-} from "../../api/live-join-service";
-import {
-  ControlBar,
-  LiveKitRoom,
-  RoomAudioRenderer,
-} from "@livekit/components-react";
+import { requestToJoin, subscribeJoinDecision } from "../../api/live-join-service";
+import { ControlBar, LiveKitRoom, RoomAudioRenderer } from "@livekit/components-react";
 import { LIVEKIT_WS_URL } from "../../core/livekitConfig";
 
 export const LiveViewerPage: React.FC = () => {
@@ -62,31 +55,33 @@ export const LiveViewerPage: React.FC = () => {
     if (!eventSlug) return;
 
     let unsub: (() => void) | null = null;
+
     try {
-      unsub = subscribeJoinDecision(eventSlug, async (d) => {
+      unsub = subscribeJoinDecision(eventSlug, (d) => {
         if (!d) return;
 
         if (d.status === "approved" && d.token) {
           setJoinState("approved");
           setSpeakerToken(d.token);
 
-          // asegura room por si acaso
-          await ensureRoom(eventSlug);
-
-          // cambia a Studio (LiveKit)
+          // ✅ NO bloquees con ensureRoom aquí.
+          // Con token ya puedes conectarte; si algo falla, LiveKitRoom lo reflejará.
           setMode("studio");
+          return;
         }
 
         if (d.status === "rejected") {
           setJoinState("rejected");
           setMode("hls");
           setSpeakerToken(null);
+          return;
         }
 
         if (d.status === "kicked") {
           setJoinState("kicked");
           setMode("hls");
           setSpeakerToken(null);
+          return;
         }
       });
     } catch (e: any) {
@@ -100,6 +95,10 @@ export const LiveViewerPage: React.FC = () => {
   const handleJoinRequest = async () => {
     if (!eventSlug) return;
     setError(null);
+
+    // evita spammear requests
+    if (joinState === "pending") return;
+
     setJoinState("pending");
     try {
       await requestToJoin(eventSlug);
@@ -186,6 +185,7 @@ export const LiveViewerPage: React.FC = () => {
             </LiveKitRoom>
           )}
         </Paper>
+
         <Group justify="space-between">
           <Text size="sm" c="dimmed">
             {joinState === "pending" && "Solicitud enviada. Espera aprobación…"}

@@ -24,7 +24,7 @@ import { IconAlertCircle } from "@tabler/icons-react";
 
 type Props = {
   eventSlug: string;
-  disabled?: boolean; // opcional: deshabilitar mientras transmite
+  disabled?: boolean;
 };
 
 export const LiveConfigPanel: React.FC<Props> = ({ eventSlug, disabled }) => {
@@ -43,21 +43,36 @@ export const LiveConfigPanel: React.FC<Props> = ({ eventSlug, disabled }) => {
     validate: {
       rtmpServerUrl: (v, values) =>
         values.ingestProtocol === "rtmp" && !v ? "RTMP server requerido" : null,
-      rtmpStreamKey: (v, values) =>
-        values.ingestProtocol === "rtmp" && !v ? "Stream key requerida" : null,
-      srtIngestUrl: (v, values) =>
-        values.ingestProtocol === "srt" && !v
-          ? "SRT ingest URL requerida"
-          : null,
+
+      // ✅ si viene "****", significa "existe y está guardada", no obligues al usuario a reescribir
+      rtmpStreamKey: (v, values) => {
+        if (values.ingestProtocol !== "rtmp") return null;
+        if (!v) return "Stream key requerida";
+        if (v === "****") return null;
+        return null;
+      },
+
+      srtIngestUrl: (v, values) => {
+        if (values.ingestProtocol !== "srt") return null;
+        if (!v) return "SRT ingest URL requerida";
+        if (v === "****") return null;
+        return null;
+      },
+
       playbackHlsUrl: (v) => (!v ? "Playback HLS URL requerida" : null),
     },
   });
 
   const ingestProtocol = form.values.ingestProtocol;
 
-  const maskedKey = useMemo(() => {
-    return form.values.rtmpStreamKey === "****";
-  }, [form.values.rtmpStreamKey]);
+  const maskedRtmpKey = useMemo(
+    () => form.values.rtmpStreamKey === "****",
+    [form.values.rtmpStreamKey]
+  );
+  const maskedSrt = useMemo(
+    () => form.values.srtIngestUrl === "****",
+    [form.values.srtIngestUrl]
+  );
 
   useEffect(() => {
     const run = async () => {
@@ -90,8 +105,9 @@ export const LiveConfigPanel: React.FC<Props> = ({ eventSlug, disabled }) => {
   const onSave = form.onSubmit(async (values) => {
     setSaving(true);
     try {
-      // Si viene enmascarada y el usuario no la cambió, NO la mandes (para no sobreescribir)
       const payload: any = { eventSlug, ...values };
+
+      // ✅ Si viene enmascarada y el usuario no la cambió, NO la mandes (para no sobreescribir)
       if (payload.rtmpStreamKey === "****") delete payload.rtmpStreamKey;
       if (payload.srtIngestUrl === "****") delete payload.srtIngestUrl;
 
@@ -157,15 +173,15 @@ export const LiveConfigPanel: React.FC<Props> = ({ eventSlug, disabled }) => {
             <TextInput
               disabled={disabled}
               label="RTMP Server"
-              placeholder="rtmp://vp-push-.../in/"
+              placeholder="rtmp://global-live.mux.com:5222/app"
               {...form.getInputProps("rtmpServerUrl")}
             />
             <PasswordInput
               disabled={disabled}
               label="RTMP Stream Key"
-              placeholder={maskedKey ? "****" : "3836340?..."}
+              placeholder={maskedRtmpKey ? "****" : "stream_key..."}
               description={
-                maskedKey
+                maskedRtmpKey
                   ? "Guardada (enmascarada). Escribe para reemplazar."
                   : undefined
               }
@@ -176,7 +192,12 @@ export const LiveConfigPanel: React.FC<Props> = ({ eventSlug, disabled }) => {
           <PasswordInput
             disabled={disabled}
             label="SRT Ingest URL"
-            placeholder="srt://... "
+            placeholder={maskedSrt ? "****" : "srt://..."}
+            description={
+              maskedSrt
+                ? "Guardada (enmascarada). Escribe para reemplazar."
+                : undefined
+            }
             {...form.getInputProps("srtIngestUrl")}
           />
         )}
@@ -186,7 +207,7 @@ export const LiveConfigPanel: React.FC<Props> = ({ eventSlug, disabled }) => {
         <TextInput
           disabled={disabled}
           label="Playback HLS URL"
-          placeholder="https://.../master.m3u8"
+          placeholder="https://stream.mux.com/<playbackId>.m3u8"
           {...form.getInputProps("playbackHlsUrl")}
         />
 
@@ -209,19 +230,15 @@ export const LiveConfigPanel: React.FC<Props> = ({ eventSlug, disabled }) => {
               Usar playback actual
             </Button>
 
-            <Button
-              loading={saving}
-              type="submit"
-              disabled={disabled}
-            >
+            <Button loading={saving} type="submit" disabled={disabled}>
               Guardar
             </Button>
           </Group>
         </form>
 
         <Text size="xs" c="dimmed">
-          Nota: por ahora no ciframos la key. Luego lo cambiamos sin afectar
-          esta UI.
+          Tip: si la key aparece enmascarada (****), ya está guardada; solo
+          escribe si quieres reemplazarla.
         </Text>
       </Stack>
     </Paper>

@@ -70,3 +70,10 @@ export interface RegistrationForm {
   submitButtonText?: string;
   successMessage?: string;
 }
+
+export type LayoutMode =
+  | "grid"
+  | "speaker"
+  | "presentation"
+  | "pip"
+  | "side_by_side";
