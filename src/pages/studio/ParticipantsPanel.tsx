@@ -1,13 +1,32 @@
 // src/ParticipantsPanel.tsx
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useParticipants } from "@livekit/components-react";
-import { Stack, Text, Button, Group, Badge, Menu, ActionIcon, Modal, TextInput } from "@mantine/core";
+import {
+  Stack,
+  Text,
+  Button,
+  Group,
+  Badge,
+  Menu,
+  ActionIcon,
+  Modal,
+  TextInput,
+  SimpleGrid,
+  Paper,
+  Flex,
+} from "@mantine/core";
 import { useMemo, useState } from "react";
 import { auth } from "../../core/firebase";
 import { kickSpeaker } from "../../api/live-join-service";
 import type { StageState } from "../../hooks/useStage";
 import type { ProgramMode } from "../../api/live-stage-service";
-import { IconDots, IconPin, IconPinnedOff, IconUserX, IconPencil } from "@tabler/icons-react";
+import {
+  IconDots,
+  IconPin,
+  IconPinnedOff,
+  IconUserX,
+  IconPencil,
+} from "@tabler/icons-react";
 
 type Props = {
   role: "host" | "speaker";
@@ -47,18 +66,17 @@ export function ParticipantsPanel({
       const aUid = a.identity;
       const bUid = b.identity;
 
-      const aSpeak = a.isSpeaking ? 1 : 0;
-      const bSpeak = b.isSpeaking ? 1 : 0;
-      if (bSpeak !== aSpeak) return bSpeak - aSpeak;
-
+      // 1) onStage primero (si quieres mantenerlo)
       const aStage = stage.onStage[aUid] ? 1 : 0;
       const bStage = stage.onStage[bUid] ? 1 : 0;
       if (bStage !== aStage) return bStage - aStage;
 
+      // 2) nombre/uid estable
       const an = (a.name || aUid || "").toLowerCase();
       const bn = (b.name || bUid || "").toLowerCase();
       return an.localeCompare(bn);
     });
+
     return arr;
   }, [participants, stage.onStage]);
 
@@ -102,7 +120,8 @@ export function ParticipantsPanel({
             <Text span fw={600}>
               {getDisplayName(
                 stage.activeUid,
-                participants.find((p) => p.identity === stage.activeUid)?.name || ""
+                participants.find((p) => p.identity === stage.activeUid)
+                  ?.name || "",
               )}
             </Text>
           </Text>
@@ -118,133 +137,149 @@ export function ParticipantsPanel({
         </Text>
       )}
 
-      {sorted.map((p) => {
-        const uid = p.identity;
-        const isMe = !!myUid && uid === myUid;
-        const isOnStage = !!stage.onStage[uid];
-        const isPinned = stage.activeUid === uid;
+      <SimpleGrid cols={{ base: 1, sm: 2, md: 3 }} spacing="sm">
+        {sorted.map((p) => {
+          const uid = p.identity;
+          const isMe = !!myUid && uid === myUid;
+          const isOnStage = !!stage.onStage[uid];
+          const isPinned = stage.activeUid === uid;
 
-        // Si tu versión no expone esto, déjalo en undefined y no se muestra nada
-        const micOn = (p as any).isMicrophoneEnabled ?? undefined;
-        const camOn = (p as any).isCameraEnabled ?? undefined;
-        const screenOn = (p as any).isScreenShareEnabled ?? undefined;
+          // Si tu versión no expone esto, déjalo en undefined y no se muestra nada
+          const micOn = (p as any).isMicrophoneEnabled ?? undefined;
+          const camOn = (p as any).isCameraEnabled ?? undefined;
+          const screenOn = (p as any).isScreenShareEnabled ?? undefined;
 
-        return (
-          <Group
-            key={uid}
-            justify="space-between"
-            align="center"
-            wrap="nowrap"
-            style={{
-              padding: 10,
-              borderRadius: 12,
-              border: "1px solid var(--mantine-color-dark-4)",
-              background: isOnStage
-                ? "var(--mantine-color-dark-7)"
-                : "var(--mantine-color-dark-8)",
-            }}
-          >
-            <div style={{ minWidth: 0 }}>
-              <Group gap={8} wrap="nowrap">
-                <Text size="sm" fw={600} truncate style={{ maxWidth: 240 }}>
-                  {getDisplayName(uid, p.name || "")}
-                </Text>
+          return (
+            <Paper
+              key={uid}
+              p="sm"
+              radius="md"
+              withBorder
+              style={{
+                height: "100%",
+                display: "flex",
+                flexDirection: "column",
+                gap: 10,
+              }}
+            >
+              {/* Header */}
+              <Group justify="space-between" align="flex-start" wrap="nowrap">
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <Group gap={8} wrap="nowrap">
+                    <Text size="sm" fw={700} truncate style={{ flex: 1 }}>
+                      {getDisplayName(uid, p.name || "")}
+                    </Text>
 
+                    {!isSpeaker && (
+                      <ActionIcon
+                        size="sm"
+                        variant="subtle"
+                        onClick={() => handleOpenEditName(uid, p.name || "")}
+                        aria-label="Editar nombre"
+                      >
+                        <IconPencil size={16} />
+                      </ActionIcon>
+                    )}
+                  </Group>
+                </div>
+
+                {/* Menu acciones (host) */}
                 {!isSpeaker && (
-                  <ActionIcon
-                    size="xs"
-                    variant="subtle"
-                    onClick={() => handleOpenEditName(uid, p.name || "")}
-                  >
-                    <IconPencil size={12} />
-                  </ActionIcon>
-                )}
+                  <Menu shadow="md" position="bottom-end" withinPortal>
+                    <Menu.Target>
+                      <ActionIcon variant="subtle" aria-label="Más acciones">
+                        <IconDots size={18} />
+                      </ActionIcon>
+                    </Menu.Target>
 
+                    <Menu.Dropdown>
+                      <Menu.Label>Acciones</Menu.Label>
+
+                      {!isPinned ? (
+                        <Menu.Item
+                          leftSection={<IconPin size={16} />}
+                          onClick={() => onPin(uid)}
+                        >
+                          Pinear (Speaker)
+                        </Menu.Item>
+                      ) : (
+                        <Menu.Item
+                          leftSection={<IconPinnedOff size={16} />}
+                          onClick={onUnpin}
+                        >
+                          Quitar pin
+                        </Menu.Item>
+                      )}
+
+                      <Menu.Divider />
+
+                      <Menu.Item
+                        color="red"
+                        leftSection={<IconUserX size={16} />}
+                        disabled={isMe}
+                        onClick={() => handleKick(uid)}
+                      >
+                        Expulsar
+                      </Menu.Item>
+                    </Menu.Dropdown>
+                  </Menu>
+                )}
+              </Group>
+
+              {/* Status chips */}
+              <Flex gap={6} wrap="wrap">
                 {isPinned && (
                   <Badge size="xs" variant="filled">
                     📌 PIN
                   </Badge>
                 )}
+
                 <Badge size="xs" variant={isOnStage ? "light" : "outline"}>
                   {isOnStage ? "🎬 En escena" : "Backstage"}
                 </Badge>
-                {p.isSpeaking && (
-                  <Badge size="xs" variant="light">
-                    🎙️ Hablando
-                  </Badge>
+
+                {(camOn !== undefined || screenOn !== undefined) && (
+                  <Text size="xs" c="dimmed">
+                    {camOn === undefined ? "" : camOn ? "📷 On" : "📷 Off"}{" "}
+                    {screenOn ? "🖥️ On" : ""}
+                  </Text>
                 )}
+
+                {micOn !== undefined && (
+                  <Text size="xs" c="dimmed">
+                    {micOn
+                      ? p.isSpeaking
+                        ? "🎤 Hablando"
+                        : "🎤 On"
+                      : "🎤 Off"}
+                  </Text>
+                )}
+
                 {isMe && (
                   <Badge size="xs" variant="outline">
                     Tú
                   </Badge>
                 )}
-              </Group>
+              </Flex>
 
-              {(micOn !== undefined ||
-                camOn !== undefined ||
-                screenOn !== undefined) && (
-                <Text size="xs" c="dimmed">
-                  {micOn === undefined ? "" : micOn ? "🎤 On" : "🎤 Off"}{" "}
-                  {camOn === undefined ? "" : camOn ? "📷 On" : "📷 Off"}{" "}
-                  {screenOn ? "🖥️ On" : ""}
-                </Text>
-              )}
-            </div>
+              {/* Spacer para empujar CTA al fondo */}
+              <div style={{ flex: 1 }} />
 
-            {/* Acciones - solo para host */}
-            {!isSpeaker && (
-              <Group gap={8} wrap="nowrap">
+              {/* CTA principal (host) */}
+              {!isSpeaker && (
                 <Button
+                  fullWidth
                   size="xs"
                   variant={isOnStage ? "default" : "filled"}
                   onClick={() => onToggleStage(uid, !isOnStage)}
                 >
-                  {isOnStage ? "Bajar" : "Subir"}
+                  {isOnStage ? "Bajar de escena" : "Subir a escena"}
                 </Button>
-
-                <Menu shadow="md" position="bottom-end">
-                  <Menu.Target>
-                    <ActionIcon variant="subtle">
-                      <IconDots size={18} />
-                    </ActionIcon>
-                  </Menu.Target>
-
-                  <Menu.Dropdown>
-                    <Menu.Label>Acciones</Menu.Label>
-
-                    {!isPinned ? (
-                      <Menu.Item
-                        leftSection={<IconPin size={16} />}
-                        onClick={() => onPin(uid)}
-                      >
-                        Pinear (Speaker)
-                      </Menu.Item>
-                    ) : (
-                      <Menu.Item
-                        leftSection={<IconPinnedOff size={16} />}
-                        onClick={onUnpin}
-                      >
-                        Quitar pin
-                      </Menu.Item>
-                    )}
-
-                    <Menu.Divider />
-
-                    <Menu.Item
-                      color="red"
-                      leftSection={<IconUserX size={16} />}
-                      disabled={isMe}
-                      onClick={() => handleKick(uid)}
-                    >
-                      Expulsar
-                    </Menu.Item>
-                  </Menu.Dropdown>
-                </Menu>
-              </Group>
-            )}
-          </Group>
-        );
-      })}
+              )}
+            </Paper>
+          );
+        })}
+      </SimpleGrid>
 
       {participants.length === 0 ? (
         <Text size="sm" c="dimmed">

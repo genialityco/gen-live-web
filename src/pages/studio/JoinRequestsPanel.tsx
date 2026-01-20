@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Badge,
   Button,
@@ -7,7 +7,13 @@ import {
   Stack,
   Text,
   Divider,
+  Box,
+  Tabs,
+  ScrollArea,
+  ActionIcon,
+  Tooltip,
 } from "@mantine/core";
+import { IconX } from "@tabler/icons-react";
 import {
   approveJoin,
   rejectJoin,
@@ -15,19 +21,49 @@ import {
   type JoinRequest,
 } from "../../api/live-join-service";
 
+type StatusTab = "pending" | "approved" | "rejected";
+
 export function JoinRequestsPanel({ eventSlug }: { eventSlug: string }) {
   const [items, setItems] = useState<JoinRequest[]>([]);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [tab, setTab] = useState<StatusTab>("pending");
+
+  const orderRef = useRef<Record<string, number>>({});
+  const seqRef = useRef(1);
 
   useEffect(() => {
-    const unsub = subscribeJoinRequests(eventSlug, setItems);
-    console.log("Subscribed to join requests for event:", eventSlug);
+    const unsub = subscribeJoinRequests(eventSlug, (next) => {
+      for (const r of next) {
+        if (!orderRef.current[r.requestId]) {
+          orderRef.current[r.requestId] = seqRef.current++;
+        }
+      }
+      setItems(next);
+    });
     return () => unsub();
   }, [eventSlug]);
 
+  const sortedAll = useMemo(() => {
+    const arr = [...items];
+    arr.sort((a, b) => {
+      const oa = orderRef.current[a.requestId] ?? Number.MAX_SAFE_INTEGER;
+      const ob = orderRef.current[b.requestId] ?? Number.MAX_SAFE_INTEGER;
+      return oa - ob;
+    });
+    return arr;
+  }, [items]);
+
   const pending = useMemo(
-    () => items.filter((i) => i.status === "pending"),
-    [items]
+    () => sortedAll.filter((i) => i.status === "pending"),
+    [sortedAll],
+  );
+  const approved = useMemo(
+    () => sortedAll.filter((i) => i.status === "approved"),
+    [sortedAll],
+  );
+  const rejected = useMemo(
+    () => sortedAll.filter((i) => i.status === "rejected"),
+    [sortedAll],
   );
 
   const onApprove = async (requestId: string) => {
@@ -48,59 +84,127 @@ export function JoinRequestsPanel({ eventSlug }: { eventSlug: string }) {
     }
   };
 
+  const renderList = (list: JoinRequest[], status: StatusTab) => {
+    if (list.length === 0) {
+      const msg =
+        status === "pending"
+          ? "No hay solicitudes pendientes."
+          : status === "approved"
+            ? "Aún no has aceptado a nadie."
+            : "Aún no has rechazado a nadie.";
+
+      return (
+        <Text size="sm" c="dimmed" ta="center" py="md">
+          {msg}
+        </Text>
+      );
+    }
+
+    return (
+      <Stack gap="xs">
+        {list.map((r, idx) => {
+          const isBusy = busyId === r.requestId;
+          const arrivalOrder = orderRef.current[r.requestId] ?? 0;
+
+          const label =
+            status === "pending"
+              ? `#${idx + 1}` // posición en cola del tab pendiente
+              : `#${arrivalOrder || "—"}`; // opcional: en otras tabs
+
+          return (
+            <Paper
+              key={r.requestId}
+              p="sm"
+              radius="md"
+              withBorder
+              style={{
+                border: "1px solid rgba(255,255,255,0.10)",
+                background: "rgba(0,0,0,0.12)",
+              }}
+            >
+              <Group justify="space-between" align="flex-start" wrap="nowrap">
+                <Box style={{ minWidth: 0 }}>
+                  <Group gap="xs" wrap="nowrap">
+                    <Badge size="xs" variant="filled">
+                      {label}
+                    </Badge>
+                    <Text fw={600} size="sm" truncate style={{ maxWidth: 190 }}>
+                      {r.name || "Invitado"}
+                    </Text>
+                  </Group>
+                </Box>
+
+                {/* Acciones solo para pendientes */}
+                {status === "pending" ? (
+                  <Group gap="xs" wrap="nowrap">
+                    <Tooltip label="Rechazar">
+                      <ActionIcon
+                        color="red"
+                        variant="light"
+                        loading={isBusy}
+                        onClick={() => onReject(r.requestId)}
+                        aria-label="Rechazar"
+                      >
+                        <IconX size={16} />
+                      </ActionIcon>
+                    </Tooltip>
+
+                    <Button
+                      size="xs"
+                      loading={isBusy}
+                      onClick={() => onApprove(r.requestId)}
+                    >
+                      Aceptar
+                    </Button>
+                  </Group>
+                ) : (
+                  <Text size="xs" c="dimmed">
+                    —
+                  </Text>
+                )}
+              </Group>
+            </Paper>
+          );
+        })}
+      </Stack>
+    );
+  };
+
   return (
-    <Paper p="sm" radius="md" bg="dark.7" withBorder>
+    <Paper p="sm" radius="md" withBorder>
       <Stack gap="sm">
-        <Group justify="space-between">
-          <Text fw={500}>Solicitudes para unirse</Text>
-          <Badge variant="light">{pending.length} pendientes</Badge>
-        </Group>
+        <Box>
+          <Text fw={700}>Requests</Text>
+          <Text size="xs" c="dimmed">
+            Ordenadas por llegada
+          </Text>
+        </Box>
 
         <Divider />
 
-        {pending.length === 0 ? (
-          <Text size="sm" c="dimmed">
-            No hay solicitudes por ahora.
-          </Text>
-        ) : (
-          pending.slice(0, 10).map((r) => (
-            <Paper key={r.requestId} p="xs" radius="md" withBorder bg="dark.8">
-              <Stack gap={6}>
-                <Group justify="space-between" align="flex-start">
-                  <Stack gap={0}>
-                    <Text size="sm" fw={600}>
-                      {r.name || "Invitado"}
-                    </Text>
-                    <Text size="xs" c="dimmed">
-                      uid: {r.uid}
-                    </Text>
-                  </Stack>
-                  <Badge color="yellow" variant="light">
-                    pendiente
-                  </Badge>
-                </Group>
+        <Tabs
+          value={tab}
+          onChange={(v) => setTab((v as StatusTab) || "pending")}
+          keepMounted={false}
+        >
+          <Tabs.List grow>
+            <Tabs.Tab value="pending">Pendientes</Tabs.Tab>
+            <Tabs.Tab value="approved">Aceptadas</Tabs.Tab>
+            <Tabs.Tab value="rejected">Rechazadas</Tabs.Tab>
+          </Tabs.List>
 
-                <Group justify="flex-end">
-                  <Button
-                    size="xs"
-                    variant="default"
-                    loading={busyId === r.requestId}
-                    onClick={() => onReject(r.requestId)}
-                  >
-                    Rechazar
-                  </Button>
-                  <Button
-                    size="xs"
-                    loading={busyId === r.requestId}
-                    onClick={() => onApprove(r.requestId)}
-                  >
-                    Aceptar
-                  </Button>
-                </Group>
-              </Stack>
-            </Paper>
-          ))
-        )}
+          <ScrollArea h={420} mt="md" offsetScrollbars>
+            <Tabs.Panel value="pending">
+              {renderList(pending, "pending")}
+            </Tabs.Panel>
+            <Tabs.Panel value="approved">
+              {renderList(approved, "approved")}
+            </Tabs.Panel>
+            <Tabs.Panel value="rejected">
+              {renderList(rejected, "rejected")}
+            </Tabs.Panel>
+          </ScrollArea>
+        </Tabs>
       </Stack>
     </Paper>
   );

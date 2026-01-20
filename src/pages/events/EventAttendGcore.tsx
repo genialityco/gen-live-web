@@ -19,7 +19,20 @@ import {
   Image,
   MantineProvider,
   Tabs,
+  Divider,
+  ThemeIcon,
+  rem,
 } from "@mantine/core";
+import { useMediaQuery } from "@mantine/hooks";
+import {
+  IconArrowLeft,
+  IconSettings,
+  IconPlayerPlay,
+  IconMicrophone2,
+  IconCircleDot,
+  IconInfoCircle,
+} from "@tabler/icons-react";
+
 import { fetchOrgBySlug, type Org } from "../../api/orgs";
 import {
   fetchEventsByOrg,
@@ -31,9 +44,9 @@ import {
 import { useAuth } from "../../auth/AuthProvider";
 import { useEventRealtime } from "../../hooks/useEventRealtime";
 import UserSession from "../../components/auth/UserSession";
-import { useMediaQuery } from "@mantine/hooks";
 import { markEventUserAsAttended } from "../../api/event-users";
 import LivePollViewer from "../../components/events/LivePollViewer";
+
 import { ensureRoom, getPlayback, getLiveConfig } from "../../api/livekit-service";
 import {
   requestToJoin,
@@ -44,13 +57,11 @@ import {
   ControlBar,
   LiveKitRoom,
   RoomAudioRenderer,
-} from "@livekit/components-react";
-import { ViewerHlsPlayer } from "../viewer/ViewerHlsPlayer";
-import {
   GridLayout,
   ParticipantTile,
   useTracks,
 } from "@livekit/components-react";
+import { ViewerHlsPlayer } from "../viewer/ViewerHlsPlayer";
 import { Track } from "livekit-client";
 
 function SpeakerPreview() {
@@ -69,7 +80,7 @@ function SpeakerPreview() {
 }
 
 // --------------------------------------------------------------
-// Branding Helpers (mismos que en OrganizationLanding)
+// Branding Helpers
 // --------------------------------------------------------------
 const DEFAULTS = {
   primary: "#228BE6",
@@ -141,8 +152,19 @@ function cssVars(
   } as React.CSSProperties;
 }
 
+function pageBackground(brand: ReturnType<typeof resolveBrandingColors>) {
+  // Fondo suave, “app-like”, sin forzar colores duros.
+  return {
+    background:
+      `radial-gradient(1200px 600px at 10% 0%, ${brand.primary}14, transparent 60%),` +
+      `radial-gradient(900px 500px at 90% 10%, ${brand.secondary}14, transparent 55%),` +
+      `radial-gradient(900px 500px at 50% 100%, ${brand.accent}10, transparent 60%),` +
+      `var(--bg-color)`,
+  } as React.CSSProperties;
+}
+
 // --------------------------------------------------------------
-// Status helpers (reutilizados)
+// Status helpers
 // --------------------------------------------------------------
 const getStatusColor = (status: string) => {
   switch (status) {
@@ -174,6 +196,23 @@ const getStatusText = (status: string) => {
   }
 };
 
+function getJoinMessage(
+  joinState: "idle" | "pending" | "approved" | "rejected" | "kicked"
+) {
+  switch (joinState) {
+    case "pending":
+      return "Solicitud enviada. Espera aprobación…";
+    case "approved":
+      return "Has sido aceptado en el estudio.";
+    case "rejected":
+      return "Tu solicitud no fue aprobada.";
+    case "kicked":
+      return "Tu intervención ha finalizado.";
+    default:
+      return "";
+  }
+}
+
 // --------------------------------------------------------------
 // Header reutilizable para la página de asistencia
 // --------------------------------------------------------------
@@ -197,51 +236,72 @@ function EventAttendHeader({
     <Box
       style={{
         borderBottom: "1px solid var(--mantine-color-gray-3)",
-        background: "white",
+        background: "rgba(255,255,255,0.9)",
         position: "sticky",
         top: 0,
-        zIndex: 100,
-        boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
+        zIndex: 120,
+        backdropFilter: "blur(10px)",
       }}
     >
       <Container size="xl" py="sm">
-        <Group justify="space-between" align="center">
-          <Group gap="md">
-            {org?.branding?.logoUrl ? (
-              <Image
-                src={org.branding.logoUrl}
-                alt={org.name}
-                h={48}
-                w="auto"
-                fit="contain"
-              />
-            ) : (
-              <Title order={3} size="h3" c="var(--mantine-color-brand-9)">
-                {org?.name || "Evento"}
-              </Title>
-            )}
-          </Group>
-          <Group gap="sm">
+        <Group justify="space-between" align="center" wrap="nowrap">
+          <Group gap="sm" wrap="nowrap" style={{ minWidth: 0 }}>
             {slug && eventSlug && (
               <Button
                 component={Link}
                 to={`/org/${slug}/event/${eventSlug}`}
                 variant="subtle"
                 size="xs"
+                leftSection={<IconArrowLeft size={14} />}
               >
-                ← Volver a la info
+                Volver
               </Button>
             )}
+
+            <Group gap="sm" wrap="nowrap" style={{ minWidth: 0 }}>
+              {org?.branding?.logoUrl ? (
+                <Image
+                  src={org.branding.logoUrl}
+                  alt={org.name}
+                  h={34}
+                  w="auto"
+                  fit="contain"
+                />
+              ) : (
+                <ThemeIcon
+                  radius="md"
+                  variant="light"
+                  color="brand"
+                  size={34}
+                >
+                  <IconPlayerPlay size={18} />
+                </ThemeIcon>
+              )}
+
+              <Box style={{ minWidth: 0 }}>
+                <Text fw={800} style={{ lineHeight: 1.1 }} truncate>
+                  {org?.name || "Evento"}
+                </Text>
+                <Text size="xs" c="dimmed" truncate>
+                  Asistencia / transmisión
+                </Text>
+              </Box>
+            </Group>
+          </Group>
+
+          <Group gap="sm" wrap="nowrap">
             {isOwner && slug && (
               <Button
                 component={Link}
                 to={`/org/${slug}/admin`}
                 variant="light"
                 size="xs"
+                leftSection={<IconSettings size={14} />}
               >
-                ⚙️ Admin
+                Admin
               </Button>
             )}
+
             <UserSession
               orgId={orgId}
               eventId={eventId}
@@ -278,7 +338,6 @@ export default function EventAttendGcore() {
   const {
     resolved: realtimeEvent,
     status,
-    // nowCount,
     loading: eventLoading,
   } = useEventRealtime(eventSlugToUse);
 
@@ -514,9 +573,7 @@ export default function EventAttendGcore() {
       }
 
       try {
-        // OJO: si ya guardas HLS en finalEvent.stream.url o similar, usa eso
-        // Si no, llama a tu backend getPlayback(eventSlug)
-        const { playbackUrl } = await getPlayback(eventSlugToUse); // usa tu función actual
+        const { playbackUrl } = await getPlayback(eventSlugToUse);
         setPlaybackUrl(playbackUrl);
       } catch (e: any) {
         console.warn("No se pudo cargar playback:", e?.message || e);
@@ -564,23 +621,23 @@ export default function EventAttendGcore() {
     return () => unsub?.();
   }, [eventSlugToUse, status]);
 
-const handleJoinRequest = async () => {
-  if (!eventSlugToUse) return;
-  if (!isRegistered && !isOwner) return;
+  const handleJoinRequest = async () => {
+    if (!eventSlugToUse) return;
+    if (!isRegistered && !isOwner) return;
 
-  setJoinState("pending");
-  try {
-    const displayName =
-      sessionName ||
-      user?.displayName ||
-      (user?.email ? user.email.split("@")[0] : "Invitado");
+    setJoinState("pending");
+    try {
+      const displayName =
+        sessionName ||
+        user?.displayName ||
+        (user?.email ? user.email.split("@")[0] : "Invitado");
 
-    await requestToJoin(eventSlugToUse, displayName);
-  } catch (e: any) {
-    setJoinState("idle");
-    console.warn(e?.message || e);
-  }
-};
+      await requestToJoin(eventSlugToUse, displayName);
+    } catch (e: any) {
+      setJoinState("idle");
+      console.warn(e?.message || e);
+    }
+  };
 
   // Poll frame config every 2s
   useEffect(() => {
@@ -612,7 +669,6 @@ const handleJoinRequest = async () => {
     };
   }, [eventSlugToUse]);
 
-
   // ----------------------------------------------------------
   // Render con MantineProvider + branding
   // ----------------------------------------------------------
@@ -626,9 +682,24 @@ const handleJoinRequest = async () => {
     "Usuario";
 
   const scale = 0.8;
+
+  const joinMessage = status === "live" ? getJoinMessage(joinState) : "";
+  const canRequestJoin =
+    status === "live" &&
+    (isRegistered || isOwner) &&
+    mode !== "studio" &&
+    joinState !== "pending";
+
   return (
     <MantineProvider theme={theme} withCssVariables>
-      <Box style={cssVars(brand)} bg="var(--bg-color)" c="var(--text-color)">
+      <Box
+        style={{
+          ...cssVars(brand),
+          ...pageBackground(brand),
+          minHeight: "100vh",
+        }}
+        c="var(--text-color)"
+      >
         {/* HEADER con branding */}
         <EventAttendHeader
           org={org}
@@ -642,10 +713,10 @@ const handleJoinRequest = async () => {
         {/* ESTADO CARGANDO */}
         {contentLoading && !error && (
           <Container size="sm">
-            <Center h={400}>
+            <Center h={420}>
               <Stack align="center" gap="lg">
                 <Loader size="lg" />
-                <Text>Verificando acceso al evento...</Text>
+                <Text c="dimmed">Verificando acceso al evento…</Text>
               </Stack>
             </Center>
           </Container>
@@ -653,19 +724,24 @@ const handleJoinRequest = async () => {
 
         {/* ERROR / NO EVENTO */}
         {!contentLoading && (error || !org || !finalEvent) && (
-          <Container size="sm">
-            <Center h={400}>
+          <Container size="sm" py="xl">
+            <Card radius="lg" withBorder>
               <Stack align="center" gap="md">
-                <Text c="red" size="lg">
+                <ThemeIcon radius="xl" size={44} variant="light" color="red">
+                  <IconInfoCircle size={22} />
+                </ThemeIcon>
+                <Text c="red" fw={700} size="lg" ta="center">
                   {error || "Evento no encontrado"}
                 </Text>
-                <Group>
+
+                <Group justify="center" wrap="wrap">
                   {slug && eventSlug && (
                     <Button
                       component={Link}
                       to={`/org/${slug}/event/${eventSlug}`}
+                      leftSection={<IconArrowLeft size={16} />}
                     >
-                      ← Volver al evento
+                      Volver al evento
                     </Button>
                   )}
                   {slug && (
@@ -679,313 +755,303 @@ const handleJoinRequest = async () => {
                   )}
                 </Group>
               </Stack>
-            </Center>
+            </Card>
           </Container>
         )}
 
-        {/* CONTENIDO PRINCIPAL (cuando todo está ok) */}
+        {/* CONTENIDO PRINCIPAL */}
         {!contentLoading && !error && org && finalEvent && (
-          <Container size="xl" py="xl">
+          <Container size="xl" py={isMobile ? "lg" : "xl"} pb={isMobile ? 84 : undefined}>
+
             <Stack gap="lg">
-              {/* Header del evento (status + info básica) */}
-              <Card shadow="sm" padding="lg" radius="lg" withBorder>
-                <Stack gap="xs">
-                  <Title
-                    order={2}
-                    size={isMobile ? "h4" : "h3"}
-                    style={{
-                      lineHeight: 1.2,
-                      ...(isMobile
-                        ? {
-                            whiteSpace: "normal",
-                            wordBreak: "break-word",
-                          }
-                        : {
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                            whiteSpace: "nowrap",
-                          }),
-                    }}
-                  >
-                    {finalEvent.title}
-                  </Title>
-
-                  <Group
-                    justify="space-between"
-                    align="center"
-                    wrap="wrap"
-                    gap="xs"
-                    style={{ rowGap: 4 }}
-                  >
-                    <Group gap="sm" align="center" wrap="wrap">
-                      <Badge
-                        color={getStatusColor(status)}
-                        size="md"
-                        variant={status === "live" ? "filled" : "light"}
+              {/* Hero del evento */}
+              <Card radius="lg" withBorder p={isMobile ? "md" : "lg"}>
+                <Stack gap="sm">
+                  <Group justify="space-between" align="flex-start" wrap="wrap">
+                    <Box style={{ minWidth: 0, flex: 1 }}>
+                      <Title
+                        order={2}
+                        size={isMobile ? "h4" : "h3"}
+                        style={{
+                          lineHeight: 1.15,
+                          ...(isMobile
+                            ? { whiteSpace: "normal", wordBreak: "break-word" }
+                            : {
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
+                              }),
+                        }}
                       >
-                        {status === "live" && "🔴 "}
-                        {getStatusText(status)}
-                      </Badge>
-                      {status === "live" && (
-                        <Group justify="space-between" mt="sm" wrap="wrap">
-                          <Text size="sm" c="dimmed">
-                            {joinState === "pending" &&
-                              "Solicitud enviada. Espera aprobación…"}
-                            {joinState === "rejected" &&
-                              "Tu solicitud fue rechazada."}
-                            {joinState === "kicked" &&
-                              "Fuiste expulsado del estudio."}
-                            {joinState === "approved" && "Has sido aceptado."}
-                          </Text>
+                        {finalEvent.title}
+                      </Title>
 
-                          <Button
-                            size="xs"
-                            onClick={handleJoinRequest}
-                            disabled={
-                              mode === "studio" ||
-                              joinState === "pending" ||
-                              (!isRegistered && !isOwner)
-                            }
-                            variant="filled"
-                          >
-                            Solicitar unirme
-                          </Button>
-                        </Group>
+                      <Group gap="xs" mt={6} wrap="wrap">
+                        <Badge
+                          color={getStatusColor(status)}
+                          size="md"
+                          variant={status === "live" ? "filled" : "light"}
+                          leftSection={
+                            status === "live" ? (
+                              <IconCircleDot size={14} />
+                            ) : undefined
+                          }
+                        >
+                          {getStatusText(status)}
+                        </Badge>
+                      </Group>
+
+                      {status === "live" && joinMessage && (
+                        <Text size="sm" c="dimmed" mt="xs">
+                          {joinMessage}
+                        </Text>
                       )}
-                    </Group>
-                  </Group>
+                    </Box>
 
-                  {isOwner && slug && eventSlug && (
-                    <Group justify="flex-end">
+                    {/* Acciones owner */}
+                    {isOwner && slug && eventSlug && (
                       <Button
                         component={Link}
                         to={`/org/${slug}/event/${eventSlug}/admin`}
-                        variant="filled"
                         size="xs"
+                        variant="light"
+                        leftSection={<IconSettings size={14} />}
                       >
-                        🎛️ Control
+                        Control
                       </Button>
-                    </Group>
+                    )}
+                  </Group>
+
+                  {/* CTA Desktop */}
+                  {status === "live" && !isMobile && (
+                    <>
+                      <Divider my="xs" />
+                      <Group justify="space-between" align="center" wrap="wrap">
+                        <Group gap="xs" wrap="wrap">
+                          <ThemeIcon
+                            variant="light"
+                            color="brand"
+                            radius="xl"
+                            size={34}
+                          >
+                            <IconMicrophone2 size={18} />
+                          </ThemeIcon>
+                          <Box>
+                            <Text fw={700}>¿Quieres participar en el estudio?</Text>
+                            <Text size="xs" c="dimmed">
+                              Envía una solicitud al anfitrión para habilitar tu micrófono/cámara.
+                            </Text>
+                          </Box>
+                        </Group>
+
+                        <Button
+                          onClick={handleJoinRequest}
+                          disabled={!canRequestJoin}
+                          size="sm"
+                          radius="xl"
+                          leftSection={<IconMicrophone2 size={16} />}
+                        >
+                          Solicitar unirme
+                        </Button>
+                      </Group>
+                    </>
                   )}
                 </Stack>
               </Card>
 
               {/* Layout principal: video + chat */}
-              <Grid gutter="lg">
+              <Grid gutter="lg" align="start">
                 <Grid.Col span={{ base: 12, md: 8 }}>
-                  <Box
-                    style={{
-                      borderRadius: 16,
-                      overflow: "hidden",
-                      backgroundColor: "#000",
-                    }}
+                  <Card
+                    radius="lg"
+                    withBorder
+                    p={0}
+                    style={{ overflow: "hidden" }}
                   >
-                    <Box
-                      style={{
-                        position: "relative",
-                        width: "100%",
-                        paddingTop: "56.25%", // 16:9
-                      }}
-                    >
-                      {status === "live" ? (
-                        <Box style={{ position: "absolute", inset: 0 }}>
-                          {mode === "studio" && speakerToken ? (
-                            <LiveKitRoom
-                              token={speakerToken}
-                              serverUrl={LIVEKIT_WS_URL}
-                              connect
-                              video
-                              audio
-                              style={{ height: "100%" }}
+                    <Box style={{ backgroundColor: "#000" }}>
+                      <Box
+                        style={{
+                          position: "relative",
+                          width: "100%",
+                          paddingTop: "56.25%", // 16:9
+                        }}
+                      >
+                        {status === "live" ? (
+                          <Box style={{ position: "absolute", inset: 0 }}>
+                            {mode === "studio" && speakerToken ? (
+                              <LiveKitRoom
+                                token={speakerToken}
+                                serverUrl={LIVEKIT_WS_URL}
+                                connect
+                                video
+                                audio
+                                style={{ height: "100%" }}
+                              >
+                                <Stack p="md" style={{ height: "100%" }}>
+                                  <SpeakerPreview />
+                                  <ControlBar />
+                                  <RoomAudioRenderer />
+                                </Stack>
+                              </LiveKitRoom>
+                            ) : playbackUrl ? (
+                              <>
+                                <ViewerHlsPlayer src={playbackUrl} />
+                              </>
+                            ) : (
+                              <Center h="100%">
+                                <Stack align="center" gap="xs">
+                                  <Loader />
+                                  <Text c="dimmed">Cargando transmisión…</Text>
+                                </Stack>
+                              </Center>
+                            )}
+                          </Box>
+                        ) : status === "replay" &&
+                          finalEvent.stream &&
+                          "url" in finalEvent.stream &&
+                          finalEvent.stream.url ? (
+                          <iframe
+                            src={
+                              "url" in finalEvent.stream!
+                                ? finalEvent.stream.url
+                                : ""
+                            }
+                            style={{
+                              position: "absolute",
+                              inset: 0,
+                              width: "100%",
+                              height: "100%",
+                              border: "none",
+                            }}
+                            title="Repetición del evento"
+                            frameBorder={0}
+                            allow="autoplay; fullscreen; picture-in-picture"
+                            allowFullScreen
+                          />
+                        ) : status === "upcoming" ? (
+                          <Box
+                            style={{
+                              position: "absolute",
+                              inset: 0,
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              padding: 24,
+                              background: "rgba(255,255,255,0.96)",
+                            }}
+                          >
+                            <Stack
+                              align="center"
+                              gap="sm"
+                              style={{ maxWidth: 520, textAlign: "center" }}
                             >
-                              <Stack p="md" style={{ height: "100%" }}>
-                                {/* Aquí puedes renderizar tiles si quieres, por ahora MVP: solo controles */}
-                                <SpeakerPreview />
-                                <ControlBar />
-                                <RoomAudioRenderer />
-                              </Stack>
-                            </LiveKitRoom>
-                          ) : playbackUrl ? (
-                            <>
-                              <ViewerHlsPlayer src={playbackUrl} />
-                              {/* Frame overlay */}
-                              {/* {showFrame && frameUrl && (
+                              <Text size="xl" fw={800}>
+                                🕒 El evento comenzará pronto
+                              </Text>
+
+                              {timeLeft && (
                                 <Box
                                   style={{
-                                    position: "absolute",
-                                    inset: 0,
-                                    zIndex: 10,
-                                    pointerEvents: "none",
+                                    padding: "8px 16px",
+                                    borderRadius: 999,
+                                    backgroundColor:
+                                      "var(--mantine-color-gray-0)",
+                                    fontVariantNumeric: "tabular-nums",
                                   }}
                                 >
-                                  <img
-                                    src={frameUrl}
-                                    alt="Marco"
-                                    crossOrigin="anonymous"
-                                    onLoad={() =>
-                                      console.log("✅ Frame loaded:", frameUrl)
-                                    }
-                                    onError={(e) =>
-                                      console.error(
-                                        "❌ Frame failed to load:",
-                                        frameUrl,
-                                        e
-                                      )
-                                    }
-                                    style={{
-                                      width: "100%",
-                                      height: "100%",
-                                      objectFit: "cover",
-                                    }}
-                                  />
+                                  <Text size="lg" fw={700}>
+                                    Comienza en {timeLeft}
+                                  </Text>
                                 </Box>
-                              )} */}
-                            </>
-                          ) : (
-                            <Center h="100%">
-                              <Stack align="center" gap="xs">
-                                <Loader />
-                                <Text c="dimmed">Cargando transmisión…</Text>
-                              </Stack>
-                            </Center>
-                          )}
-                        </Box>
-                      ) : status === "replay" &&
-                        finalEvent.stream &&
-                        "url" in finalEvent.stream &&
-                        finalEvent.stream.url ? (
-                        <iframe
-                          src={
-                            "url" in finalEvent.stream!
-                              ? finalEvent.stream.url
-                              : ""
-                          }
-                          style={{
-                            position: "absolute",
-                            inset: 0,
-                            width: "100%",
-                            height: "100%",
-                            border: "none",
-                          }}
-                          title="Repetición del evento"
-                          frameBorder={0}
-                          allow="autoplay; fullscreen; picture-in-picture"
-                          allowFullScreen
-                        />
-                      ) : status === "upcoming" ? (
-                        <Box
-                          style={{
-                            position: "absolute",
-                            inset: 0,
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            padding: 24,
-                            backgroundColor: "#ffffff",
-                          }}
-                        >
-                          <Stack
-                            align="center"
-                            gap="sm"
-                            style={{ maxWidth: 480, textAlign: "center" }}
-                          >
-                            <Text size="xl" fw={800}>
-                              🕒 El evento comenzará pronto
-                            </Text>
+                              )}
 
-                            {timeLeft && (
+                              <Text size="sm" c="dimmed">
+                                Mantén esta ventana abierta. La transmisión se iniciará automáticamente.
+                              </Text>
+                            </Stack>
+                          </Box>
+                        ) : (
+                          <Box
+                            style={{
+                              position: "absolute",
+                              inset: 0,
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              padding: 24,
+                              background: "rgba(255,255,255,0.96)",
+                            }}
+                          >
+                            <Stack
+                              align="center"
+                              gap="sm"
+                              style={{ maxWidth: 520, textAlign: "center" }}
+                            >
                               <Box
                                 style={{
-                                  padding: "8px 16px",
+                                  padding: "4px 12px",
                                   borderRadius: 999,
-                                  backgroundColor:
-                                    "var(--mantine-color-gray-0)",
-                                  fontVariantNumeric: "tabular-nums",
+                                  border: "1px solid var(--mantine-color-gray-3)",
+                                  fontSize: 12,
+                                  textTransform: "uppercase",
+                                  letterSpacing: 0.5,
+                                  fontWeight: 700,
                                 }}
                               >
-                                <Text size="lg" fw={700}>
-                                  Comienza en {timeLeft}
-                                </Text>
+                                Evento finalizado
                               </Box>
-                            )}
 
-                            <Text size="sm" c="dimmed">
-                              Mantén esta ventana abierta. La transmisión se
-                              iniciará automáticamente cuando el anfitrión
-                              comience el evento.
-                            </Text>
-                          </Stack>
-                        </Box>
-                      ) : (
-                        <Box
-                          style={{
-                            position: "absolute",
-                            inset: 0,
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            padding: 24,
-                            backgroundColor: "#ffffff",
-                          }}
-                        >
-                          <Stack
-                            align="center"
-                            gap="sm"
-                            style={{ maxWidth: 480, textAlign: "center" }}
-                          >
-                            <Box
-                              style={{
-                                padding: "4px 12px",
-                                borderRadius: 999,
-                                border: "1px solid var(--mantine-color-gray-3)",
-                                fontSize: 12,
-                                textTransform: "uppercase",
-                                letterSpacing: 0.5,
-                                fontWeight: 600,
-                              }}
-                            >
-                              Evento finalizado
-                            </Box>
+                              <Text size="xl" fw={800}>
+                                📝 Gracias por asistir
+                              </Text>
 
-                            <Text size="xl" fw={800}>
-                              📝 Gracias por asistir
-                            </Text>
+                              <Text size="sm" c="dimmed">
+                                Este evento ha terminado y en este momento no hay transmisión disponible.
+                              </Text>
 
-                            <Text size="sm" c="dimmed">
-                              Este evento ha terminado y en este momento no hay
-                              transmisión disponible.
-                            </Text>
-
-                            {slug && eventSlug && (
-                              <Group gap="xs" mt="xs" justify="center">
-                                <Button
-                                  component={Link}
-                                  to={`/org/${slug}/event/${eventSlug}`}
-                                  size="xs"
-                                  variant="light"
-                                >
-                                  Ver detalles del evento
-                                </Button>
-                              </Group>
-                            )}
-                          </Stack>
-                        </Box>
-                      )}
+                              {slug && eventSlug && (
+                                <Group gap="xs" mt="xs" justify="center">
+                                  <Button
+                                    component={Link}
+                                    to={`/org/${slug}/event/${eventSlug}`}
+                                    size="xs"
+                                    variant="light"
+                                  >
+                                    Ver detalles del evento
+                                  </Button>
+                                </Group>
+                              )}
+                            </Stack>
+                          </Box>
+                        )}
+                      </Box>
                     </Box>
-                  </Box>
+                  </Card>
+
+                  {/* Espacio extra en móvil para que la barra fija no tape contenido */}
+                  {status === "live" && isMobile && mode !== "studio" && (
+                    <Box h={72} />
+                  )}
                 </Grid.Col>
 
                 <Grid.Col span={{ base: 12, md: 4 }}>
-                  <Stack gap="lg">
+                  <Stack gap="lg" style={{ position: "sticky", top: rem(86) }}>
                     {/* Chat con tabs Chat/Preguntas */}
-                    <Card shadow="md" padding="lg" radius="lg" withBorder>
+                    <Card radius="lg" withBorder>
                       <Stack gap="md">
-                        <Title order={4}>💬 Chat del evento</Title>
+                        <Group justify="space-between" align="center">
+                          <Title order={4}>💬 Chat del evento</Title>
+                          {status === "live" && (
+                            <Badge variant="light" color="brand">
+                              En directo
+                            </Badge>
+                          )}
+                        </Group>
 
                         {event?._id ? (
                           <Tabs defaultValue="chat" keepMounted={false}>
-                            <Tabs.List>
-                              <Tabs.Tab value="chat">Chat en directo</Tabs.Tab>
+                            <Tabs.List grow>
+                              <Tabs.Tab value="chat">Chat</Tabs.Tab>
                               <Tabs.Tab value="questions">Preguntas</Tabs.Tab>
                             </Tabs.List>
 
@@ -993,10 +1059,10 @@ const handleJoinRequest = async () => {
                               <Box
                                 style={{
                                   height: 400,
-                                  borderRadius: "12px",
+                                  borderRadius: 12,
                                   overflow: "hidden",
-                                  border:
-                                    "1px solid var(--mantine-color-gray-3)",
+                                  border: "1px solid var(--mantine-color-gray-3)",
+                                  background: "white",
                                 }}
                               >
                                 <iframe
@@ -1031,10 +1097,10 @@ const handleJoinRequest = async () => {
                               <Box
                                 style={{
                                   height: 400,
-                                  borderRadius: "12px",
+                                  borderRadius: 12,
                                   overflow: "hidden",
-                                  border:
-                                    "1px solid var(--mantine-color-gray-3)",
+                                  border: "1px solid var(--mantine-color-gray-3)",
+                                  background: "white",
                                 }}
                               >
                                 <iframe
@@ -1068,8 +1134,7 @@ const handleJoinRequest = async () => {
                         ) : (
                           <Center h={200}>
                             <Text size="sm" c="dimmed" ta="center">
-                              El chat estará disponible cuando se cargue
-                              completamente el evento.
+                              El chat estará disponible cuando se cargue completamente el evento.
                             </Text>
                           </Center>
                         )}
@@ -1080,6 +1145,43 @@ const handleJoinRequest = async () => {
               </Grid>
             </Stack>
           </Container>
+        )}
+
+        {/* CTA fijo en móvil */}
+        {status === "live" && isMobile && mode !== "studio" && (
+          <Box
+            style={{
+              position: "fixed",
+              left: 0,
+              right: 0,
+              bottom: 0,
+              zIndex: 200,
+              padding: 5,
+              background: "rgba(255,255,255,0.92)",
+              borderTop: "1px solid var(--mantine-color-gray-3)",
+              backdropFilter: "blur(10px)",
+            }}
+          >
+            <Container size="xl" p={0}>
+              <Stack gap={6}>
+
+                  <Text size="xs" c="dimmed" ta="center">
+                    ¿Quieres participar en el estudio? Envía una solicitud.
+                  </Text>
+
+                <Button
+                  fullWidth
+                  size="xs"
+                  radius="xl"
+                  onClick={handleJoinRequest}
+                  disabled={!canRequestJoin}
+                  leftSection={<IconMicrophone2 size={16} />}
+                >
+                  Solicitar unirme al estudio
+                </Button>
+              </Stack>
+            </Container>
+          </Box>
         )}
 
         {/* Live Poll Viewer - Drawer de encuestas en tiempo real */}

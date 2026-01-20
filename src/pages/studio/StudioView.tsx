@@ -123,7 +123,7 @@ function StudioRoomUI(props: {
           disabled={props.unread === 0}
           label={props.unread > 99 ? "99+" : props.unread}
           size={18}
-          processing 
+          processing
         >
           <ActionIcon
             size="xl"
@@ -154,6 +154,7 @@ export const StudioView: React.FC<StudioViewProps> = ({
   const [token, setToken] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [skipLiveKit, setSkipLiveKit] = useState(false);
+  const [, setEmergencyReason] = useState<string | null>(null);
   const [resetting, setResetting] = useState(false);
   const [stateWarning, setStateWarning] = useState<string | null>(null);
 
@@ -181,7 +182,6 @@ export const StudioView: React.FC<StudioViewProps> = ({
 
   const [chatOpen, setChatOpen] = useState(false);
   const [unread, setUnread] = useState(0);
-
 
   // Guardar layout en RTDB (tiempo real) y backend
   const handleLayoutModeChange = async (mode: LayoutMode) => {
@@ -213,7 +213,12 @@ export const StudioView: React.FC<StudioViewProps> = ({
         // Sincronizar estado en RTDB para que todos lo vean
         await setEgressState(eventSlug, egressId, st || "");
 
-        if (s.error) setError(String(s.error));
+        if (s?.error) {
+          // ✅ No bloquear el Studio por esto
+          setStateWarning(
+            `No se pudo consultar estado del egress: ${String(s.error)}`,
+          );
+        }
 
         // terminal => stop polling
         if (st && isTerminalEgressStatus(st)) {
@@ -225,8 +230,11 @@ export const StudioView: React.FC<StudioViewProps> = ({
         const delay = st === "starting" || st === "pending" ? 1000 : 3500;
 
         timer = window.setTimeout(() => void tick(), delay);
-      } catch {
+      } catch (e: any) {
+        console.error("Error polling egress status:", e);
         if (!alive) return;
+        // ✅ warning leve, sin bloquear
+        // opcional: evita spamear usando un flag/ref
         timer = window.setTimeout(() => void tick(), 3500);
       }
     };
@@ -250,7 +258,7 @@ export const StudioView: React.FC<StudioViewProps> = ({
       setError(
         err?.response?.data?.message ||
           err.message ||
-          "Error iniciando transmisión"
+          "Error iniciando transmisión",
       );
     } finally {
       setStartingEgress(false);
@@ -269,7 +277,7 @@ export const StudioView: React.FC<StudioViewProps> = ({
       setError(
         err?.response?.data?.message ||
           err.message ||
-          "Error deteniendo transmisión"
+          "Error deteniendo transmisión",
       );
     } finally {
       setStoppingEgress(false);
@@ -296,14 +304,11 @@ export const StudioView: React.FC<StudioViewProps> = ({
           err?.response?.data?.message || err.message || "Error inesperado";
         setError(errorMsg);
 
-        // Permitir continuar sin LiveKit para hosts después de 3 segundos
         if (role === "host") {
-          setTimeout(() => {
-            setStateWarning(
-              "LiveKit no disponible. Modo de emergencia activado."
-            );
-            setSkipLiveKit(true);
-          }, 3000);
+          setEmergencyReason(errorMsg);
+          // ✅ no dependas del timeout para poder entrar
+          // Puedes mantener el timeout como fallback si quieres:
+          // setTimeout(() => setSkipLiveKit(true), 1500);
         }
       }
     };
@@ -353,7 +358,7 @@ export const StudioView: React.FC<StudioViewProps> = ({
   const handleEmergencyReset = async () => {
     if (
       !confirm(
-        "¿Estás seguro de resetear todo el estado? Esto detendrá cualquier transmisión activa."
+        "¿Estás seguro de resetear todo el estado? Esto detendrá cualquier transmisión activa.",
       )
     ) {
       return;
@@ -386,8 +391,8 @@ export const StudioView: React.FC<StudioViewProps> = ({
         setStateWarning(
           `Egress ${egressId.slice(
             0,
-            8
-          )}... no existe. El estado puede estar desincronizado.`
+            8,
+          )}... no existe. El estado puede estar desincronizado.`,
         );
       }
     };
@@ -413,20 +418,52 @@ export const StudioView: React.FC<StudioViewProps> = ({
 
   // Mostrar error solo si no es host o si aún no se activa modo emergencia
   if (error && !skipLiveKit) {
+    const isHost = role === "host";
+
     return (
       <Center h="100vh">
-        <Stack gap="md" align="center">
+        <Stack gap="md" align="center" maw={520} px="md">
           <Alert
             icon={<IconAlertTriangle />}
             title="Error de conexión"
             color="red"
-            maw={500}
+            w="100%"
           >
             {error}
           </Alert>
-          {role === "host" && (
+
+          {isHost ? (
+            <Stack w="100%" gap="xs">
+              <Button
+                onClick={() => {
+                  setStateWarning("Modo de emergencia activado manualmente.");
+                  setSkipLiveKit(true);
+                }}
+              >
+                Entrar en modo emergencia
+              </Button>
+
+              <Button
+                variant="default"
+                onClick={() => {
+                  // reintentar sin recargar toda la app
+                  setError(null);
+                  setToken(null);
+                  setEmergencyReason(null);
+                  setSkipLiveKit(false);
+                }}
+              >
+                Reintentar conexión
+              </Button>
+
+              <Text size="xs" c="dimmed">
+                Si LiveKit o el backend no responden, puedes entrar igual para
+                gestionar el estado del evento/transmisión.
+              </Text>
+            </Stack>
+          ) : (
             <Text size="sm" c="dimmed">
-              Activando modo de emergencia en 3 segundos...
+              Contacta al host para revisar la conexión.
             </Text>
           )}
         </Stack>
@@ -709,7 +746,7 @@ export const StudioView: React.FC<StudioViewProps> = ({
             />
 
             {/* BOTÓN FLOTANTE */}
-            <Affix position={{ bottom: 20, right: 20 }}>
+            {/* <Affix position={{ bottom: 20, right: 20 }}>
               <Indicator
                 disabled={unread === 0}
                 label={unread > 99 ? "99+" : unread}
@@ -730,7 +767,7 @@ export const StudioView: React.FC<StudioViewProps> = ({
                   )}
                 </ActionIcon>
               </Indicator>
-            </Affix>
+            </Affix> */}
           </AppShell.Main>
         </AppShell>
       </LiveKitRoom>
