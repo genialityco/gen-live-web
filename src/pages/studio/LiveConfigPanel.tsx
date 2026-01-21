@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { useEffect, useMemo, useState } from "react";
 import {
+  Accordion,
   Badge,
   Button,
   Group,
@@ -12,6 +13,7 @@ import {
   PasswordInput,
   Divider,
   NumberInput,
+  Box,
 } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { showNotification } from "@mantine/notifications";
@@ -25,9 +27,14 @@ import { IconAlertCircle } from "@tabler/icons-react";
 type Props = {
   eventSlug: string;
   disabled?: boolean;
+  defaultOpened?: boolean; // opcional
 };
 
-export const LiveConfigPanel: React.FC<Props> = ({ eventSlug, disabled }) => {
+export const LiveConfigPanel: React.FC<Props> = ({
+  eventSlug,
+  disabled,
+  defaultOpened = false,
+}) => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -44,7 +51,6 @@ export const LiveConfigPanel: React.FC<Props> = ({ eventSlug, disabled }) => {
       rtmpServerUrl: (v, values) =>
         values.ingestProtocol === "rtmp" && !v ? "RTMP server requerido" : null,
 
-      // ✅ si viene "****", significa "existe y está guardada", no obligues al usuario a reescribir
       rtmpStreamKey: (v, values) => {
         if (values.ingestProtocol !== "rtmp") return null;
         if (!v) return "Stream key requerida";
@@ -106,8 +112,6 @@ export const LiveConfigPanel: React.FC<Props> = ({ eventSlug, disabled }) => {
     setSaving(true);
     try {
       const payload: any = { eventSlug, ...values };
-
-      // ✅ Si viene enmascarada y el usuario no la cambió, NO la mandes (para no sobreescribir)
       if (payload.rtmpStreamKey === "****") delete payload.rtmpStreamKey;
       if (payload.srtIngestUrl === "****") delete payload.srtIngestUrl;
 
@@ -151,7 +155,7 @@ export const LiveConfigPanel: React.FC<Props> = ({ eventSlug, disabled }) => {
 
   if (loading) {
     return (
-      <Paper p="sm" radius="md" bg="dark.7" withBorder>
+      <Paper p="sm" radius="md" withBorder>
         <Group justify="space-between">
           <Text fw={500}>Configuración</Text>
           <Loader size="sm" />
@@ -161,86 +165,106 @@ export const LiveConfigPanel: React.FC<Props> = ({ eventSlug, disabled }) => {
   }
 
   return (
-    <Paper p="sm" radius="md" bg="dark.7" withBorder>
-      <Stack gap="sm">
-        <Group justify="space-between">
-          <Text fw={500}>Configuración del Live</Text>
-          <Badge variant="light">eventSlug: {eventSlug}</Badge>
-        </Group>
+    <Paper p="sm" radius="md" withBorder>
+      <Accordion
+        variant="contained"
+        defaultValue={defaultOpened ? "live-config" : null}
+      >
+        <Accordion.Item value="live-config">
+          <Accordion.Control>
+            <Group justify="space-between" w="100%" wrap="nowrap">
+              <Box style={{ minWidth: 0 }}>
+                <Text fw={600} truncate>
+                  Configuración del Live
+                </Text>
+                <Text size="xs" c="dimmed" truncate>
+                  RTMP/SRT · Playback · Límites
+                </Text>
+              </Box>
+              <Badge variant="light" style={{ whiteSpace: "nowrap" }}>
+                {eventSlug}
+              </Badge>
+            </Group>
+          </Accordion.Control>
 
-        {ingestProtocol === "rtmp" ? (
-          <>
-            <TextInput
-              disabled={disabled}
-              label="RTMP Server"
-              placeholder="rtmp://global-live.mux.com:5222/app"
-              {...form.getInputProps("rtmpServerUrl")}
-            />
-            <PasswordInput
-              disabled={disabled}
-              label="RTMP Stream Key"
-              placeholder={maskedRtmpKey ? "****" : "stream_key..."}
-              description={
-                maskedRtmpKey
-                  ? "Guardada (enmascarada). Escribe para reemplazar."
-                  : undefined
-              }
-              {...form.getInputProps("rtmpStreamKey")}
-            />
-          </>
-        ) : (
-          <PasswordInput
-            disabled={disabled}
-            label="SRT Ingest URL"
-            placeholder={maskedSrt ? "****" : "srt://..."}
-            description={
-              maskedSrt
-                ? "Guardada (enmascarada). Escribe para reemplazar."
-                : undefined
-            }
-            {...form.getInputProps("srtIngestUrl")}
-          />
-        )}
+          <Accordion.Panel>
+            <Stack gap="sm" pt="xs">
+              {ingestProtocol === "rtmp" ? (
+                <>
+                  <TextInput
+                    disabled={disabled}
+                    label="RTMP Server"
+                    placeholder="rtmp://global-live.mux.com:5222/app"
+                    {...form.getInputProps("rtmpServerUrl")}
+                  />
+                  <PasswordInput
+                    disabled={disabled}
+                    label="RTMP Stream Key"
+                    placeholder={maskedRtmpKey ? "****" : "stream_key..."}
+                    description={
+                      maskedRtmpKey
+                        ? "Guardada (enmascarada). Escribe para reemplazar."
+                        : undefined
+                    }
+                    {...form.getInputProps("rtmpStreamKey")}
+                  />
+                </>
+              ) : (
+                <PasswordInput
+                  disabled={disabled}
+                  label="SRT Ingest URL"
+                  placeholder={maskedSrt ? "****" : "srt://..."}
+                  description={
+                    maskedSrt
+                      ? "Guardada (enmascarada). Escribe para reemplazar."
+                      : undefined
+                  }
+                  {...form.getInputProps("srtIngestUrl")}
+                />
+              )}
 
-        <Divider />
+              <Divider />
 
-        <TextInput
-          disabled={disabled}
-          label="Playback HLS URL"
-          placeholder="https://stream.mux.com/<playbackId>.m3u8"
-          {...form.getInputProps("playbackHlsUrl")}
-        />
+              <TextInput
+                disabled={disabled}
+                label="Playback HLS URL"
+                placeholder="https://stream.mux.com/<playbackId>.m3u8"
+                {...form.getInputProps("playbackHlsUrl")}
+              />
 
-        <Group grow>
-          <NumberInput
-            disabled={disabled}
-            label="Max participantes"
-            min={1}
-            {...form.getInputProps("maxParticipants")}
-          />
-        </Group>
+              <Group grow>
+                <NumberInput
+                  disabled={disabled}
+                  label="Max participantes"
+                  min={1}
+                  {...form.getInputProps("maxParticipants")}
+                />
+              </Group>
 
-        <form onSubmit={onSave}>
-          <Group justify="space-between">
-            <Button
-              variant="default"
-              disabled={disabled}
-              onClick={handleAutoFillFromCurrentPlayback}
-            >
-              Usar playback actual
-            </Button>
+              <form onSubmit={onSave}>
+                <Group justify="space-between">
+                  <Button
+                    variant="default"
+                    disabled={disabled}
+                    onClick={handleAutoFillFromCurrentPlayback}
+                  >
+                    Usar playback actual
+                  </Button>
 
-            <Button loading={saving} type="submit" disabled={disabled}>
-              Guardar
-            </Button>
-          </Group>
-        </form>
+                  <Button loading={saving} type="submit" disabled={disabled}>
+                    Guardar
+                  </Button>
+                </Group>
+              </form>
 
-        <Text size="xs" c="dimmed">
-          Tip: si la key aparece enmascarada (****), ya está guardada; solo
-          escribe si quieres reemplazarla.
-        </Text>
-      </Stack>
+              <Text size="xs" c="dimmed">
+                Tip: si la key aparece enmascarada (****), ya está guardada; solo
+                escribe si quieres reemplazarla.
+              </Text>
+            </Stack>
+          </Accordion.Panel>
+        </Accordion.Item>
+      </Accordion>
     </Paper>
   );
 };

@@ -45,8 +45,6 @@ type Props = {
   onStart: () => void;
   onStop: () => void;
   onMode: (m: ProgramMode) => void;
-  panelOpen: boolean;
-  onTogglePanel: () => void;
   layoutMode: LayoutMode;
   onLayoutMode: (m: LayoutMode) => void;
 };
@@ -60,8 +58,6 @@ export function StudioToolbar({
   onToggleFrame,
   onStart,
   onStop,
-  panelOpen,
-  onTogglePanel,
   layoutMode,
   onLayoutMode,
 }: Props) {
@@ -132,14 +128,6 @@ export function StudioToolbar({
             onChange={(e) => onToggleFrame(e.currentTarget.checked)}
             label="Marco"
           />
-
-          <Button
-            size="sm"
-            variant={panelOpen ? "filled" : "default"}
-            onClick={onTogglePanel}
-          >
-            Panel
-          </Button>
         </Group>
       )}
     </Group>

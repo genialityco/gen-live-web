@@ -9,7 +9,6 @@ import {
 } from "@livekit/components-react";
 import { Track } from "livekit-client";
 import type { StageState } from "../../hooks/useStage";
-
 import type { LayoutMode } from "../../types";
 
 type Props = {
@@ -17,15 +16,72 @@ type Props = {
   frameUrl: string;
   stage: StageState;
   layoutMode: LayoutMode;
+
+  // Media layer - separado en visual y audio
+  mediaEnabled: boolean;
+
+  // Visual layer (video/imagen/gif)
+  visualUrl: string;
+  visualType: "image" | "gif" | "video";
+  visualMode: "overlay" | "full";
+  visualLoop: boolean;
+  visualMuted: boolean;
+  visualFit: "cover" | "contain";
+  visualOpacity: number;
+
+  // Audio layer
+  audioUrl: string;
+  audioLoop: boolean;
+  audioMuted: boolean;
+  
+  // Background
+  backgroundUrl: string;
+  backgroundType: "image" | "gif" | "video";
+  backgroundColor: string;
+
+  // Legacy para backward compatibility
+  mediaType: "image" | "gif" | "video" | "audio";
+  mediaUrl: string;
+  mediaMode: "overlay" | "full";
+  mediaLoop: boolean;
+  mediaMuted: boolean;
+  mediaFit: "cover" | "contain";
+  mediaOpacity: number;
 };
 
-export function LiveMonitor({ showFrame, frameUrl, stage, layoutMode }: Props) {
+export function LiveMonitor({
+  showFrame,
+  frameUrl,
+  stage,
+  layoutMode,
+  mediaEnabled,
+  visualUrl,
+  visualType,
+  visualMode,
+  visualLoop,
+  visualMuted,
+  visualFit,
+  visualOpacity,
+  audioUrl,
+  audioLoop,
+  audioMuted,
+  backgroundUrl,
+  backgroundType,
+  backgroundColor,
+  mediaType,
+  mediaUrl,
+  mediaMode,
+  mediaLoop,
+  mediaMuted,
+  mediaFit,
+  mediaOpacity,
+}: Props) {
   const tracks = useTracks(
     [
       { source: Track.Source.ScreenShare, withPlaceholder: false },
       { source: Track.Source.Camera, withPlaceholder: true },
     ],
-    { onlySubscribed: false }
+    { onlySubscribed: false },
   );
 
   // Solo los que están en "escena" para el programa
@@ -44,10 +100,12 @@ export function LiveMonitor({ showFrame, frameUrl, stage, layoutMode }: Props) {
 
     const ss = tracks.find(
       (t) =>
-        t.participant?.identity === uid && t.source === Track.Source.ScreenShare
+        t.participant?.identity === uid &&
+        t.source === Track.Source.ScreenShare,
     );
     const cam = tracks.find(
-      (t) => t.participant?.identity === uid && t.source === Track.Source.Camera
+      (t) =>
+        t.participant?.identity === uid && t.source === Track.Source.Camera,
     );
     return ss ?? cam ?? null;
   }, [tracks, stage.activeUid]);
@@ -62,6 +120,20 @@ export function LiveMonitor({ showFrame, frameUrl, stage, layoutMode }: Props) {
   const effectiveMode = layoutMode;
   const focus = pinnedTrack ?? fallbackSpeaker;
 
+  // Usar visual/audio separados si están disponibles, sino usar legacy
+  const showVisual = !!(mediaEnabled && visualUrl);
+  const showAudio = !!(mediaEnabled && audioUrl);
+  const showLegacyMedia = !!(
+    mediaEnabled &&
+    mediaUrl &&
+    !visualUrl &&
+    !audioUrl
+  );
+
+  const renderVideoTiles =
+    !(showVisual && visualMode === "full") &&
+    !(showLegacyMedia && mediaMode === "full");
+
   return (
     <Box
       style={{
@@ -69,12 +141,159 @@ export function LiveMonitor({ showFrame, frameUrl, stage, layoutMode }: Props) {
         aspectRatio: "16 / 9",
         minHeight: 320,
         height: "100%",
-        background: "#000",
+        background: backgroundColor || "#000",
         overflow: "hidden",
         position: "relative",
       }}
     >
-      {/* MARCO */}
+      {/* BACKGROUND IMAGE (zIndex 0) - Fondo personalizado */}
+      {backgroundUrl && (
+        <Box
+          style={{
+            position: "absolute",
+            inset: 0,
+            zIndex: 0,
+            pointerEvents: "none",
+          }}
+        >
+          {backgroundType === "video" ? (
+            <video
+              src={backgroundUrl}
+              autoPlay
+              playsInline
+              muted
+              loop
+              controls={false}
+              style={{
+                width: "100%",
+                height: "100%",
+                objectFit: "cover",
+                display: "block",
+              }}
+            />
+          ) : (
+            <img
+              src={backgroundUrl}
+              alt="Fondo"
+              style={{
+                width: "100%",
+                height: "100%",
+                objectFit: "cover",
+                display: "block",
+              }}
+            />
+          )}
+        </Box>
+      )}
+
+      {/* VISUAL LAYER (zIndex 10) - video/imagen/gif */}
+      {showVisual && (
+        <Box
+          style={{
+            position: "absolute",
+            inset: 0,
+            zIndex: 10,
+            pointerEvents: "none",
+            opacity:
+              typeof visualOpacity === "number"
+                ? Math.min(1, Math.max(0, visualOpacity))
+                : 1,
+          }}
+        >
+          {visualType === "video" ? (
+            <video
+              src={visualUrl}
+              autoPlay
+              playsInline
+              muted={visualMuted ?? true}
+              loop={visualLoop ?? false}
+              controls={false}
+              style={{
+                width: "100%",
+                height: "100%",
+                objectFit: visualFit ?? "cover",
+                display: "block",
+              }}
+            />
+          ) : (
+            <img
+              src={visualUrl}
+              alt="Visual Media"
+              style={{
+                width: "100%",
+                height: "100%",
+                objectFit: visualFit ?? "cover",
+                display: "block",
+              }}
+            />
+          )}
+        </Box>
+      )}
+
+      {/* AUDIO LAYER (zIndex 11) - separado, siempre invisible */}
+      {showAudio && (
+        <audio
+          src={audioUrl}
+          autoPlay
+          muted={audioMuted ?? true}
+          loop={audioLoop ?? false}
+          style={{ display: "none" }}
+        />
+      )}
+
+      {/* LEGACY MEDIA LAYER para backward compatibility */}
+      {showLegacyMedia && (
+        <Box
+          style={{
+            position: "absolute",
+            inset: 0,
+            zIndex: 10,
+            pointerEvents: "none",
+            opacity:
+              typeof mediaOpacity === "number"
+                ? Math.min(1, Math.max(0, mediaOpacity))
+                : 1,
+          }}
+        >
+          {mediaType === "video" ? (
+            <video
+              src={mediaUrl}
+              autoPlay
+              playsInline
+              muted={mediaMuted ?? true}
+              loop={mediaLoop ?? false}
+              controls={false}
+              style={{
+                width: "100%",
+                height: "100%",
+                objectFit: mediaFit ?? "cover",
+                display: "block",
+              }}
+            />
+          ) : mediaType === "audio" ? (
+            <audio
+              src={mediaUrl}
+              autoPlay
+              muted={mediaMuted ?? true}
+              loop={mediaLoop ?? false}
+              style={{ display: "none" }}
+            />
+          ) : (
+            <img
+              src={mediaUrl}
+              alt="Media"
+              style={{
+                width: "100%",
+                height: "100%",
+                objectFit: mediaFit ?? "cover",
+                display: "block",
+              }}
+            />
+          )}
+        </Box>
+      )}
+
+      {/* FRAME (zIndex 20) */}
       {showFrame && frameUrl && (
         <Box
           style={{
@@ -89,52 +308,134 @@ export function LiveMonitor({ showFrame, frameUrl, stage, layoutMode }: Props) {
             alt="Marco"
             style={{ width: "100%", height: "100%", objectFit: "cover" }}
           />
-          {/* <Badge
-            color="red"
-            size="md"
-            style={{ position: "absolute", top: 16, left: 16 }}
-          >
-            EN VIVO
-          </Badge> */}
         </Box>
       )}
 
-      {/* VIDEO */}
-      <Box style={{ position: "absolute", inset: 0, zIndex: 1 }}>
-        {(() => {
-          switch (effectiveMode) {
-            case "grid":
-              return (
-                <GridLayout tracks={stageTracks}>
-                  <ParticipantTile />
-                </GridLayout>
-              );
-            case "speaker":
-              return focus ? (
-                <FocusLayout trackRef={focus}>
-                  <ParticipantTile trackRef={focus} />
-                </FocusLayout>
-              ) : (
-                <Center h="100%">
-                  <Text c="dimmed">Nadie en escena</Text>
-                </Center>
-              );
-            case "presentation":
-              // Layout: principal grande, otros en columna, cámaras centradas y proporcionadas
-              return focus ? (
-                <Box
-                  style={{
-                    width: "100%",
-                    height: "100%",
-                    display: "flex",
-                    flexDirection: "row",
-                  }}
-                >
+      {/* VIDEO TILES (zIndex 1) */}
+      {renderVideoTiles && (
+        <Box style={{ position: "absolute", inset: 0, zIndex: 1 }}>
+          {(() => {
+            switch (effectiveMode) {
+              case "grid":
+                return (
+                  <GridLayout tracks={stageTracks}>
+                    <ParticipantTile />
+                  </GridLayout>
+                );
+
+              case "speaker":
+                return focus ? (
+                  <FocusLayout trackRef={focus}>
+                    <ParticipantTile trackRef={focus} />
+                  </FocusLayout>
+                ) : (
+                  <Center h="100%">
+                    <Text c="dimmed">Nadie en escena</Text>
+                  </Center>
+                );
+
+              case "presentation":
+                return focus ? (
                   <Box
                     style={{
-                      flex: 3,
+                      width: "100%",
                       height: "100%",
-                      minWidth: 0,
+                      display: "flex",
+                      flexDirection: "row",
+                      overflow: "hidden",
+                    }}
+                  >
+                    {/* PARTICIPANTES (IZQUIERDA) */}
+                    <Box
+                      style={{
+                        flex: 1,
+                        height: "100%",
+                        minWidth: 220,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        overflowY: "auto",
+                        flexDirection: "column",
+                      }}
+                    >
+                      {stageTracks
+                        .filter((t) => t !== focus)
+                        .map((t) => (
+                          <Box
+                            key={t.participant?.identity}
+                            style={{
+                              padding: 6,
+                              flexShrink: 0,
+                            }}
+                          >
+                            <Box
+                              style={{
+                                width: "100%",
+                                aspectRatio: "16 / 9",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                              }}
+                            >
+                              <ParticipantTile
+                                trackRef={t}
+                                style={{
+                                  width: "100%",
+                                  height: "100%",
+                                  objectFit: "contain",
+                                }}
+                              />
+                            </Box>
+                          </Box>
+                        ))}
+                    </Box>
+
+                    {/* PRESENTACIÓN (DERECHA) */}
+                    <Box
+                      style={{
+                        flex: 3,
+                        height: "100%",
+                        minWidth: 0,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      <Box
+                        style={{
+                          width: "100%",
+                          maxWidth: "100%",
+                          aspectRatio: "16 / 9",
+                          maxHeight: "100%",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                        }}
+                      >
+                        <ParticipantTile
+                          trackRef={focus}
+                          style={{
+                            width: "100%",
+                            height: "100%",
+                            objectFit: "contain",
+                          }}
+                        />
+                      </Box>
+                    </Box>
+                  </Box>
+                ) : (
+                  <Center h="100%">
+                    <Text c="dimmed">Nadie en escena</Text>
+                  </Center>
+                );
+
+              case "pip":
+                return focus ? (
+                  <Box
+                    style={{
+                      width: "100%",
+                      height: "100%",
+                      position: "relative",
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "center",
@@ -160,158 +461,136 @@ export function LiveMonitor({ showFrame, frameUrl, stage, layoutMode }: Props) {
                         }}
                       />
                     </Box>
-                  </Box>
-                  <Box
-                    style={{
-                      flex: 1,
-                      height: "100%",
-                      minWidth: 0,
-                      background: "#111",
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: 0,
-                      padding: 0,
-                    }}
-                  >
-                    {stageTracks
-                      .filter((t) => t !== focus)
-                      .map((t) => (
-                        <Box
-                          key={t.participant?.identity}
-                          style={{
-                            flex: 1,
-                            minHeight: 0,
-                            minWidth: 0,
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                          }}
-                        >
+
+                    <Box
+                      style={{
+                        position: "absolute",
+                        bottom: 36,
+                        left: 36,
+                        display: "flex",
+                        gap: 8,
+                      }}
+                    >
+                      {stageTracks
+                        .filter((t) => t !== focus)
+                        .map((t) => (
                           <Box
+                            key={t.participant?.identity}
                             style={{
-                              width: "100%",
-                              maxWidth: "100%",
-                              aspectRatio: "16/9",
-                              maxHeight: "100%",
+                              width: 150,
+                              height: 92,
+                              background: "#222",
+                              borderRadius: 8,
+                              overflow: "hidden",
                               display: "flex",
                               alignItems: "center",
                               justifyContent: "center",
                             }}
                           >
-                            <ParticipantTile
-                              trackRef={t}
+                            <Box
                               style={{
                                 width: "100%",
                                 height: "100%",
-                                objectFit: "contain",
+                                aspectRatio: "16/9",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
                               }}
-                            />
+                            >
+                              <ParticipantTile
+                                trackRef={t}
+                                style={{
+                                  width: "100%",
+                                  height: "100%",
+                                  objectFit: "contain",
+                                }}
+                              />
+                            </Box>
                           </Box>
-                        </Box>
-                      ))}
+                        ))}
+                    </Box>
                   </Box>
-                </Box>
-              ) : (
-                <Center h="100%">
-                  <Text c="dimmed">Nadie en escena</Text>
-                </Center>
-              );
-            case "pip":
-              // Picture-in-Picture: focus grande centrado, los demás pequeños en esquina
-              return focus ? (
-                <Box
-                  style={{
-                    width: "100%",
-                    height: "100%",
-                    position: "relative",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                  }}
-                >
+                ) : (
+                  <Center h="100%">
+                    <Text c="dimmed">Nadie en escena</Text>
+                  </Center>
+                );
+
+              case "side_by_side": {
+                const [first, second] = stageTracks;
+                return first && second ? (
+                  <Box
+                    style={{ width: "100%", height: "100%", display: "flex" }}
+                  >
+                    <Box
+                      style={{
+                        flex: 1,
+                        minWidth: 0,
+                        minHeight: 0,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      <Box
+                        style={{
+                          width: "100%",
+                          maxWidth: "100%",
+                          aspectRatio: "16/9",
+                          maxHeight: "100%",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                        }}
+                      >
+                        <ParticipantTile
+                          trackRef={first}
+                          style={{
+                            width: "100%",
+                            height: "100%",
+                            objectFit: "contain",
+                          }}
+                        />
+                      </Box>
+                    </Box>
+
+                    <Box
+                      style={{
+                        flex: 1,
+                        minWidth: 0,
+                        minHeight: 0,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      <Box
+                        style={{
+                          width: "100%",
+                          maxWidth: "100%",
+                          aspectRatio: "16/9",
+                          maxHeight: "100%",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                        }}
+                      >
+                        <ParticipantTile
+                          trackRef={second}
+                          style={{
+                            width: "100%",
+                            height: "100%",
+                            objectFit: "contain",
+                          }}
+                        />
+                      </Box>
+                    </Box>
+                  </Box>
+                ) : first ? (
                   <Box
                     style={{
                       width: "100%",
-                      maxWidth: "100%",
-                      aspectRatio: "16/9",
-                      maxHeight: "100%",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                    }}
-                  >
-                    <ParticipantTile
-                      trackRef={focus}
-                      style={{
-                        width: "100%",
-                        height: "100%",
-                        objectFit: "contain",
-                      }}
-                    />
-                  </Box>
-                  <Box
-                    style={{
-                      position: "absolute",
-                      bottom: 36,
-                      left: 36,
-                      display: "flex",
-                      gap: 8,
-                    }}
-                  >
-                    {stageTracks
-                      .filter((t) => t !== focus)
-                      .map((t) => (
-                        <Box
-                          key={t.participant?.identity}
-                          style={{
-                            width: 150,
-                            height: 92,
-                            background: "#222",
-                            borderRadius: 8,
-                            overflow: "hidden",
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                          }}
-                        >
-                          <Box
-                            style={{
-                              width: "100%",
-                              height: "100%",
-                              aspectRatio: "16/9",
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "center",
-                            }}
-                          >
-                            <ParticipantTile
-                              trackRef={t}
-                              style={{
-                                width: "100%",
-                                height: "100%",
-                                objectFit: "contain",
-                              }}
-                            />
-                          </Box>
-                        </Box>
-                      ))}
-                  </Box>
-                </Box>
-              ) : (
-                <Center h="100%">
-                  <Text c="dimmed">Nadie en escena</Text>
-                </Center>
-              );
-            case "side_by_side": {
-              // Dos participantes principales lado a lado, cámaras centradas y proporcionadas
-              const [first, second] = stageTracks;
-              return first && second ? (
-                <Box style={{ width: "100%", height: "100%", display: "flex" }}>
-                  <Box
-                    style={{
-                      flex: 1,
-                      minWidth: 0,
-                      minHeight: 0,
+                      height: "100%",
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "center",
@@ -338,84 +617,30 @@ export function LiveMonitor({ showFrame, frameUrl, stage, layoutMode }: Props) {
                       />
                     </Box>
                   </Box>
-                  <Box
-                    style={{
-                      flex: 1,
-                      minWidth: 0,
-                      minHeight: 0,
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                    }}
-                  >
-                    <Box
-                      style={{
-                        width: "100%",
-                        maxWidth: "100%",
-                        aspectRatio: "16/9",
-                        maxHeight: "100%",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                      }}
-                    >
-                      <ParticipantTile
-                        trackRef={second}
-                        style={{
-                          width: "100%",
-                          height: "100%",
-                          objectFit: "contain",
-                        }}
-                      />
-                    </Box>
-                  </Box>
-                </Box>
-              ) : first ? (
-                <Box
-                  style={{
-                    width: "100%",
-                    height: "100%",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                  }}
-                >
-                  <Box
-                    style={{
-                      width: "100%",
-                      maxWidth: "100%",
-                      aspectRatio: "16/9",
-                      maxHeight: "100%",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                    }}
-                  >
-                    <ParticipantTile
-                      trackRef={first}
-                      style={{
-                        width: "100%",
-                        height: "100%",
-                        objectFit: "contain",
-                      }}
-                    />
-                  </Box>
-                </Box>
-              ) : (
-                <Center h="100%">
-                  <Text c="dimmed">Nadie en escena</Text>
-                </Center>
-              );
+                ) : (
+                  <Center h="100%">
+                    <Text c="dimmed">Nadie en escena</Text>
+                  </Center>
+                );
+              }
+
+              default:
+                return (
+                  <Center h="100%">
+                    <Text c="dimmed">Nadie en escena</Text>
+                  </Center>
+                );
             }
-            default:
-              return (
-                <Center h="100%">
-                  <Text c="dimmed">Nadie en escena</Text>
-                </Center>
-              );
-          }
-        })()}
-      </Box>
+          })()}
+        </Box>
+      )}
+
+      {/* Si mediaMode=full y no hay video tiles, muestra fallback si no hay media */}
+      {!renderVideoTiles && !showVisual && !showAudio && !showLegacyMedia && (
+        <Center h="100%">
+          <Text c="dimmed">Sin contenido</Text>
+        </Center>
+      )}
     </Box>
   );
 }

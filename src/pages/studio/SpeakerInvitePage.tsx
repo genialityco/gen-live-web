@@ -15,18 +15,19 @@ import {
 } from "@mantine/core";
 import { IconAlertCircle, IconVideo } from "@tabler/icons-react";
 import { StudioView } from "./StudioView";
+import { getLivekitToken } from "../../api/livekit-service";
 
 /**
  * Página para speakers invitados
- * URL: /studio/:eventSlug/speaker/:inviteToken
+ * URL: /studio/:eventSlug/join (genérica, sin token)
+ * URL: /studio/:eventSlug/speaker/:inviteToken (legacy, con token)
  * 
- * El speaker ingresa con un link de invitación y solo necesita
- * proporcionar su nombre para unirse al studio
+ * El speaker ingresa su nombre y se genera el token dinámicamente
  */
 export const SpeakerInvitePage: React.FC = () => {
   const { eventSlug, inviteToken } = useParams<{
     eventSlug: string;
-    inviteToken: string;
+    inviteToken?: string;
   }>();
   const navigate = useNavigate();
 
@@ -34,18 +35,32 @@ export const SpeakerInvitePage: React.FC = () => {
   const [inputName, setInputName] = useState("");
   const [isValidating, setIsValidating] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [generatedToken, setGeneratedToken] = useState<string | null>(null);
+  const [isGeneratingToken, setIsGeneratingToken] = useState(false);
 
-  // Validar token al montar
+  // Validar token al montar (solo si viene token en URL)
   useEffect(() => {
     const validateInvite = async () => {
-      if (!eventSlug || !inviteToken) {
-        setError("Link de invitación inválido");
+      if (!eventSlug) {
+        setError("Evento no válido");
+        setIsValidating(false);
+        return;
+      }
+
+      // Si no hay token en la URL, es acceso genérico - solo verificar si hay nombre guardado
+      if (!inviteToken) {
+        const savedName = localStorage.getItem(`speaker_name_${eventSlug}`);
+        const savedToken = localStorage.getItem(`speaker_token_${eventSlug}`);
+        if (savedName && savedToken) {
+          setDisplayName(savedName);
+          setGeneratedToken(savedToken);
+        }
         setIsValidating(false);
         return;
       }
 
       try {
-        // TODO: Validar el token contra el backend
+        // TODO: Validar el token contra el backend (legacy flow)
         // Por ahora, aceptamos cualquier token (MVP)
         // const response = await api.get(`/studio/validate-invite/${eventSlug}/${inviteToken}`);
         
@@ -65,21 +80,53 @@ export const SpeakerInvitePage: React.FC = () => {
     void validateInvite();
   }, [eventSlug, inviteToken]);
 
-  const handleJoin = () => {
+  const handleJoin = async () => {
     if (!inputName.trim()) {
       setError("Por favor ingresa tu nombre");
       return;
     }
 
-    // Guardar el nombre localmente
-    localStorage.setItem(`speaker_name_${eventSlug}`, inputName.trim());
-    setDisplayName(inputName.trim());
+    // Si no hay token en URL, generar dinámicamente
+    if (!inviteToken) {
+      setIsGeneratingToken(true);
+      setError(null);
+      
+      try {
+        // Generar token desde el backend
+        const { token } = await getLivekitToken({
+          eventSlug: eventSlug!,
+          role: "speaker",
+          name: inputName.trim(),
+        });
+
+        // Guardar nombre y token localmente
+        localStorage.setItem(`speaker_name_${eventSlug}`, inputName.trim());
+        localStorage.setItem(`speaker_token_${eventSlug}`, token);
+        
+        setDisplayName(inputName.trim());
+        setGeneratedToken(token);
+      } catch (err: any) {
+        console.error("Error generando token:", err);
+        setError(
+          err?.response?.data?.message ||
+          "Error al unirse al estudio. Verifica que el evento esté activo."
+        );
+      } finally {
+        setIsGeneratingToken(false);
+      }
+    } else {
+      // Flujo legacy con token en URL
+      localStorage.setItem(`speaker_name_${eventSlug}`, inputName.trim());
+      setDisplayName(inputName.trim());
+    }
   };
 
   const handleChangeName = () => {
     localStorage.removeItem(`speaker_name_${eventSlug}`);
+    localStorage.removeItem(`speaker_token_${eventSlug}`);
     setDisplayName("");
     setInputName("");
+    setGeneratedToken(null);
   };
 
   // Validando token
@@ -149,8 +196,9 @@ export const SpeakerInvitePage: React.FC = () => {
               size="md"
               onClick={handleJoin}
               disabled={!inputName.trim()}
+              loading={isGeneratingToken}
             >
-              Unirme al Studio
+              {isGeneratingToken ? "Generando acceso..." : "Unirme al Studio"}
             </Button>
 
             <Text size="xs" c="dimmed" ta="center">
@@ -171,7 +219,8 @@ export const SpeakerInvitePage: React.FC = () => {
         eventSlug={eventSlug!}
         role="speaker"
         displayName={displayName}
-        identity={`speaker-${inviteToken}`}
+        identity={inviteToken ? `speaker-${inviteToken}` : undefined}
+        token={generatedToken || undefined}
       />
       
       {/* Botón pequeño para cambiar nombre */}

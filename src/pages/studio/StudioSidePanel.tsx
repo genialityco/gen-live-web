@@ -12,8 +12,10 @@ import {
 
 import { LiveConfigPanel } from "./LiveConfigPanel";
 import { JoinRequestsPanel } from "./JoinRequestsPanel";
-import { FrameControls } from "../../components/FrameControls";
 import { InvitationManager } from "../../components/studio/InvitationManager";
+import { FrameControls } from "./FrameControls";
+import { BackgroundControls } from "./BackgroundControls";
+import { MediaLibrary } from "./MediaLibrary";
 
 type Props = {
   role: "host" | "speaker";
@@ -22,7 +24,12 @@ type Props = {
 
   showFrame: boolean;
   frameUrl: string;
-  onRefreshFrameConfig: () => void;
+  backgroundUrl: string;
+  backgroundType: "image" | "gif" | "video";
+  activeVisualId?: string;
+  activeAudioId?: string;
+
+  onRefreshFrameConfig: () => void; // renombrable luego
 };
 
 export const StudioSidePanel: React.FC<Props> = ({
@@ -31,49 +38,79 @@ export const StudioSidePanel: React.FC<Props> = ({
   disabled,
   showFrame,
   frameUrl,
+  backgroundUrl,
+  backgroundType,
   onRefreshFrameConfig,
+  activeVisualId,
+  activeAudioId,
 }) => {
   const isSpeaker = role === "speaker";
   return (
-    <Tabs defaultValue={isSpeaker ? "info" : "control"} keepMounted={false}>
+    <Tabs defaultValue={isSpeaker ? "info" : "control"} keepMounted={false} style={{ display: "flex", flexDirection: "column", height: "100%" }}>
       <Tabs.List grow>
         {!isSpeaker && <Tabs.Tab value="control">Control</Tabs.Tab>}
+        {!isSpeaker && <Tabs.Tab value="media">Biblioteca</Tabs.Tab>}
         {!isSpeaker && <Tabs.Tab value="invites">Invitaciones</Tabs.Tab>}
         {!isSpeaker && <Tabs.Tab value="requests">Requests</Tabs.Tab>}
-        <Tabs.Tab value="info">Info</Tabs.Tab>
       </Tabs.List>
 
-      <ScrollArea mt="md" h="calc(100dvh - 140px)">
+      <ScrollArea mt="md" style={{ flex: 1 }}>
         {!isSpeaker && (
           <Tabs.Panel value="control">
             <Stack gap="md">
               <LiveConfigPanel eventSlug={eventSlug} disabled={disabled} />
 
-            <Paper p="sm" radius="md" withBorder>
-              <Stack gap="sm">
-                <Group justify="space-between">
-                  <Text fw={600}>Marco gráfico</Text>
-                  <Text size="xs" c="dimmed">
-                    {showFrame ? "Activo" : "Inactivo"}
-                  </Text>
-                </Group>
+              <Paper p="sm" radius="md" withBorder>
+                <Stack gap="sm">
+                  <Group justify="space-between">
+                    <Text fw={600}>Marco gráfico</Text>
+                    <Text size="xs" c="dimmed">
+                      {showFrame ? "Activo" : "Inactivo"}
+                    </Text>
+                  </Group>
 
-                <FrameControls
+                  <FrameControls
+                    eventSlug={eventSlug}
+                    showFrame={showFrame}
+                    frameUrl={frameUrl}
+                    onUpdate={onRefreshFrameConfig}
+                  />
+                </Stack>
+              </Paper>
+
+              <Paper p="sm" radius="md" withBorder>
+                <BackgroundControls
                   eventSlug={eventSlug}
-                  showFrame={showFrame}
-                  frameUrl={frameUrl}
+                  backgroundUrl={backgroundUrl}
+                  backgroundType={backgroundType}
                   onUpdate={onRefreshFrameConfig}
+                  disabled={disabled}
                 />
+              </Paper>
 
-                <Divider />
+              <Paper p="sm" radius="md" withBorder>
+                <Stack gap="sm">
+                  <Divider />
 
-                <Text size="xs" c="dimmed">
-                  Tip: el monitor muestra solo los que están “En escena”.
-                </Text>
-              </Stack>
-            </Paper>
-          </Stack>
-        </Tabs.Panel>
+                  <Text size="xs" c="dimmed">
+                    Tip: el monitor muestra solo los que están “En escena”.
+                  </Text>
+                </Stack>
+              </Paper>
+            </Stack>
+          </Tabs.Panel>
+        )}
+
+        {!isSpeaker && (
+          <Tabs.Panel value="media">
+            <MediaLibrary
+              eventSlug={eventSlug}
+              activeVisualId={activeVisualId}
+              activeAudioId={activeAudioId}
+              onConfigChange={onRefreshFrameConfig}
+              disabled={disabled}
+            />
+          </Tabs.Panel>
         )}
 
         {!isSpeaker && (
@@ -87,20 +124,6 @@ export const StudioSidePanel: React.FC<Props> = ({
             <JoinRequestsPanel eventSlug={eventSlug} />
           </Tabs.Panel>
         )}
-
-        <Tabs.Panel value="info">
-          <Paper p="sm" radius="md" withBorder>
-            <Stack gap="xs">
-              <Text fw={600}>Atajos / Tips</Text>
-              <Text size="sm" c="dimmed">
-                • “Subir/Bajar” controla quién sale al programa.
-              </Text>
-              <Text size="sm" c="dimmed">
-                • “Pin” fuerza modo Speaker con ese usuario.
-              </Text>
-            </Stack>
-          </Paper>
-        </Tabs.Panel>
       </ScrollArea>
     </Tabs>
   );

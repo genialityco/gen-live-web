@@ -41,6 +41,10 @@ export const routes = [
     element: <LkEgressProgram />,
   },
   {
+    path: "/studio/:eventSlug/join",
+    element: <SpeakerInvitePage />,
+  },
+  {
     path: "/studio/:eventSlug/speaker/:inviteToken",
     element: <SpeakerInvitePage />,
   },

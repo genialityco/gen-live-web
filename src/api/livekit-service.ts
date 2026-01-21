@@ -18,6 +18,24 @@ export interface LiveConfig {
   lastError?: string;
   showFrame?: boolean;
   frameUrl?: string;
+  // Media library support - múltiples capas
+  activeMediaItemId?: string; // Legacy
+  activeVisualItemId?: string;
+  activeAudioItemId?: string;
+  mediaEnabled?: boolean;
+  // Legacy fields
+  mediaUrl?: string;
+  mediaType?: "image" | "gif" | "video" | "audio";
+  // Override fields (pueden ser undefined si se usan defaults del item)
+  mediaMode?: "overlay" | "full";
+  mediaLoop?: boolean;
+  mediaMuted?: boolean;
+  mediaFit?: "cover" | "contain";
+  mediaOpacity?: number;
+  // Background
+  backgroundUrl?: string;
+  backgroundType?: "image" | "gif" | "video";
+  backgroundColor?: string;
 }
 
 export interface EnsureRoomResponse {
@@ -76,7 +94,7 @@ export async function getLivekitToken(params: {
   if (params.identity) qs.append("identity", params.identity);
 
   const { data } = await api.get<TokenResponse>(
-    `/livekit/token?${qs.toString()}`
+    `/livekit/token?${qs.toString()}`,
   );
   return data;
 }
@@ -102,27 +120,27 @@ export async function stopLive(egressId: string) {
 
 export async function getPlayback(eventSlug: string) {
   const { data } = await api.get<PlaybackResponse>(
-    `/live/playback?eventSlug=${encodeURIComponent(eventSlug)}`
+    `/live/playback?eventSlug=${encodeURIComponent(eventSlug)}`,
   );
   return data;
 }
 
 export async function getEgressStatus(egressId: string) {
   const { data } = await api.get<EgressStatusResponse>(
-    `/live/status?egressId=${encodeURIComponent(egressId)}`
+    `/live/status?egressId=${encodeURIComponent(egressId)}`,
   );
   return data;
 }
 
 export async function getLiveConfig(eventSlug: string) {
   const { data } = await api.get<LiveConfig>(
-    `/livekit/config?eventSlug=${encodeURIComponent(eventSlug)}`
+    `/livekit/config?eventSlug=${encodeURIComponent(eventSlug)}`,
   );
   return data;
 }
 
 export async function updateLiveConfig(
-  payload: Partial<LiveConfig> & { eventSlug: string }
+  payload: Partial<LiveConfig> & { eventSlug: string },
 ) {
   const { data } = await api.put(`/livekit/config`, payload);
   return data as { ok: boolean; id: string };
@@ -137,13 +155,61 @@ export async function uploadFrame(eventSlug: string, file: File) {
     formData,
     {
       headers: { "Content-Type": "multipart/form-data" },
-    }
+    },
   );
   return data;
 }
 
 export async function deleteFrame(eventSlug: string) {
   const { data } = await api.delete<{ ok: boolean }>("/livekit/frame", {
+    params: { eventSlug },
+  });
+  return data;
+}
+
+export async function uploadBackground(eventSlug: string, file: File) {
+  const formData = new FormData();
+  formData.append("eventSlug", eventSlug);
+  formData.append("background", file);
+  const { data } = await api.post<{ 
+    ok: boolean; 
+    backgroundUrl: string;
+    backgroundType: "image" | "gif" | "video";
+  }>(
+    "/livekit/background/upload",
+    formData,
+    {
+      headers: { "Content-Type": "multipart/form-data" },
+    },
+  );
+  return data;
+}
+
+export async function deleteBackground(eventSlug: string) {
+  const { data } = await api.delete<{ ok: boolean }>("/livekit/background", {
+    params: { eventSlug },
+  });
+  return data;
+}
+
+export async function uploadMedia(eventSlug: string, file: File) {
+  const formData = new FormData();
+  formData.append("eventSlug", eventSlug);
+  formData.append("media", file);
+
+  const { data } = await api.post<{
+    ok: boolean;
+    mediaUrl: string;
+    mediaType: "image" | "gif" | "video" | "audio";
+  }>("/ livekit/media/upload", formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+
+  return data;
+}
+
+export async function deleteMedia(eventSlug: string) {
+  const { data } = await api.delete<{ ok: boolean }>("/livekit/media", {
     params: { eventSlug },
   });
   return data;

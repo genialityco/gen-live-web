@@ -10,6 +10,7 @@ import {
   getLiveConfig,
   updateLiveConfig,
 } from "../../api/livekit-service";
+import { getEffectiveMediaConfig } from "../../api/media-library-service";
 import {
   LiveKitRoom,
   ControlBar,
@@ -26,8 +27,8 @@ import {
   Paper,
   AppShell,
   ScrollArea,
-  Drawer,
   Container,
+  Drawer,
   Group,
   Badge,
   Button,
@@ -70,6 +71,7 @@ interface StudioViewProps {
   role: Role;
   displayName?: string;
   identity?: string;
+  token?: string; // Token pre-generado (opcional)
 }
 
 function normalizeStatus(s: any): string {
@@ -150,6 +152,7 @@ export const StudioView: React.FC<StudioViewProps> = ({
   role,
   displayName: initialDisplayName,
   identity,
+  token: preGeneratedToken,
 }) => {
   const [token, setToken] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -160,6 +163,39 @@ export const StudioView: React.FC<StudioViewProps> = ({
 
   const [showFrame, setShowFrame] = useState(false);
   const [frameUrl, setFrameUrl] = useState("");
+  const [, setActiveMediaItemId] = useState(""); // Legacy
+  const [activeVisualId, setActiveVisualId] = useState("");
+  const [activeAudioId, setActiveAudioId] = useState("");
+  const [mediaEnabled, setMediaEnabled] = useState(false);
+  
+  // Estados separados para visual y audio
+  const [visualUrl, setVisualUrl] = useState("");
+  const [visualType, setVisualType] = useState<"image" | "gif" | "video">("image");
+  const [visualMode, setVisualMode] = useState<"overlay" | "full">("overlay");
+  const [visualLoop, setVisualLoop] = useState(false);
+  const [visualMuted, setVisualMuted] = useState(true);
+  const [visualFit, setVisualFit] = useState<"cover" | "contain">("cover");
+  const [visualOpacity, setVisualOpacity] = useState(1);
+  
+  const [audioUrl, setAudioUrl] = useState("");
+  const [audioLoop, setAudioLoop] = useState(false);
+  const [audioMuted, setAudioMuted] = useState(true);
+  
+  // Background
+  const [backgroundUrl, setBackgroundUrl] = useState("");
+  const [backgroundType, setBackgroundType] = useState<"image" | "gif" | "video">("image");
+  const [backgroundColor, setBackgroundColor] = useState("#000000");
+  
+  // Legacy para backward compatibility
+  const [mediaType, setMediaType] = useState<"image" | "gif" | "video" | "audio">(
+    "image",
+  );
+  const [mediaUrl, setMediaUrl] = useState("");
+  const [mediaMode, setMediaMode] = useState<"overlay" | "full">("overlay");
+  const [mediaLoop, setMediaLoop] = useState(false);
+  const [mediaMuted, setMediaMuted] = useState(true);
+  const [mediaFit, setMediaFit] = useState<"cover" | "contain">("cover");
+  const [mediaOpacity, setMediaOpacity] = useState(1);
 
   const [startingEgress, setStartingEgress] = useState(false);
   const [stoppingEgress, setStoppingEgress] = useState(false);
@@ -177,8 +213,6 @@ export const StudioView: React.FC<StudioViewProps> = ({
   // Usar egressId y egressStatus del stage (sincronizado via RTDB)
   const egressId = stage.egressId ?? null;
   const egressStatus = stage.egressStatus ?? null;
-
-  const [panelOpen, setPanelOpen] = useState(false);
 
   const [chatOpen, setChatOpen] = useState(false);
   const [unread, setUnread] = useState(0);
@@ -289,6 +323,13 @@ export const StudioView: React.FC<StudioViewProps> = ({
     const run = async () => {
       setError(null);
       try {
+        // Si ya hay un token pre-generado (speaker join), usarlo directamente
+        if (preGeneratedToken) {
+          setToken(preGeneratedToken);
+          return;
+        }
+
+        // Si no, generar token desde el backend
         await ensureRoom(eventSlug);
 
         const { token } = await getLivekitToken({
@@ -313,7 +354,7 @@ export const StudioView: React.FC<StudioViewProps> = ({
       }
     };
     void run();
-  }, [eventSlug, role, displayName, identity]);
+  }, [eventSlug, role, displayName, identity, preGeneratedToken]);
 
   // ----- stage handlers (pro) -----
   const handleToggleStage = async (uid: string, next: boolean) => {
@@ -403,8 +444,61 @@ export const StudioView: React.FC<StudioViewProps> = ({
   const fetchConfig = async () => {
     try {
       const cfg = await getLiveConfig(eventSlug);
+
       setShowFrame(!!cfg.showFrame);
       setFrameUrl(cfg.frameUrl || "");
+
+      setActiveMediaItemId(cfg.activeMediaItemId || ""); // Legacy
+      setActiveVisualId(cfg.activeVisualItemId || "");
+      setActiveAudioId(cfg.activeAudioItemId || "");
+      setMediaEnabled(!!cfg.mediaEnabled);
+      
+      console.log("📊 fetchConfig - IDs:", {
+        visual: cfg.activeVisualItemId,
+        audio: cfg.activeAudioItemId,
+        mediaEnabled: cfg.mediaEnabled
+      });
+      
+      // Legacy fields
+      setMediaType(cfg.mediaType || "image");
+      setMediaUrl(cfg.mediaUrl || "");
+      setMediaMode(cfg.mediaMode || "overlay");
+      setMediaLoop(cfg.mediaLoop ?? false);
+      setMediaMuted(cfg.mediaMuted ?? true);
+      setMediaFit(cfg.mediaFit || "cover");
+      setMediaOpacity(
+        typeof cfg.mediaOpacity === "number" ? cfg.mediaOpacity : 1,
+      );
+      
+      // Obtener effective config para visual y audio
+      const effectiveConfig = await getEffectiveMediaConfig(eventSlug);
+      
+      console.log("📊 effectiveConfig:", effectiveConfig);
+      
+      if (effectiveConfig.visual) {
+        setVisualUrl(effectiveConfig.visual.item.url);
+        setVisualType(effectiveConfig.visual.item.type as "image" | "gif" | "video");
+        setVisualMode(effectiveConfig.visual.config.mode);
+        setVisualLoop(effectiveConfig.visual.config.loop);
+        setVisualMuted(effectiveConfig.visual.config.muted);
+        setVisualFit(effectiveConfig.visual.config.fit);
+        setVisualOpacity(effectiveConfig.visual.config.opacity);
+      } else {
+        setVisualUrl("");
+      }
+      
+      if (effectiveConfig.audio) {
+        setAudioUrl(effectiveConfig.audio.item.url);
+        setAudioLoop(effectiveConfig.audio.config.loop);
+        setAudioMuted(effectiveConfig.audio.config.muted);
+      } else {
+        setAudioUrl("");
+      }
+      
+      // Background
+      setBackgroundUrl(cfg.backgroundUrl || "");
+      setBackgroundType(cfg.backgroundType || "image");
+      setBackgroundColor(cfg.backgroundColor || "#000000");
     } catch (err) {
       console.error("Error fetching config:", err);
     }
@@ -413,6 +507,13 @@ export const StudioView: React.FC<StudioViewProps> = ({
   // fetch initial config
   useEffect(() => {
     void fetchConfig();
+    
+    // Polling cada 3 segundos para mantener sincronizado
+    const interval = setInterval(() => {
+      void fetchConfig();
+    }, 3000);
+    
+    return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [eventSlug]);
 
@@ -578,7 +679,7 @@ export const StudioView: React.FC<StudioViewProps> = ({
 
   // Renderizado normal con LiveKit
   return (
-    <Container>
+    <div>
       <LiveKitRoom
         token={token!}
         serverUrl={LIVEKIT_WS_URL}
@@ -640,100 +741,135 @@ export const StudioView: React.FC<StudioViewProps> = ({
                 layoutMode={stage.layoutMode}
                 onLayoutMode={handleLayoutModeChange}
                 onMode={handleSetMode}
-                panelOpen={panelOpen}
-                onTogglePanel={() => setPanelOpen((v) => !v)}
               />
             </Paper>
           </AppShell.Header>
 
-          {/* DRAWER */}
-          <Drawer
-            opened={panelOpen}
-            onClose={() => setPanelOpen(false)}
-            title="Panel del Studio"
-            position="right"
-            size={380}
-            overlayProps={{ opacity: 0.55, blur: 2 }}
-            withCloseButton
-          >
-            <StudioSidePanel
-              role={role}
-              eventSlug={eventSlug}
-              disabled={!!egressId || isBusy}
-              showFrame={showFrame}
-              frameUrl={frameUrl}
-              onRefreshFrameConfig={fetchConfig}
-            />
-          </Drawer>
-
           {/* MAIN */}
-          <AppShell.Main>
+            {/* Advertencia de estado */}
+            {stateWarning && role === "host" && (
+              <Alert
+                icon={<IconAlertTriangle />}
+                title="Advertencia de Estado"
+                color="orange"
+                withCloseButton
+                onClose={() => setStateWarning(null)}
+                mb="md"
+              >
+                <Stack gap="xs">
+                  <Text size="sm">{stateWarning}</Text>
+                  <Button
+                    size="xs"
+                    color="orange"
+                    variant="light"
+                    loading={resetting}
+                    onClick={handleEmergencyReset}
+                  >
+                    Resetear Estado
+                  </Button>
+                </Stack>
+              </Alert>
+            )}
+
             <Box
               style={{
-                display: "flex",
-                flexDirection: "column",
-                gap: 12,
-                flex: 1,
+                display: "grid",
+                gridTemplateColumns: role === "host" ? "1fr 450px" : "1fr",
+                gap: 16,
+                height: "100%",
                 minHeight: 0,
+                marginInline: role === "host" ? "4rem" : "20rem",
+                marginTop: role == "host" ? "0" : "5rem",
               }}
             >
-              {/* Advertencia de estado */}
-              {stateWarning && role === "host" && (
-                <Alert
-                  icon={<IconAlertTriangle />}
-                  title="Advertencia de Estado"
-                  color="orange"
-                  withCloseButton
-                  onClose={() => setStateWarning(null)}
-                >
-                  <Stack gap="xs">
-                    <Text size="sm">{stateWarning}</Text>
-                    <Button
-                      size="xs"
-                      color="orange"
-                      variant="light"
-                      loading={resetting}
-                      onClick={handleEmergencyReset}
-                    >
-                      Resetear Estado
-                    </Button>
-                  </Stack>
-                </Alert>
-              )}
-
-              <Box style={{ flex: 1, minHeight: 320 }}>
+              {/* Columna principal - Monitor y participantes */}
+              <Box
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 12,
+                  minHeight: 0,
+                }}
+              >
                 <LiveMonitor
                   showFrame={showFrame}
                   frameUrl={frameUrl}
                   stage={stage}
                   layoutMode={stage.layoutMode}
+                  mediaEnabled={mediaEnabled}
+                  visualUrl={visualUrl}
+                  visualType={visualType}
+                  visualMode={visualMode}
+                  visualLoop={visualLoop}
+                  visualMuted={visualMuted}
+                  visualFit={visualFit}
+                  visualOpacity={visualOpacity}
+                  audioUrl={audioUrl}
+                  audioLoop={audioLoop}
+                  audioMuted={audioMuted}
+                  backgroundUrl={backgroundUrl}
+                  backgroundType={backgroundType}
+                  backgroundColor={backgroundColor}
+                  mediaType={mediaType}
+                  mediaUrl={mediaUrl}
+                  mediaMode={mediaMode}
+                  mediaLoop={mediaLoop}
+                  mediaMuted={mediaMuted}
+                  mediaFit={mediaFit}
+                  mediaOpacity={mediaOpacity}
                 />
-              </Box>
-              <Paper
-                mt="md"
-                p="sm"
-                withBorder
-                radius="md"
-                style={{ display: "flex", justifyContent: "center" }}
-              >
-                <ControlBar variation="minimal" />
-              </Paper>
+                <Paper
+                  p="sm"
+                  withBorder
+                  radius="md"
+                  style={{ display: "flex", justifyContent: "center" }}
+                >
+                  <ControlBar variation="minimal" />
+                </Paper>
 
-              <Paper p="sm" radius="md" withBorder>
-                <ScrollArea h="100%">
-                  <ParticipantsPanel
+                <Paper p="sm" radius="md" withBorder>
+                  <ScrollArea h="100%">
+                    <ParticipantsPanel
+                      role={role}
+                      eventSlug={eventSlug}
+                      stage={stage}
+                      customNames={customNames}
+                      onChangeParticipantName={handleChangeParticipantName}
+                      onToggleStage={handleToggleStage}
+                      onPin={handlePin}
+                      onUnpin={handleUnpin}
+                      onSetMode={handleSetMode}
+                    />
+                  </ScrollArea>
+                </Paper>
+              </Box>
+
+              {/* Columna lateral - Panel de control (solo host) */}
+              {role === "host" && (
+                <Paper
+                  p="md"
+                  radius="md"
+                  withBorder
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    minHeight: 0,
+                  }}
+                >
+                  <StudioSidePanel
                     role={role}
                     eventSlug={eventSlug}
-                    stage={stage}
-                    customNames={customNames}
-                    onChangeParticipantName={handleChangeParticipantName}
-                    onToggleStage={handleToggleStage}
-                    onPin={handlePin}
-                    onUnpin={handleUnpin}
-                    onSetMode={handleSetMode}
+                    disabled={!!egressId || isBusy}
+                    showFrame={showFrame}
+                    frameUrl={frameUrl}
+                    backgroundUrl={backgroundUrl}
+                    backgroundType={backgroundType}
+                    onRefreshFrameConfig={fetchConfig}
+                    activeVisualId={activeVisualId}
+                    activeAudioId={activeAudioId}
                   />
-                </ScrollArea>
-              </Paper>
+                </Paper>
+              )}
             </Box>
             <RoomAudioRenderer />
 
@@ -744,33 +880,8 @@ export const StudioView: React.FC<StudioViewProps> = ({
               unread={unread}
               setUnread={setUnread}
             />
-
-            {/* BOTÓN FLOTANTE */}
-            {/* <Affix position={{ bottom: 20, right: 20 }}>
-              <Indicator
-                disabled={unread === 0}
-                label={unread > 99 ? "99+" : unread}
-                size={18}
-              >
-                <ActionIcon
-                  size="xl"
-                  radius="xl"
-                  variant="filled"
-                  onClick={() => setChatOpen((v) => !v)}
-                  aria-label={chatOpen ? "Cerrar chat" : "Abrir chat"}
-                  style={{ boxShadow: "0 10px 30px rgba(0,0,0,.25)" }}
-                >
-                  {chatOpen ? (
-                    <IconX size={22} />
-                  ) : (
-                    <IconMessageCircle size={22} />
-                  )}
-                </ActionIcon>
-              </Indicator>
-            </Affix> */}
-          </AppShell.Main>
         </AppShell>
       </LiveKitRoom>
-    </Container>
+    </div>
   );
 };

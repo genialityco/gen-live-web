@@ -1,6 +1,6 @@
 import { useState, useRef } from "react";
 import { Stack, Switch, Button, Group, Text, Image, Box } from "@mantine/core";
-import { uploadFrame, deleteFrame, updateLiveConfig } from "../api/livekit-service";
+import { uploadFrame, deleteFrame, updateLiveConfig } from "../../api/livekit-service";
 import { notifications } from "@mantine/notifications";
 
 interface FrameControlsProps {
