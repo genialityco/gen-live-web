@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 // src/pages/studio/LkEgressProgram.tsx
 import { useEffect, useState } from "react";
-import { LiveKitRoom } from "@livekit/components-react";
+import { LiveKitRoom, RoomAudioRenderer } from "@livekit/components-react";
 import { LiveMonitor } from "./LiveMonitor";
 import { useStage } from "../../hooks/useStage"; // ajusta tu path real
 import { getEffectiveMediaConfig } from "../../api/media-library-service";
@@ -177,6 +177,9 @@ function ProgramCanvas({ eventSlug }: { eventSlug: string }) {
         overflow: "hidden",
       }}
     >
+      {/* Render audio from all participants in the room */}
+      <RoomAudioRenderer />
+
       <LiveMonitor
         showFrame={showFrame && frameLoaded}
         frameUrl={frameUrl}
@@ -246,7 +249,7 @@ export default function LkEgressProgram() {
       serverUrl={serverUrl}
       connect
       video={false} // Egress NO publica video
-      audio={false} // Egress NO publica audio (solo se suscribe)
+      audio={true} // Egress DEBE suscribirse al audio para transmitirlo
       onConnected={() => {
         console.log("LiveKit CONNECTED");
         console.log("START_RECORDING");

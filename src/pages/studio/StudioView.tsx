@@ -16,6 +16,7 @@ import {
   ControlBar,
   RoomAudioRenderer,
   useLocalParticipant,
+  LayoutContextProvider,
 } from "@livekit/components-react";
 
 import "@livekit/components-styles";
@@ -791,33 +792,35 @@ export const StudioView: React.FC<StudioViewProps> = ({
                   minHeight: 0,
                 }}
               >
-                <LiveMonitor
-                  showFrame={showFrame}
-                  frameUrl={frameUrl}
-                  stage={stage}
-                  layoutMode={stage.layoutMode}
-                  mediaEnabled={mediaEnabled}
-                  visualUrl={visualUrl}
-                  visualType={visualType}
-                  visualMode={visualMode}
-                  visualLoop={visualLoop}
-                  visualMuted={visualMuted}
-                  visualFit={visualFit}
-                  visualOpacity={visualOpacity}
-                  audioUrl={audioUrl}
-                  audioLoop={audioLoop}
-                  audioMuted={audioMuted}
-                  backgroundUrl={backgroundUrl}
-                  backgroundType={backgroundType}
-                  backgroundColor={backgroundColor}
-                  mediaType={mediaType}
-                  mediaUrl={mediaUrl}
-                  mediaMode={mediaMode}
-                  mediaLoop={mediaLoop}
-                  mediaMuted={mediaMuted}
-                  mediaFit={mediaFit}
-                  mediaOpacity={mediaOpacity}
-                />
+                <LayoutContextProvider>
+                  <LiveMonitor
+                    showFrame={showFrame}
+                    frameUrl={frameUrl}
+                    stage={stage}
+                    layoutMode={stage.layoutMode}
+                    mediaEnabled={mediaEnabled}
+                    visualUrl={visualUrl}
+                    visualType={visualType}
+                    visualMode={visualMode}
+                    visualLoop={visualLoop}
+                    visualMuted={visualMuted}
+                    visualFit={visualFit}
+                    visualOpacity={visualOpacity}
+                    audioUrl={audioUrl}
+                    audioLoop={audioLoop}
+                    audioMuted={audioMuted}
+                    backgroundUrl={backgroundUrl}
+                    backgroundType={backgroundType}
+                    backgroundColor={backgroundColor}
+                    mediaType={mediaType}
+                    mediaUrl={mediaUrl}
+                    mediaMode={mediaMode}
+                    mediaLoop={mediaLoop}
+                    mediaMuted={mediaMuted}
+                    mediaFit={mediaFit}
+                    mediaOpacity={mediaOpacity}
+                  />
+                </LayoutContextProvider>
                 <Paper
                   p="sm"
                   withBorder

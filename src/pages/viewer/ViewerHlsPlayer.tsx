@@ -245,7 +245,6 @@ export function ViewerHlsPlayer({
         controls
         autoPlay
         playsInline
-        muted
         style={{ width: "100%", borderRadius: 12, background: "#000" }}
       />
 
