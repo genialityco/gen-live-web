@@ -57,6 +57,7 @@ import {
   ControlBar,
   LiveKitRoom,
   RoomAudioRenderer,
+  GridLayout,
   ParticipantTile,
   useTracks,
 } from "@livekit/components-react";
@@ -65,56 +66,15 @@ import { Track } from "livekit-client";
 
 function SpeakerPreview() {
   const tracks = useTracks(
-    [
-      { source: Track.Source.Camera, withPlaceholder: true },
-      { source: Track.Source.Microphone, withPlaceholder: false },
-    ],
+    [{ source: Track.Source.Camera, withPlaceholder: true }],
     { onlySubscribed: false }
   );
 
   return (
-    <Box
-      style={{
-        flex: 1,
-        minHeight: 0,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        position: "relative",
-      }}
-    >
-      {tracks.length > 0 ? (
-        <div
-          style={{
-            width: "100%",
-            height: "100%",
-            display: "flex",
-            flexWrap: "wrap",
-            gap: "8px",
-            padding: "8px",
-          }}
-        >
-          {tracks.map((trackRef) => (
-            <div
-              key={trackRef.publication?.trackSid}
-              style={{
-                flex: tracks.length === 1 ? "1 1 100%" : "1 1 calc(50% - 4px)",
-                minHeight: "200px",
-                position: "relative",
-              }}
-            >
-              <ParticipantTile
-                key={trackRef.publication?.trackSid}
-                {...trackRef}
-              />
-            </div>
-          ))}
-        </div>
-      ) : (
-        <Text c="white" size="sm">
-          Esperando cámara...
-        </Text>
-      )}
+    <Box style={{ flex: 1, minHeight: 0 }}>
+      <GridLayout tracks={tracks}>
+        <ParticipantTile />
+      </GridLayout>
     </Box>
   );
 }
@@ -927,59 +887,21 @@ export default function EventAttendGcore() {
                                 audio
                                 style={{ height: "100%" }}
                               >
-                                <Box
-                                  style={{
-                                    height: "100%",
-                                    display: "flex",
-                                    flexDirection: "column",
-                                    background: "#000",
-                                  }}
-                                >
-                                  {/* Vista previa del speaker */}
-                                  <Box
-                                    style={{
-                                      flex: 1,
-                                      minHeight: 0,
-                                      position: "relative",
-                                    }}
-                                  >
-                                    <SpeakerPreview />
-                                  </Box>
-
-                                  {/* Controles */}
-                                  <Box
-                                    style={{
-                                      padding: isMobile ? "8px" : "12px",
-                                      background: "rgba(0,0,0,0.8)",
-                                      borderTop: "1px solid rgba(255,255,255,0.1)",
-                                    }}
-                                  >
-                                    <Stack gap={isMobile ? 4 : 8}>
-                                      <Text
-                                        size={isMobile ? "xs" : "sm"}
-                                        c="white"
-                                        ta="center"
-                                        fw={500}
-                                      >
-                                        🎙️ Estás en el estudio - El anfitrión controla cuándo aparecerás en vivo
-                                      </Text>
-                                      <ControlBar />
-                                    </Stack>
-                                  </Box>
-
+                                <Stack p="md" style={{ height: "100%" }}>
+                                  <SpeakerPreview />
+                                  <ControlBar />
                                   <RoomAudioRenderer />
-                                </Box>
+                                </Stack>
                               </LiveKitRoom>
                             ) : playbackUrl ? (
-                              <ViewerHlsPlayer
-                                key={`hls-${playbackUrl}`}
-                                src={playbackUrl}
-                              />
+                              <>
+                                <ViewerHlsPlayer src={playbackUrl} />
+                              </>
                             ) : (
                               <Center h="100%">
                                 <Stack align="center" gap="xs">
-                                  <Loader color="white" />
-                                  <Text c="white">Cargando transmisión…</Text>
+                                  <Loader />
+                                  <Text c="dimmed">Cargando transmisión…</Text>
                                 </Stack>
                               </Center>
                             )}
