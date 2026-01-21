@@ -775,12 +775,13 @@ export const StudioView: React.FC<StudioViewProps> = ({
             <Box
               style={{
                 display: "grid",
-                gridTemplateColumns: role === "host" ? "1fr 450px" : "1fr",
+                gridTemplateColumns: role === "host" ? "minmax(0, 1fr) 380px" : "1fr",
                 gap: 16,
                 height: "100%",
                 minHeight: 0,
-                marginInline: role === "host" ? "4rem" : "20rem",
-                marginTop: role == "host" ? "0" : "5rem",
+                maxWidth: role === "host" ? "1800px" : "1200px",
+                marginInline: "auto",
+                paddingInline: "1rem",
               }}
             >
               {/* Columna principal - Monitor y participantes */}
