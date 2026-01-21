@@ -886,6 +886,7 @@ export default function EventAttendGcore() {
                                 video
                                 audio
                                 style={{ height: "100%" }}
+                                data-lk-theme="default"
                               >
                                 <Stack p="md" style={{ height: "100%" }}>
                                   <SpeakerPreview />
