@@ -586,7 +586,7 @@ export const StudioView: React.FC<StudioViewProps> = ({
   // Modo emergencia: solo controles sin LiveKit
   if (skipLiveKit && role === "host") {
     return (
-      <Container fluid p="md">
+      <Container p="md">
         <Stack gap="md">
           <Alert
             icon={<IconAlertTriangle />}
