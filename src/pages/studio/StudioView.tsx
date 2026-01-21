@@ -859,7 +859,7 @@ export const StudioView: React.FC<StudioViewProps> = ({
                   <StudioSidePanel
                     role={role}
                     eventSlug={eventSlug}
-                    disabled={!!egressId || isBusy}
+                    disabled={isBusy}
                     showFrame={showFrame}
                     frameUrl={frameUrl}
                     backgroundUrl={backgroundUrl}

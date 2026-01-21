@@ -560,6 +560,10 @@ export default function EventAttendGcore() {
   }, [event?._id, attendeeId, isRegistered, status]);
 
   useEffect(() => {
+    let retryCount = 0;
+    const maxRetries = 5;
+    let retryTimeout: number;
+
     const run = async () => {
       if (!eventSlugToUse) return;
 
@@ -573,15 +577,37 @@ export default function EventAttendGcore() {
       }
 
       try {
+        console.log("🎥 Cargando playback URL (intento", retryCount + 1, "/", maxRetries, ")");
         const { playbackUrl } = await getPlayback(eventSlugToUse);
-        setPlaybackUrl(playbackUrl);
+        
+        if (playbackUrl) {
+          console.log("✅ Playback URL cargado:", playbackUrl);
+          setPlaybackUrl(playbackUrl);
+          retryCount = 0; // reset counter on success
+        } else {
+          throw new Error("No playback URL returned");
+        }
       } catch (e: any) {
-        console.warn("No se pudo cargar playback:", e?.message || e);
-        setPlaybackUrl(null);
+        console.warn("⚠️ No se pudo cargar playback:", e?.message || e);
+        
+        // Retry con backoff exponencial
+        if (retryCount < maxRetries) {
+          retryCount++;
+          const delay = Math.min(1000 * Math.pow(2, retryCount - 1), 5000);
+          console.log("🔄 Reintentando en", delay, "ms...");
+          retryTimeout = setTimeout(() => void run(), delay);
+        } else {
+          console.error("❌ Máximo de reintentos alcanzado");
+          setPlaybackUrl(null);
+        }
       }
     };
 
     void run();
+
+    return () => {
+      if (retryTimeout) clearTimeout(retryTimeout);
+    };
   }, [eventSlugToUse, status]);
 
   useEffect(() => {
@@ -887,15 +913,72 @@ export default function EventAttendGcore() {
                                 audio
                                 style={{ height: "100%" }}
                               >
-                                <Stack p="md" style={{ height: "100%" }}>
-                                  <SpeakerPreview />
-                                  <ControlBar />
+                                <Box
+                                  style={{
+                                    height: "100%",
+                                    display: "flex",
+                                    flexDirection: "column",
+                                    background: "#000",
+                                  }}
+                                >
+                                  {/* Vista previa del speaker - ocupa el espacio disponible */}
+                                  <Box
+                                    style={{
+                                      flex: 1,
+                                      minHeight: 0,
+                                      padding: isMobile ? "8px" : "16px",
+                                    }}
+                                  >
+                                    <SpeakerPreview />
+                                  </Box>
+
+                                  {/* Controles - fijos en la parte inferior con fondo visible */}
+                                  <Box
+                                    style={{
+                                      padding: isMobile ? "12px 8px" : "16px",
+                                      background: "linear-gradient(to top, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0.7) 100%)",
+                                      borderTop: "1px solid rgba(255,255,255,0.1)",
+                                    }}
+                                  >
+                                    {/* Mensaje de ayuda */}
+                                    <Text
+                                      size={isMobile ? "xs" : "sm"}
+                                      c="white"
+                                      ta="center"
+                                      mb={isMobile ? 8 : 12}
+                                      style={{
+                                        textShadow: "0 1px 3px rgba(0,0,0,0.5)",
+                                      }}
+                                    >
+                                      🎙️ Estás en el estudio. El anfitrión controla si apareces en vivo.
+                                    </Text>
+
+                                    {/* Barra de controles con mejor visibilidad */}
+                                    <Box
+                                      style={{
+                                        display: "flex",
+                                        justifyContent: "center",
+                                      }}
+                                    >
+                                      <ControlBar
+                                        variation="minimal"
+                                        controls={{
+                                          microphone: true,
+                                          camera: true,
+                                          screenShare: false,
+                                          leave: true,
+                                          settings: true,
+                                        }}
+                                      />
+                                    </Box>
+                                  </Box>
+
                                   <RoomAudioRenderer />
-                                </Stack>
+                                </Box>
                               </LiveKitRoom>
                             ) : playbackUrl ? (
                               <>
-                                <ViewerHlsPlayer src={playbackUrl} />
+                                <ViewerHlsPlayer key={playbackUrl} src={playbackUrl} />
                               </>
                             ) : (
                               <Center h="100%">
