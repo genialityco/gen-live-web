@@ -14,10 +14,11 @@ import { getEffectiveMediaConfig } from "../../api/media-library-service";
 import {
   LiveKitRoom,
   ControlBar,
-  RoomAudioRenderer,
   useLocalParticipant,
   LayoutContextProvider,
+  useRemoteParticipants,
 } from "@livekit/components-react";
+import { Track } from "livekit-client";
 
 import "@livekit/components-styles";
 import {
@@ -92,6 +93,50 @@ function isTerminalEgressStatus(status: string) {
     "aborted",
     "stopped",
   ].includes(status);
+}
+
+/**
+ * Componente que solo reproduce audio de participantes que están on-stage
+ */
+function FilteredRoomAudio(props: { onStageMap: Record<string, boolean> }) {
+  const remoteParticipants = useRemoteParticipants();
+
+  return (
+    <>
+      {remoteParticipants.map((participant) => {
+        const isOnStage = props.onStageMap[participant.identity] ?? false;
+        if (!isOnStage) return null;
+
+        return (
+          <ParticipantAudio
+            key={participant.identity}
+            participant={participant}
+          />
+        );
+      })}
+    </>
+  );
+}
+
+/**
+ * Renderiza el audio de un participante individual
+ */
+function ParticipantAudio(props: { participant: any }) {
+  const audioTrack = props.participant.getTrackPublication(Track.Source.Microphone)?.audioTrack;
+
+  useEffect(() => {
+    if (!audioTrack) return;
+
+    const audioElement = audioTrack.attach();
+    document.body.appendChild(audioElement);
+
+    return () => {
+      audioTrack.detach(audioElement);
+      audioElement.remove();
+    };
+  }, [audioTrack]);
+
+  return null;
 }
 
 function StudioRoomUI(props: {
@@ -881,7 +926,7 @@ export const StudioView: React.FC<StudioViewProps> = ({
                 </Paper>
               )}
             </Box>
-            <RoomAudioRenderer />
+            <FilteredRoomAudio onStageMap={stage.onStage} />
 
             {/* DRAWER CHAT */}
             <StudioRoomUI
