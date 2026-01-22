@@ -13,18 +13,20 @@ import {
   Alert,
   Center,
   Loader,
+  Box,
+  Modal,
 } from "@mantine/core";
+import { useDisclosure, useMediaQuery } from "@mantine/hooks";
 import { IconAlertCircle, IconVideo } from "@tabler/icons-react";
 import { StudioView } from "./StudioView";
 import { getLivekitToken } from "../../api/livekit-service";
-import { useMediaQuery } from "@mantine/hooks";
 
 /**
  * Página para speakers invitados
  * URL: /studio/:eventSlug/join (genérica, sin token)
  * URL: /studio/:eventSlug/speaker/:inviteToken (legacy, con token)
- * 
- * El speaker ingresa su nombre y se genera el token dinámicamente
+ *
+ * El speaker ingresa su nombre y se genera el token dinámicamente (solo en flujo genérico)
  */
 export const SpeakerInvitePage: React.FC = () => {
   const { eventSlug, inviteToken } = useParams<{
@@ -33,13 +35,18 @@ export const SpeakerInvitePage: React.FC = () => {
   }>();
   const navigate = useNavigate();
 
+  const isMobile = useMediaQuery("(max-width: 768px)");
+
   const [displayName, setDisplayName] = useState("");
   const [inputName, setInputName] = useState("");
   const [isValidating, setIsValidating] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [generatedToken, setGeneratedToken] = useState<string | null>(null);
   const [isGeneratingToken, setIsGeneratingToken] = useState(false);
-  const isMobile = useMediaQuery("(max-width: 768px)");
+
+  // Modal para cambiar nombre cuando ya estás dentro
+  const [nameModalOpen, nameModal] = useDisclosure(false);
+  const [nameDraft, setNameDraft] = useState("");
 
   // Validar token al montar (solo si viene token en URL)
   useEffect(() => {
@@ -65,17 +72,19 @@ export const SpeakerInvitePage: React.FC = () => {
       try {
         // TODO: Validar el token contra el backend (legacy flow)
         // Por ahora, aceptamos cualquier token (MVP)
-        // const response = await api.get(`/studio/validate-invite/${eventSlug}/${inviteToken}`);
-        
+
         // Verificar si ya hay nombre guardado localmente
         const savedName = localStorage.getItem(`speaker_name_${eventSlug}`);
         if (savedName) {
           setDisplayName(savedName);
         }
-        
+
         setIsValidating(false);
       } catch (err: unknown) {
-        setError((err as { response?: { data?: { message?: string } }; message?: string })?.response?.data?.message || "Token de invitación inválido o expirado");
+        setError(
+          (err as { response?: { data?: { message?: string } }; message?: string })
+            ?.response?.data?.message || "Token de invitación inválido o expirado",
+        );
         setIsValidating(false);
       }
     };
@@ -93,9 +102,8 @@ export const SpeakerInvitePage: React.FC = () => {
     if (!inviteToken) {
       setIsGeneratingToken(true);
       setError(null);
-      
+
       try {
-        // Generar token desde el backend
         const { token } = await getLivekitToken({
           eventSlug: eventSlug!,
           role: "speaker",
@@ -105,14 +113,14 @@ export const SpeakerInvitePage: React.FC = () => {
         // Guardar nombre y token localmente
         localStorage.setItem(`speaker_name_${eventSlug}`, inputName.trim());
         localStorage.setItem(`speaker_token_${eventSlug}`, token);
-        
+
         setDisplayName(inputName.trim());
         setGeneratedToken(token);
       } catch (err: any) {
         console.error("Error generando token:", err);
         setError(
           err?.response?.data?.message ||
-          "Error al unirse al estudio. Verifica que el evento esté activo."
+            "Error al unirse al estudio. Verifica que el evento esté activo.",
         );
       } finally {
         setIsGeneratingToken(false);
@@ -125,11 +133,36 @@ export const SpeakerInvitePage: React.FC = () => {
   };
 
   const handleChangeName = () => {
+    // abrir modal y prellenar
+    setNameDraft(displayName || "");
+    nameModal.open();
+  };
+
+  const applyChangeName = () => {
+    const clean = nameDraft.trim();
+    if (!clean) return;
+
+    // Guardar SOLO el nombre; el token no se invalida (en flujo genérico lo tenemos en localStorage)
+    localStorage.setItem(`speaker_name_${eventSlug}`, clean);
+
+    setDisplayName(clean);
+    setInputName(clean);
+    nameModal.close();
+
+    // OJO: StudioView usa el token ya generado; cambiar displayName no requiere regenerar token
+    // (Si quieres que el nombre en LiveKit cambie, sí requeriría reconectar/regenerar token.
+    // Por ahora mantenemos la funcionalidad sin romper nada.)
+  };
+
+  const handleForgetAndRejoin = () => {
+    // Si el usuario quiere que realmente cambie el nombre “dentro de LiveKit”, la forma segura es reingresar.
     localStorage.removeItem(`speaker_name_${eventSlug}`);
     localStorage.removeItem(`speaker_token_${eventSlug}`);
     setDisplayName("");
     setInputName("");
     setGeneratedToken(null);
+    setError(null);
+    nameModal.close();
   };
 
   // Validando token
@@ -149,12 +182,7 @@ export const SpeakerInvitePage: React.FC = () => {
           <Alert icon={<IconAlertCircle size={24} />} title="Error" color="red">
             {error}
           </Alert>
-          <Button
-            fullWidth
-            mt="md"
-            variant="light"
-            onClick={() => navigate("/")}
-          >
+          <Button fullWidth mt="md" variant="light" onClick={() => navigate("/")}>
             Volver al inicio
           </Button>
         </Paper>
@@ -186,7 +214,7 @@ export const SpeakerInvitePage: React.FC = () => {
               onChange={(e) => setInputName(e.currentTarget.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && inputName.trim()) {
-                  handleJoin();
+                  void handleJoin();
                 }
               }}
               size="md"
@@ -197,7 +225,7 @@ export const SpeakerInvitePage: React.FC = () => {
             <Button
               fullWidth
               size="md"
-              onClick={handleJoin}
+              onClick={() => void handleJoin()}
               disabled={!inputName.trim()}
               loading={isGeneratingToken}
             >
@@ -215,9 +243,10 @@ export const SpeakerInvitePage: React.FC = () => {
     );
   }
 
-  // Ya tiene nombre - mostrar el studio
+  // Ya tiene nombre - mostrar el studio (FULL RESPONSIVE ✅)
   return (
-    <div style={{marginTop: "100px", marginInline: isMobile ? "10px" : "300px" }}>
+    <Box style={{ minHeight: "100dvh", marginInline: isMobile ? "30px" : "300px", marginTop: "100px" }}>
+      {/* StudioView full width/height (sin márgenes fijos) */}
       <StudioView
         eventSlug={eventSlug!}
         role="speaker"
@@ -225,29 +254,60 @@ export const SpeakerInvitePage: React.FC = () => {
         identity={inviteToken ? `speaker-${inviteToken}` : undefined}
         token={generatedToken || undefined}
       />
-      
-      {/* Botón pequeño para cambiar nombre */}
+
+      {/* Botón flotante (subido para no chocar con el FAB del chat en StudioView) */}
       <Button
         size="xs"
-        variant="subtle"
+        variant="light"
         onClick={handleChangeName}
         style={{
           position: "fixed",
-          bottom: 16,
+          bottom: 84,
           left: 16,
-          zIndex: 1000,
+          zIndex: 1100,
+          boxShadow: "0 10px 30px rgba(0,0,0,.18)",
         }}
         styles={{
           root: {
-            '@media (max-width: 768px)': {
-              fontSize: '0.7rem',
-              padding: '4px 8px',
+            "@media (max-width: 768px)": {
+              fontSize: "0.7rem",
+              padding: "4px 8px",
             },
           },
         }}
       >
         Cambiar nombre
       </Button>
-    </div>
+
+      <Modal
+        opened={nameModalOpen}
+        onClose={nameModal.close}
+        centered
+        title="Cambiar nombre"
+      >
+        <Stack>
+          <TextInput
+            label="Nombre a mostrar"
+            value={nameDraft}
+            onChange={(e) => setNameDraft(e.currentTarget.value)}
+            placeholder="Ej: Juan / Invitado"
+            autoFocus
+          />
+
+          <Button onClick={applyChangeName} disabled={!nameDraft.trim()}>
+            Guardar
+          </Button>
+
+          <Button variant="light" color="red" onClick={handleForgetAndRejoin}>
+            Cambiar nombre y volver a unirme
+          </Button>
+
+          <Text size="xs" c="dimmed">
+            Nota: si quieres que el nombre cambie también dentro de LiveKit (en la sala),
+            lo más seguro es “volver a unirte” para regenerar/reconectar con el nombre nuevo.
+          </Text>
+        </Stack>
+      </Modal>
+    </Box>
   );
 };

@@ -40,11 +40,14 @@ import {
   ActionIcon,
   Indicator,
 } from "@mantine/core";
+import { useMediaQuery } from "@mantine/hooks";
 import {
   IconAlertTriangle,
   IconMessageCircle,
   IconX,
+  IconSettings,
 } from "@tabler/icons-react";
+
 import { LIVEKIT_WS_URL } from "../../core/livekitConfig";
 import { ParticipantsPanel } from "./ParticipantsPanel";
 import { LiveMonitor } from "./LiveMonitor";
@@ -120,21 +123,41 @@ function FilteredRoomAudio(props: { onStageMap: Record<string, boolean> }) {
 
 /**
  * Renderiza el audio de un participante individual
+ * Incluye tanto el micrófono como el audio de pantalla compartida
  */
 function ParticipantAudio(props: { participant: any }) {
-  const audioTrack = props.participant.getTrackPublication(Track.Source.Microphone)?.audioTrack;
+  const microphoneTrack = props.participant.getTrackPublication(
+    Track.Source.Microphone,
+  )?.audioTrack;
+  const screenShareAudioTrack = props.participant.getTrackPublication(
+    Track.Source.ScreenShareAudio,
+  )?.audioTrack;
 
+  // Reproducir audio del micrófono
   useEffect(() => {
-    if (!audioTrack) return;
+    if (!microphoneTrack) return;
 
-    const audioElement = audioTrack.attach();
+    const audioElement = microphoneTrack.attach();
     document.body.appendChild(audioElement);
 
     return () => {
-      audioTrack.detach(audioElement);
+      microphoneTrack.detach(audioElement);
       audioElement.remove();
     };
-  }, [audioTrack]);
+  }, [microphoneTrack]);
+
+  // Reproducir audio de la pantalla compartida
+  useEffect(() => {
+    if (!screenShareAudioTrack) return;
+
+    const audioElement = screenShareAudioTrack.attach();
+    document.body.appendChild(audioElement);
+
+    return () => {
+      screenShareAudioTrack.detach(audioElement);
+      audioElement.remove();
+    };
+  }, [screenShareAudioTrack]);
 
   return null;
 }
@@ -181,11 +204,7 @@ function StudioRoomUI(props: {
             aria-label={props.chatOpen ? "Cerrar chat" : "Abrir chat"}
             style={{ boxShadow: "0 10px 30px rgba(0,0,0,.25)" }}
           >
-            {props.chatOpen ? (
-              <IconX size={22} />
-            ) : (
-              <IconMessageCircle size={22} />
-            )}
+            {props.chatOpen ? <IconX size={22} /> : <IconMessageCircle size={22} />}
           </ActionIcon>
         </Indicator>
       </Affix>
@@ -216,9 +235,7 @@ export const StudioView: React.FC<StudioViewProps> = ({
 
   // Estados separados para visual y audio
   const [visualUrl, setVisualUrl] = useState("");
-  const [visualType, setVisualType] = useState<"image" | "gif" | "video">(
-    "image",
-  );
+  const [visualType, setVisualType] = useState<"image" | "gif" | "video">("image");
   const [visualMode, setVisualMode] = useState<"overlay" | "full">("overlay");
   const [visualLoop, setVisualLoop] = useState(false);
   const [visualMuted, setVisualMuted] = useState(true);
@@ -231,15 +248,15 @@ export const StudioView: React.FC<StudioViewProps> = ({
 
   // Background
   const [backgroundUrl, setBackgroundUrl] = useState("");
-  const [backgroundType, setBackgroundType] = useState<
-    "image" | "gif" | "video"
-  >("image");
+  const [backgroundType, setBackgroundType] = useState<"image" | "gif" | "video">(
+    "image",
+  );
   const [backgroundColor, setBackgroundColor] = useState("#000000");
 
   // Legacy para backward compatibility
-  const [mediaType, setMediaType] = useState<
-    "image" | "gif" | "video" | "audio"
-  >("image");
+  const [mediaType, setMediaType] = useState<"image" | "gif" | "video" | "audio">(
+    "image",
+  );
   const [mediaUrl, setMediaUrl] = useState("");
   const [mediaMode, setMediaMode] = useState<"overlay" | "full">("overlay");
   const [mediaLoop, setMediaLoop] = useState(false);
@@ -250,9 +267,13 @@ export const StudioView: React.FC<StudioViewProps> = ({
   const [startingEgress, setStartingEgress] = useState(false);
   const [stoppingEgress, setStoppingEgress] = useState(false);
 
+  // Responsive
+  const isNarrow = useMediaQuery("(max-width: 1100px)");
+  const isMobile = useMediaQuery("(max-width: 768px)");
+  const [sideOpen, setSideOpen] = useState(false);
+
   // Nombre por defecto: "Producción" para host
-  const displayName =
-    initialDisplayName || (role === "host" ? "Producción" : undefined);
+  const displayName = initialDisplayName || (role === "host" ? "Producción" : undefined);
 
   // Estado para nombres personalizados de participantes (identity -> nombre)
   const [customNames, setCustomNames] = useState<Record<string, string>>({});
@@ -279,10 +300,7 @@ export const StudioView: React.FC<StudioViewProps> = ({
 
   // ----- egress status poll (adaptativo) - solo para host -----
   useEffect(() => {
-    // Solo el host hace polling del estado
-    if (role !== "host" || !egressId) {
-      return;
-    }
+    if (role !== "host" || !egressId) return;
 
     let alive = true;
     let timer: number | null = null;
@@ -298,13 +316,9 @@ export const StudioView: React.FC<StudioViewProps> = ({
         await setEgressState(eventSlug, egressId, st || "");
 
         if (s?.error) {
-          // ✅ No bloquear el Studio por esto
-          setStateWarning(
-            `No se pudo consultar estado del egress: ${String(s.error)}`,
-          );
+          setStateWarning(`No se pudo consultar estado del egress: ${String(s.error)}`);
         }
 
-        // terminal => stop polling
         if (st && isTerminalEgressStatus(st)) {
           if (timer) window.clearTimeout(timer);
           timer = null;
@@ -312,13 +326,10 @@ export const StudioView: React.FC<StudioViewProps> = ({
         }
 
         const delay = st === "starting" || st === "pending" ? 1000 : 3500;
-
         timer = window.setTimeout(() => void tick(), delay);
       } catch (e: any) {
         console.error("Error polling egress status:", e);
         if (!alive) return;
-        // ✅ warning leve, sin bloquear
-        // opcional: evita spamear usando un flag/ref
         timer = window.setTimeout(() => void tick(), 3500);
       }
     };
@@ -336,13 +347,10 @@ export const StudioView: React.FC<StudioViewProps> = ({
     setStartingEgress(true);
     try {
       const data = await startLiveRtmp(eventSlug);
-      // Sincronizar en RTDB para que todos vean el estado
       await setEgressState(eventSlug, data.egressId, "starting");
     } catch (err: any) {
       setError(
-        err?.response?.data?.message ||
-          err.message ||
-          "Error iniciando transmisión",
+        err?.response?.data?.message || err.message || "Error iniciando transmisión",
       );
     } finally {
       setStartingEgress(false);
@@ -355,13 +363,10 @@ export const StudioView: React.FC<StudioViewProps> = ({
     setStoppingEgress(true);
     try {
       await stopLive(egressId);
-      // Limpiar estado en RTDB
       await setEgressState(eventSlug, null, null);
     } catch (err: any) {
       setError(
-        err?.response?.data?.message ||
-          err.message ||
-          "Error deteniendo transmisión",
+        err?.response?.data?.message || err.message || "Error deteniendo transmisión",
       );
     } finally {
       setStoppingEgress(false);
@@ -373,13 +378,11 @@ export const StudioView: React.FC<StudioViewProps> = ({
     const run = async () => {
       setError(null);
       try {
-        // Si ya hay un token pre-generado (speaker join), usarlo directamente
         if (preGeneratedToken) {
           setToken(preGeneratedToken);
           return;
         }
 
-        // Si no, generar token desde el backend
         await ensureRoom(eventSlug);
 
         const { token } = await getLivekitToken({
@@ -397,9 +400,6 @@ export const StudioView: React.FC<StudioViewProps> = ({
 
         if (role === "host") {
           setEmergencyReason(errorMsg);
-          // ✅ no dependas del timeout para poder entrar
-          // Puedes mantener el timeout como fallback si quieres:
-          // setTimeout(() => setSkipLiveKit(true), 1500);
         }
       }
     };
@@ -410,13 +410,11 @@ export const StudioView: React.FC<StudioViewProps> = ({
   const handleToggleStage = async (uid: string, next: boolean) => {
     await setOnStage(eventSlug, uid, next);
 
-    // UX: si lo subes y no hay pin, pínalo automáticamente en speaker mode
     if (next && !stage.activeUid) {
       await setActiveUid(eventSlug, uid);
       await setProgramMode(eventSlug, "speaker");
     }
 
-    // si lo bajas y estaba pineado, quita pin
     if (!next && stage.activeUid === uid) {
       await setActiveUid(eventSlug, "");
     }
@@ -480,10 +478,7 @@ export const StudioView: React.FC<StudioViewProps> = ({
       const validation = await validateEgressState(egressId);
       if (!validation.exists) {
         setStateWarning(
-          `Egress ${egressId.slice(
-            0,
-            8,
-          )}... no existe. El estado puede estar desincronizado.`,
+          `Egress ${egressId.slice(0, 8)}... no existe. El estado puede estar desincronizado.`,
         );
       }
     };
@@ -516,9 +511,7 @@ export const StudioView: React.FC<StudioViewProps> = ({
       setMediaLoop(cfg.mediaLoop ?? false);
       setMediaMuted(cfg.mediaMuted ?? true);
       setMediaFit(cfg.mediaFit || "cover");
-      setMediaOpacity(
-        typeof cfg.mediaOpacity === "number" ? cfg.mediaOpacity : 1,
-      );
+      setMediaOpacity(typeof cfg.mediaOpacity === "number" ? cfg.mediaOpacity : 1);
 
       // Obtener effective config para visual y audio
       const effectiveConfig = await getEffectiveMediaConfig(eventSlug);
@@ -560,7 +553,6 @@ export const StudioView: React.FC<StudioViewProps> = ({
   useEffect(() => {
     void fetchConfig();
 
-    // Polling cada 3 segundos para mantener sincronizado
     const interval = setInterval(() => {
       void fetchConfig();
     }, 3000);
@@ -576,12 +568,7 @@ export const StudioView: React.FC<StudioViewProps> = ({
     return (
       <Center>
         <Stack gap="md" align="center" maw={520} px="md">
-          <Alert
-            icon={<IconAlertTriangle />}
-            title="Error de conexión"
-            color="red"
-            w="100%"
-          >
+          <Alert icon={<IconAlertTriangle />} title="Error de conexión" color="red" w="100%">
             {error}
           </Alert>
 
@@ -599,7 +586,6 @@ export const StudioView: React.FC<StudioViewProps> = ({
               <Button
                 variant="default"
                 onClick={() => {
-                  // reintentar sin recargar toda la app
                   setError(null);
                   setToken(null);
                   setEmergencyReason(null);
@@ -610,8 +596,8 @@ export const StudioView: React.FC<StudioViewProps> = ({
               </Button>
 
               <Text size="xs" c="dimmed">
-                Si LiveKit o el backend no responden, puedes entrar igual para
-                gestionar el estado del evento/transmisión.
+                Si LiveKit o el backend no responden, puedes entrar igual para gestionar el
+                estado del evento/transmisión.
               </Text>
             </Stack>
           ) : (
@@ -639,21 +625,12 @@ export const StudioView: React.FC<StudioViewProps> = ({
     return (
       <Container p="md">
         <Stack gap="md">
-          <Alert
-            icon={<IconAlertTriangle />}
-            title="Modo de Emergencia"
-            color="yellow"
-          >
-            LiveKit no está disponible. Solo puedes gestionar el estado de la
-            transmisión.
+          <Alert icon={<IconAlertTriangle />} title="Modo de Emergencia" color="yellow">
+            LiveKit no está disponible. Solo puedes gestionar el estado de la transmisión.
           </Alert>
 
           {stateWarning && (
-            <Alert
-              icon={<IconAlertTriangle />}
-              title="Advertencia de Estado"
-              color="orange"
-            >
+            <Alert icon={<IconAlertTriangle />} title="Advertencia de Estado" color="orange">
               {stateWarning}
             </Alert>
           )}
@@ -716,12 +693,8 @@ export const StudioView: React.FC<StudioViewProps> = ({
           <Alert color="blue" title="Instrucciones">
             <ul style={{ margin: 0, paddingLeft: 20 }}>
               <li>Si la transmisión está bloqueada, usa "Resetear Estado"</li>
-              <li>
-                Esto detendrá cualquier transmisión activa y limpiará el estado
-              </li>
-              <li>
-                Después del reset, recarga la página para reconectar LiveKit
-              </li>
+              <li>Esto detendrá cualquier transmisión activa y limpiará el estado</li>
+              <li>Después del reset, recarga la página para reconectar LiveKit</li>
             </ul>
           </Alert>
         </Stack>
@@ -732,14 +705,7 @@ export const StudioView: React.FC<StudioViewProps> = ({
   // Renderizado normal con LiveKit
   return (
     <div>
-      <LiveKitRoom
-        token={token!}
-        serverUrl={LIVEKIT_WS_URL}
-        connect
-        video
-        audio
-        // data-lk-theme="default"
-      >
+      <LiveKitRoom token={token!} serverUrl={LIVEKIT_WS_URL} connect video audio>
         <AppShell
           header={{ height: 64 }}
           padding="md"
@@ -767,10 +733,7 @@ export const StudioView: React.FC<StudioViewProps> = ({
               <Group gap="xs">
                 {displayName && (
                   <Group gap="xs">
-                    <Badge
-                      color={role === "host" ? "blue" : "green"}
-                      variant="dot"
-                    >
+                    <Badge color={role === "host" ? "blue" : "green"} variant="dot">
                       {role === "host" ? "Host" : "Speaker"}
                     </Badge>
                     <Text size="sm" fw={500}>
@@ -780,24 +743,39 @@ export const StudioView: React.FC<StudioViewProps> = ({
                 )}
               </Group>
 
-              <StudioToolbar
-                role={role}
-                egressId={egressId}
-                isBusy={isBusy}
-                egressStatus={egressStatus}
-                stage={stage}
-                showFrame={showFrame}
-                onToggleFrame={setShowFrame}
-                onStart={handleStartTransmission}
-                onStop={handleStopTransmission}
-                layoutMode={stage.layoutMode}
-                onLayoutMode={handleLayoutModeChange}
-                onMode={handleSetMode}
-              />
+              <Group gap="xs" wrap="nowrap">
+                {/* Responsive: botón de controles (solo host + narrow) */}
+                {role === "host" && isNarrow && (
+                  <ActionIcon
+                    variant="light"
+                    radius="xl"
+                    onClick={() => setSideOpen(true)}
+                    aria-label="Abrir controles"
+                  >
+                    <IconSettings size={18} />
+                  </ActionIcon>
+                )}
+
+                <StudioToolbar
+                  role={role}
+                  egressId={egressId}
+                  isBusy={isBusy}
+                  egressStatus={egressStatus}
+                  stage={stage}
+                  showFrame={showFrame}
+                  onToggleFrame={setShowFrame}
+                  onStart={handleStartTransmission}
+                  onStop={handleStopTransmission}
+                  layoutMode={stage.layoutMode}
+                  onLayoutMode={handleLayoutModeChange}
+                  onMode={handleSetMode}
+                />
+              </Group>
             </Paper>
           </AppShell.Header>
 
           {/* MAIN */}
+          <AppShell.Main style={{ padding: 0 }}>
             {/* Advertencia de estado */}
             {stateWarning && role === "host" && (
               <Alert
@@ -827,12 +805,9 @@ export const StudioView: React.FC<StudioViewProps> = ({
               style={{
                 display: "grid",
                 gridTemplateColumns:
-                  role === "host" ? "minmax(0, 1fr) 380px" : "1fr",
-                gap: 16,
-                height: "100%",
-                minHeight: 0,
-                marginInline: "auto",
-                paddingInline: "1rem",
+                  role === "host" && !isNarrow ? "minmax(0, 1fr) 500px" : "1fr",
+                gap: isMobile ? 12 : 16,
+                alignItems: "start",
               }}
             >
               {/* Columna principal - Monitor y participantes */}
@@ -841,7 +816,7 @@ export const StudioView: React.FC<StudioViewProps> = ({
                   display: "flex",
                   flexDirection: "column",
                   gap: 12,
-                  minHeight: 0,
+                  minWidth: 0,
                 }}
               >
                 <LayoutContextProvider>
@@ -873,6 +848,7 @@ export const StudioView: React.FC<StudioViewProps> = ({
                     mediaOpacity={mediaOpacity}
                   />
                 </LayoutContextProvider>
+
                 <Paper
                   p="sm"
                   withBorder
@@ -882,8 +858,9 @@ export const StudioView: React.FC<StudioViewProps> = ({
                   <ControlBar variation="minimal" />
                 </Paper>
 
-                <Paper p="sm" radius="md" withBorder>
-                  <ScrollArea h="100%">
+                <Paper p="sm" radius="md" withBorder style={{ minHeight: 0 }}>
+                  {/* ✅ Scroll real: damos una altura razonable para que no “explote” */}
+                  <ScrollArea h={isNarrow ? 320 : 420} offsetScrollbars>
                     <ParticipantsPanel
                       role={role}
                       eventSlug={eventSlug}
@@ -900,7 +877,7 @@ export const StudioView: React.FC<StudioViewProps> = ({
               </Box>
 
               {/* Columna lateral - Panel de control (solo host) */}
-              {role === "host" && (
+              {role === "host" && !isNarrow && (
                 <Paper
                   p="md"
                   radius="md"
@@ -926,6 +903,36 @@ export const StudioView: React.FC<StudioViewProps> = ({
                 </Paper>
               )}
             </Box>
+
+            {/* Responsive: SidePanel en Drawer (host + narrow) */}
+            {role === "host" && isNarrow && (
+              <Drawer
+                opened={sideOpen}
+                onClose={() => setSideOpen(false)}
+                position="right"
+                size={isMobile ? "95%" : 420}
+                overlayProps={{ opacity: 0.35, blur: 2 }}
+                withCloseButton
+                title="Control del Live"
+                keepMounted
+              >
+                <div style={{ height: "calc(100dvh - 140px)" }}>
+                  <StudioSidePanel
+                    role={role}
+                    eventSlug={eventSlug}
+                    disabled={isBusy}
+                    showFrame={showFrame}
+                    frameUrl={frameUrl}
+                    backgroundUrl={backgroundUrl}
+                    backgroundType={backgroundType}
+                    onRefreshFrameConfig={fetchConfig}
+                    activeVisualId={activeVisualId}
+                    activeAudioId={activeAudioId}
+                  />
+                </div>
+              </Drawer>
+            )}
+
             <FilteredRoomAudio onStageMap={stage.onStage} />
 
             {/* DRAWER CHAT */}
@@ -935,6 +942,7 @@ export const StudioView: React.FC<StudioViewProps> = ({
               unread={unread}
               setUnread={setUnread}
             />
+          </AppShell.Main>
         </AppShell>
       </LiveKitRoom>
     </div>

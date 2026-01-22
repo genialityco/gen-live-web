@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { useState, useEffect } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Stack,
   Button,
@@ -20,6 +20,8 @@ import {
   Switch,
   Slider,
   SegmentedControl,
+  Divider,
+  Collapse,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import {
@@ -33,6 +35,8 @@ import {
   IconPhoto,
   IconVideo,
   IconMusic,
+  IconChevronDown,
+  IconChevronRight,
 } from "@tabler/icons-react";
 import {
   listMediaItems,
@@ -53,6 +57,9 @@ interface MediaLibraryProps {
   disabled?: boolean;
 }
 
+type QuickMode = "overlay" | "full";
+type QuickFit = "cover" | "contain";
+
 export function MediaLibrary({
   eventSlug,
   activeVisualId,
@@ -68,12 +75,20 @@ export function MediaLibrary({
   const [filterType, setFilterType] = useState<string>("all");
   const [selectedItem, setSelectedItem] = useState<MediaItem | null>(null);
 
-  // Quick controls para item seleccionado
-  const [quickMode, setQuickMode] = useState<"overlay" | "full">("full");
+  // Quick controls
+  const [quickMode, setQuickMode] = useState<QuickMode>("full");
   const [quickLoop, setQuickLoop] = useState(false);
   const [quickMuted, setQuickMuted] = useState(true);
-  const [quickFit, setQuickFit] = useState<"cover" | "contain">("cover");
+  const [quickFit, setQuickFit] = useState<QuickFit>("cover");
   const [quickOpacity, setQuickOpacity] = useState(1);
+
+  // UX: secciones
+  const [openAudio, setOpenAudio] = useState(true);
+  const [openVideo, setOpenVideo] = useState(true);
+  const [openImages, setOpenImages] = useState(true);
+
+  // Debounce apply
+  const applyTimerRef = useRef<number | null>(null);
 
   const loadItems = async () => {
     try {
@@ -96,31 +111,34 @@ export function MediaLibrary({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [eventSlug]);
 
-  // Debug: ver qué props se están recibiendo
+  // Debug
   useEffect(() => {
     console.log("📚 MediaLibrary - activeVisualId:", activeVisualId);
     console.log("📚 MediaLibrary - activeAudioId:", activeAudioId);
   }, [activeVisualId, activeAudioId]);
 
-  // Sincronizar quick controls con item seleccionado
+  const isItemActive = (item: MediaItem) => {
+    if (item.type === "audio") return !!activeAudioId && item._id === activeAudioId;
+    return !!activeVisualId && item._id === activeVisualId;
+  };
+
+  // Sincronizar quick controls con item seleccionado (solo al seleccionar)
   useEffect(() => {
-    if (selectedItem) {
-      setQuickMode(selectedItem.defaultMode);
-      setQuickLoop(selectedItem.defaultLoop);
-      setQuickMuted(selectedItem.defaultMuted);
-      setQuickFit(selectedItem.defaultFit);
-      setQuickOpacity(selectedItem.defaultOpacity);
-    }
+    if (!selectedItem) return;
+    setQuickMode(selectedItem.defaultMode as QuickMode);
+    setQuickLoop(!!selectedItem.defaultLoop);
+    setQuickMuted(!!selectedItem.defaultMuted);
+    setQuickFit(selectedItem.defaultFit as QuickFit);
+    setQuickOpacity(
+      typeof selectedItem.defaultOpacity === "number" ? selectedItem.defaultOpacity : 1,
+    );
   }, [selectedItem]);
 
   const handleUpload = async (file: File, metadata: CreateMediaItemDto) => {
     try {
       setUploading(true);
       await uploadMediaItem(eventSlug, file, metadata);
-      notifications.show({
-        message: "Media subida exitosamente",
-        color: "green",
-      });
+      notifications.show({ message: "Media subida exitosamente", color: "green" });
       await loadItems();
     } catch (err: any) {
       console.error("Error uploading:", err);
@@ -135,7 +153,6 @@ export function MediaLibrary({
 
   const handleDelete = async (id: string) => {
     if (!confirm("¿Eliminar este archivo de media?")) return;
-
     try {
       await deleteMediaItem(id);
       notifications.show({ message: "Media eliminada", color: "blue" });
@@ -150,27 +167,52 @@ export function MediaLibrary({
     }
   };
 
+  const applyConfigToItem = async (item: MediaItem) => {
+    // Re-aplicar “activate” al mismo item para que backend actualice config
+    // (sin desmontar el monitor). Asumimos que activateMediaItem es idempotente.
+    await activateMediaItem(item._id, eventSlug, {
+      mode: quickMode,
+      loop: quickLoop,
+      muted: quickMuted,
+      fit: quickFit,
+      opacity: quickOpacity,
+    });
+
+    onConfigChange?.();
+  };
+
+  const scheduleApplyIfActive = (item: MediaItem | null) => {
+    if (!item) return;
+    if (!isItemActive(item)) return; // solo aplicamos live si ese item ya está activo
+
+    if (applyTimerRef.current) window.clearTimeout(applyTimerRef.current);
+    applyTimerRef.current = window.setTimeout(async () => {
+      try {
+        await applyConfigToItem(item);
+        // no spamear notificaciones cada cambio; lo dejamos silencioso
+      } catch (err: any) {
+        console.error("Error applying config:", err);
+        notifications.show({
+          message: err?.response?.data?.message || "Error aplicando configuración",
+          color: "red",
+        });
+      }
+    }, 250);
+  };
+
+  // Cada vez que cambian controles, si el seleccionado está activo, aplicar live (debounced)
+  useEffect(() => {
+    scheduleApplyIfActive(selectedItem);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [quickMode, quickLoop, quickMuted, quickFit, quickOpacity]);
+
   const handleActivate = async (item: MediaItem) => {
     try {
-      await activateMediaItem(item._id, eventSlug, {
-        mode: quickMode,
-        loop: quickLoop,
-        muted: quickMuted,
-        fit: quickFit,
-        opacity: quickOpacity,
-      });
-      notifications.show({
-        message: `"${item.name}" activado en monitor`,
-        color: "green",
-      });
-      
-      // Notificar al parent PRIMERO para que actualice los IDs
-      onConfigChange?.();
-      
-      // Esperar un momento para que el backend y parent actualicen
-      await new Promise(resolve => setTimeout(resolve, 400));
-      
-      // Recargar items locales
+      await applyConfigToItem(item);
+      notifications.show({ message: `"${item.name}" activado`, color: "green" });
+
+      // leve delay para que parent refleje IDs, luego recargar
+      await new Promise((r) => setTimeout(r, 250));
       await loadItems();
     } catch (err: any) {
       console.error("Error activating:", err);
@@ -181,26 +223,18 @@ export function MediaLibrary({
     }
   };
 
-  const handleDeactivate = async () => {
-    if (!selectedItem) return;
-
+  const handleDeactivateByItem = async (item: MediaItem) => {
     try {
-      // Determinar qué tipo desactivar según el item seleccionado
-      const typeToDeactivate = selectedItem.type === "audio" ? "audio" : "visual";
-      
+      const typeToDeactivate = item.type === "audio" ? "audio" : "visual";
       await deactivateMedia(eventSlug, typeToDeactivate);
-      notifications.show({ 
-        message: `${selectedItem.type === "audio" ? "Audio" : "Visual"} desactivado`, 
-        color: "blue" 
+
+      notifications.show({
+        message: `${typeToDeactivate === "audio" ? "Audio" : "Visual"} desactivado`,
+        color: "blue",
       });
-      
-      // Notificar al parent PRIMERO
+
       onConfigChange?.();
-      
-      // Esperar un momento para que el backend y parent actualicen
-      await new Promise(resolve => setTimeout(resolve, 400));
-      
-      // Recargar items locales
+      await new Promise((r) => setTimeout(r, 250));
       await loadItems();
     } catch (err: any) {
       console.error("Error deactivating:", err);
@@ -211,14 +245,211 @@ export function MediaLibrary({
     }
   };
 
-  const filteredItems = items.filter((item) => {
-    const matchesSearch = item.name
-      .toLowerCase()
-      .includes(searchTerm.toLowerCase());
-    const matchesType =
-      filterType === "all" || item.type === filterType;
-    return matchesSearch && matchesType;
-  });
+  // ✅ Click card => toggle activar/desactivar
+  const handleCardClick = async (item: MediaItem) => {
+    setSelectedItem(item);
+
+    if (disabled) return;
+
+    const active = isItemActive(item);
+    if (active) {
+      await handleDeactivateByItem(item);
+    } else {
+      await handleActivate(item);
+    }
+  };
+
+  const filteredItems = useMemo(() => {
+    const s = searchTerm.toLowerCase();
+    return items.filter((item) => {
+      const matchesSearch = item.name.toLowerCase().includes(s);
+      const matchesType = filterType === "all" || item.type === filterType;
+      return matchesSearch && matchesType;
+    });
+  }, [items, searchTerm, filterType]);
+
+  const groups = useMemo(() => {
+    const audio = filteredItems.filter((i) => i.type === "audio");
+    const video = filteredItems.filter((i) => i.type === "video");
+    const images = filteredItems.filter((i) => i.type === "image" || i.type === "gif");
+    return { audio, video, images };
+  }, [filteredItems]);
+
+  const renderGrid = (list: MediaItem[]) => (
+    <SimpleGrid cols={{ base: 1, sm: 2, md: 3 }} spacing="sm">
+      {list.map((item) => {
+        const isActive = isItemActive(item);
+        const isSelected = selectedItem?._id === item._id;
+
+        return (
+          <Card
+            key={item._id}
+            padding="xs"
+            withBorder
+            style={{
+              cursor: disabled ? "not-allowed" : "pointer",
+              opacity: disabled ? 0.6 : 1,
+              borderColor: isActive
+                ? "var(--mantine-color-green-6)"
+                : isSelected
+                  ? "var(--mantine-color-blue-6)"
+                  : undefined,
+              borderWidth: isActive || isSelected ? 2 : 1,
+              transition: "transform 120ms ease, box-shadow 120ms ease",
+            }}
+            onClick={() => void handleCardClick(item)}
+            onMouseDown={(e) => {
+              // evita selección de texto rara
+              e.preventDefault();
+            }}
+          >
+            <Card.Section>
+              <Box
+                style={{
+                  width: "100%",
+                  aspectRatio: "16/9",
+                  background: "#000",
+                  position: "relative",
+                  overflow: "hidden",
+                }}
+              >
+                {item.type === "video" ? (
+                  <>
+                    <video
+                      src={item.url}
+                      style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                    />
+                    <Badge
+                      size="xs"
+                      style={{ position: "absolute", top: 4, left: 4 }}
+                      leftSection={<IconVideo size={12} />}
+                    >
+                      Video
+                    </Badge>
+                  </>
+                ) : item.type === "audio" ? (
+                  <>
+                    <Box
+                      style={{
+                        width: "100%",
+                        height: "100%",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        background:
+                          "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+                      }}
+                    >
+                      <IconMusic size={64} color="white" opacity={0.5} />
+                    </Box>
+                    <Badge
+                      size="xs"
+                      style={{ position: "absolute", top: 4, left: 4 }}
+                      leftSection={<IconMusic size={12} />}
+                    >
+                      Audio
+                    </Badge>
+                  </>
+                ) : (
+                  <>
+                    <Image
+                      src={item.url}
+                      alt={item.name}
+                      fit="cover"
+                      style={{ width: "100%", height: "100%" }}
+                    />
+                    <Badge
+                      size="xs"
+                      style={{ position: "absolute", top: 4, left: 4 }}
+                      leftSection={<IconPhoto size={12} />}
+                    >
+                      {item.type === "gif" ? "GIF" : "Imagen"}
+                    </Badge>
+                  </>
+                )}
+
+                {isActive && (
+                  <Badge
+                    size="sm"
+                    color="green"
+                    style={{ position: "absolute", top: 4, right: 4 }}
+                  >
+                    ● Activo
+                  </Badge>
+                )}
+
+                {/* Hint de acción */}
+                {!disabled && (
+                  <Badge
+                    size="xs"
+                    variant="light"
+                    style={{ position: "absolute", bottom: 6, right: 6 }}
+                    leftSection={
+                      isActive ? <IconPlayerStop size={12} /> : <IconPlayerPlay size={12} />
+                    }
+                  >
+                    {isActive ? "Click: apagar" : "Click: activar"}
+                  </Badge>
+                )}
+              </Box>
+            </Card.Section>
+
+            <Group justify="space-between" mt="xs">
+              <Text size="sm" fw={500} lineClamp={1}>
+                {item.name}
+              </Text>
+
+              <Menu position="bottom-end">
+                <Menu.Target>
+                  <ActionIcon
+                    size="sm"
+                    variant="subtle"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <IconDotsVertical size={16} />
+                  </ActionIcon>
+                </Menu.Target>
+                <Menu.Dropdown>
+                  <Menu.Item
+                    leftSection={<IconEdit size={16} />}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      notifications.show({
+                        message: "Edición próximamente",
+                        color: "blue",
+                      });
+                    }}
+                  >
+                    Editar
+                  </Menu.Item>
+                  <Menu.Item
+                    leftSection={<IconTrash size={16} />}
+                    color="red"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      void handleDelete(item._id);
+                    }}
+                  >
+                    Eliminar
+                  </Menu.Item>
+                </Menu.Dropdown>
+              </Menu>
+            </Group>
+
+            {item.tags?.length > 0 && (
+              <Group gap={4} mt="xs">
+                {item.tags.slice(0, 3).map((tag) => (
+                  <Badge key={tag} size="xs" variant="dot">
+                    {tag}
+                  </Badge>
+                ))}
+              </Group>
+            )}
+          </Card>
+        );
+      })}
+    </SimpleGrid>
+  );
 
   if (loading) {
     return (
@@ -228,15 +459,18 @@ export function MediaLibrary({
     );
   }
 
+  const hasAnyActive = !!activeVisualId || !!activeAudioId;
+
   return (
     <Stack gap="md">
-      {/* Header con búsqueda y filtros */}
+      {/* Header */}
       <Group justify="space-between">
         <Text fw={600} size="lg">
           Biblioteca de Media
         </Text>
+
         <Group gap="xs">
-          {(activeVisualId || activeAudioId) && (
+          {hasAnyActive && (
             <Button
               size="xs"
               variant="light"
@@ -245,17 +479,17 @@ export function MediaLibrary({
               onClick={async () => {
                 try {
                   await deactivateMedia(eventSlug, "all");
-                  notifications.show({ 
-                    message: "Toda la media desactivada", 
-                    color: "blue" 
+                  notifications.show({
+                    message: "Toda la media desactivada",
+                    color: "blue",
                   });
-                  await new Promise(resolve => setTimeout(resolve, 300));
                   onConfigChange?.();
+                  await new Promise((r) => setTimeout(r, 250));
                   await loadItems();
                 } catch (err: any) {
-                  notifications.show({ 
-                    message: err?.response?.data?.message || "Error", 
-                    color: "red" 
+                  notifications.show({
+                    message: err?.response?.data?.message || "Error",
+                    color: "red",
                   });
                 }
               }}
@@ -264,6 +498,7 @@ export function MediaLibrary({
               Desactivar Todo
             </Button>
           )}
+
           <Button
             size="xs"
             leftSection={<IconPlus size={16} />}
@@ -276,6 +511,7 @@ export function MediaLibrary({
         </Group>
       </Group>
 
+      {/* Search + Filter */}
       <Group grow>
         <TextInput
           placeholder="Buscar..."
@@ -298,191 +534,89 @@ export function MediaLibrary({
         />
       </Group>
 
-      {/* Grid de items */}
+      {/* Secciones por tipo */}
       {filteredItems.length === 0 ? (
         <Paper p="xl" withBorder>
           <Center>
             <Stack align="center" gap="xs">
               <Text c="dimmed">No hay media en esta biblioteca</Text>
-              <Button
-                size="xs"
-                variant="light"
-                onClick={() => setUploadOpen(true)}
-              >
+              <Button size="xs" variant="light" onClick={() => setUploadOpen(true)}>
                 Subir primer archivo
               </Button>
             </Stack>
           </Center>
         </Paper>
       ) : (
-        <SimpleGrid cols={{ base: 1, sm: 2, md: 3 }} spacing="sm">
-          {filteredItems.map((item) => {
-            const isVisualActive =
-              item.type !== "audio" &&
-              activeVisualId &&
-              item._id === activeVisualId;
-            const isAudioActive =
-              item.type === "audio" &&
-              activeAudioId &&
-              item._id === activeAudioId;
-            const isActive = isVisualActive || isAudioActive;
-            const isSelected = selectedItem?._id === item._id;
+        <Stack gap="md">
+          {/* AUDIO */}
+          <Paper p="sm" withBorder>
+            <Group justify="space-between">
+              <Group gap="xs">
+                <ActionIcon
+                  variant="subtle"
+                  onClick={() => setOpenAudio((v) => !v)}
+                >
+                  {openAudio ? <IconChevronDown size={16} /> : <IconChevronRight size={16} />}
+                </ActionIcon>
+                <Badge leftSection={<IconMusic size={12} />}>Audio</Badge>
+                <Text size="sm" c="dimmed">
+                  {groups.audio.length}
+                </Text>
+              </Group>
+            </Group>
+            <Collapse in={openAudio}>
+              <Divider my="sm" />
+              {groups.audio.length ? renderGrid(groups.audio) : <Text size="sm" c="dimmed">Sin audios.</Text>}
+            </Collapse>
+          </Paper>
 
-            return (
-              <Card
-                key={item._id}
-                padding="xs"
-                withBorder
-                style={{
-                  cursor: "pointer",
-                  borderColor: isActive
-                    ? "var(--mantine-color-green-6)"
-                    : isSelected
-                      ? "var(--mantine-color-blue-6)"
-                      : undefined,
-                  borderWidth: isActive || isSelected ? 2 : 1,
-                }}
-                onClick={() => setSelectedItem(item)}
-              >
-                <Card.Section>
-                  <Box
-                    style={{
-                      width: "100%",
-                      aspectRatio: "16/9",
-                      background: "#000",
-                      position: "relative",
-                      overflow: "hidden",
-                    }}
-                  >
-                    {item.type === "video" ? (
-                      <>
-                        <video
-                          src={item.url}
-                          style={{
-                            width: "100%",
-                            height: "100%",
-                            objectFit: "cover",
-                          }}
-                        />
-                        <Badge
-                          size="xs"
-                          style={{ position: "absolute", top: 4, left: 4 }}
-                          leftSection={<IconVideo size={12} />}
-                        >
-                          Video
-                        </Badge>
-                      </>
-                    ) : item.type === "audio" ? (
-                      <>
-                        <Box
-                          style={{
-                            width: "100%",
-                            height: "100%",
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-                          }}
-                        >
-                          <IconMusic size={64} color="white" opacity={0.5} />
-                        </Box>
-                        <Badge
-                          size="xs"
-                          style={{ position: "absolute", top: 4, left: 4 }}
-                          leftSection={<IconMusic size={12} />}
-                        >
-                          Audio
-                        </Badge>
-                      </>
-                    ) : (
-                      <>
-                        <Image
-                          src={item.url}
-                          alt={item.name}
-                          fit="cover"
-                          style={{ width: "100%", height: "100%" }}
-                        />
-                        <Badge
-                          size="xs"
-                          style={{ position: "absolute", top: 4, left: 4 }}
-                          leftSection={<IconPhoto size={12} />}
-                        >
-                          {item.type === "gif" ? "GIF" : "Imagen"}
-                        </Badge>
-                      </>
-                    )}
+          {/* VIDEO */}
+          <Paper p="sm" withBorder>
+            <Group justify="space-between">
+              <Group gap="xs">
+                <ActionIcon
+                  variant="subtle"
+                  onClick={() => setOpenVideo((v) => !v)}
+                >
+                  {openVideo ? <IconChevronDown size={16} /> : <IconChevronRight size={16} />}
+                </ActionIcon>
+                <Badge leftSection={<IconVideo size={12} />}>Videos</Badge>
+                <Text size="sm" c="dimmed">
+                  {groups.video.length}
+                </Text>
+              </Group>
+            </Group>
+            <Collapse in={openVideo}>
+              <Divider my="sm" />
+              {groups.video.length ? renderGrid(groups.video) : <Text size="sm" c="dimmed">Sin videos.</Text>}
+            </Collapse>
+          </Paper>
 
-                    {isActive && (
-                      <Badge
-                        size="sm"
-                        color="green"
-                        style={{ position: "absolute", top: 4, right: 4 }}
-                      >
-                        ● {isVisualActive ? "Visual" : "Audio"}
-                      </Badge>
-                    )}
-                  </Box>
-                </Card.Section>
-
-                <Group justify="space-between" mt="xs">
-                  <Text size="sm" fw={500} lineClamp={1}>
-                    {item.name}
-                  </Text>
-
-                  <Menu position="bottom-end">
-                    <Menu.Target>
-                      <ActionIcon
-                        size="sm"
-                        variant="subtle"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <IconDotsVertical size={16} />
-                      </ActionIcon>
-                    </Menu.Target>
-                    <Menu.Dropdown>
-                      <Menu.Item
-                        leftSection={<IconEdit size={16} />}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          // TODO: edit dialog
-                          notifications.show({
-                            message: "Edición próximamente",
-                            color: "blue",
-                          });
-                        }}
-                      >
-                        Editar
-                      </Menu.Item>
-                      <Menu.Item
-                        leftSection={<IconTrash size={16} />}
-                        color="red"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          void handleDelete(item._id);
-                        }}
-                      >
-                        Eliminar
-                      </Menu.Item>
-                    </Menu.Dropdown>
-                  </Menu>
-                </Group>
-
-                {item.tags.length > 0 && (
-                  <Group gap={4} mt="xs">
-                    {item.tags.slice(0, 3).map((tag) => (
-                      <Badge key={tag} size="xs" variant="dot">
-                        {tag}
-                      </Badge>
-                    ))}
-                  </Group>
-                )}
-              </Card>
-            );
-          })}
-        </SimpleGrid>
+          {/* IMAGES+GIF */}
+          <Paper p="sm" withBorder>
+            <Group justify="space-between">
+              <Group gap="xs">
+                <ActionIcon
+                  variant="subtle"
+                  onClick={() => setOpenImages((v) => !v)}
+                >
+                  {openImages ? <IconChevronDown size={16} /> : <IconChevronRight size={16} />}
+                </ActionIcon>
+                <Badge leftSection={<IconPhoto size={12} />}>Imágenes & GIF</Badge>
+                <Text size="sm" c="dimmed">
+                  {groups.images.length}
+                </Text>
+              </Group>
+            </Group>
+            <Collapse in={openImages}>
+              <Divider my="sm" />
+              {groups.images.length ? renderGrid(groups.images) : <Text size="sm" c="dimmed">Sin imágenes/GIF.</Text>}
+            </Collapse>
+          </Paper>
+        </Stack>
       )}
 
-      {/* Quick controls para item seleccionado */}
+      {/* Quick controls */}
       {selectedItem && (
         <Paper p="md" withBorder>
           <Stack gap="sm">
@@ -490,19 +624,15 @@ export function MediaLibrary({
               <Text fw={600} size="sm">
                 {selectedItem.name}
               </Text>
-              {selectedItem && (
-                selectedItem._id === activeVisualId ||
-                selectedItem._id === activeAudioId
-              ) && (
-                <Badge color="green">Activo</Badge>
-              )}
+
+              {isItemActive(selectedItem) && <Badge color="green">Activo</Badge>}
             </Group>
 
             <Group grow>
               <SegmentedControl
                 size="xs"
                 value={quickMode}
-                onChange={(v) => setQuickMode(v as any)}
+                onChange={(v) => setQuickMode(v as QuickMode)}
                 data={[
                   { label: "Overlay", value: "overlay" },
                   { label: "Full", value: "full" },
@@ -512,7 +642,7 @@ export function MediaLibrary({
               <Select
                 size="xs"
                 value={quickFit}
-                onChange={(v) => setQuickFit((v as any) || "cover")}
+                onChange={(v) => setQuickFit((v as QuickFit) || "cover")}
                 data={[
                   { value: "cover", label: "Cover" },
                   { value: "contain", label: "Contain" },
@@ -538,7 +668,19 @@ export function MediaLibrary({
             <Box>
               <Text size="xs" fw={500} mb={4}>
                 Opacidad: {Math.round(quickOpacity * 100)}%
+                {isItemActive(selectedItem) ? (
+                  <Text span c="dimmed">
+                    {" "}
+                    (se aplica en vivo)
+                  </Text>
+                ) : (
+                  <Text span c="dimmed">
+                    {" "}
+                    (se aplicará al activar)
+                  </Text>
+                )}
               </Text>
+
               <Slider
                 size="xs"
                 min={0}
@@ -549,15 +691,14 @@ export function MediaLibrary({
               />
             </Box>
 
+            {/* Botón opcional (ya no es necesario, pero lo dejo como fallback) */}
             <Group grow mt="xs">
-              {selectedItem &&
-              (selectedItem._id === activeVisualId ||
-                selectedItem._id === activeAudioId) ? (
+              {isItemActive(selectedItem) ? (
                 <Button
                   size="sm"
                   color="red"
                   leftSection={<IconPlayerStop size={16} />}
-                  onClick={() => void handleDeactivate()}
+                  onClick={() => void handleDeactivateByItem(selectedItem)}
                   disabled={disabled}
                 >
                   Desactivar
@@ -570,86 +711,17 @@ export function MediaLibrary({
                   onClick={() => void handleActivate(selectedItem)}
                   disabled={disabled}
                 >
-                  Activar en Monitor
+                  Activar
                 </Button>
               )}
             </Group>
+
+            <Text size="xs" c="dimmed">
+              Tip: ahora puedes simplemente hacer click en cualquier card para activar/desactivar.
+              Y si el item está activo, cualquier cambio de loop/mute/fit/opacidad se aplica sin desmontar.
+            </Text>
           </Stack>
         </Paper>
-      )}
-
-      {/* Badges para items activos */}
-      {(activeVisualId || activeAudioId) && !selectedItem && (
-        <Stack gap="xs">
-          {activeVisualId && (
-            <Paper p="sm" withBorder style={{ background: "var(--mantine-color-green-0)" }}>
-              <Group justify="space-between">
-                <Group gap="xs">
-                  <Badge color="green">● Visual activo</Badge>
-                  <Text size="sm" fw={500}>
-                    {items.find(i => i._id === activeVisualId)?.name || "Desconocido"}
-                  </Text>
-                </Group>
-                <Button
-                  size="xs"
-                  variant="light"
-                  color="red"
-                  onClick={async () => {
-                    try {
-                      await deactivateMedia(eventSlug, "visual");
-                      notifications.show({ message: "Visual desactivado", color: "blue" });
-                      onConfigChange?.();
-                      await new Promise(resolve => setTimeout(resolve, 400));
-                      await loadItems();
-                    } catch (err: any) {
-                      notifications.show({ 
-                        message: err?.response?.data?.message || "Error", 
-                        color: "red" 
-                      });
-                    }
-                  }}
-                  disabled={disabled}
-                >
-                  Desactivar
-                </Button>
-              </Group>
-            </Paper>
-          )}
-          {activeAudioId && (
-            <Paper p="sm" withBorder style={{ background: "var(--mantine-color-blue-0)" }}>
-              <Group justify="space-between">
-                <Group gap="xs">
-                  <Badge color="blue">● Audio activo</Badge>
-                  <Text size="sm" fw={500}>
-                    {items.find(i => i._id === activeAudioId)?.name || "Desconocido"}
-                  </Text>
-                </Group>
-                <Button
-                  size="xs"
-                  variant="light"
-                  color="red"
-                  onClick={async () => {
-                    try {
-                      await deactivateMedia(eventSlug, "audio");
-                      notifications.show({ message: "Audio desactivado", color: "blue" });
-                      onConfigChange?.();
-                      await new Promise(resolve => setTimeout(resolve, 400));
-                      await loadItems();
-                    } catch (err: any) {
-                      notifications.show({ 
-                        message: err?.response?.data?.message || "Error", 
-                        color: "red" 
-                      });
-                    }
-                  }}
-                  disabled={disabled}
-                >
-                  Desactivar
-                </Button>
-              </Group>
-            </Paper>
-          )}
-        </Stack>
       )}
 
       <UploadMediaDialog
