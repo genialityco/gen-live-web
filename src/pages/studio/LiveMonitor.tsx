@@ -10,6 +10,7 @@ import {
 import { Track } from "livekit-client";
 import type { StageState } from "../../hooks/useStage";
 import type { LayoutMode } from "../../types";
+import { getStageKeyForTrack, parseStageKey } from "../../utils/screen-share-utils";
 
 type Props = {
   showFrame: boolean;
@@ -85,29 +86,52 @@ export function LiveMonitor({
   );
 
   // Solo los que están en "escena" para el programa
+  // Ahora filtra por track individual (cámara o screen share por separado)
   const stageTracks = useMemo(() => {
     return tracks.filter((t) => {
       const uid = t.participant?.identity;
       if (!uid) return false;
-      return !!stage.onStage[uid];
+      
+      // Generar la key específica para este track
+      const stageKey = getStageKeyForTrack(uid, t.source);
+      
+      // Solo mostrar si la key específica está en escena
+      return !!stage.onStage[stageKey];
     });
   }, [tracks, stage.onStage]);
 
-  // Track pineado (prioriza screenshare del uid)
+  // Track pineado - ahora puede ser un track específico (cámara o screen)
   const pinnedTrack = useMemo(() => {
-    const uid = stage.activeUid;
-    if (!uid) return null;
+    const activeKey = stage.activeUid;
+    if (!activeKey) return null;
 
-    const ss = tracks.find(
-      (t) =>
-        t.participant?.identity === uid &&
-        t.source === Track.Source.ScreenShare,
-    );
+    // Parsear la key para ver si es un track específico
+    const parsed = parseStageKey(activeKey);
+    
+    if (parsed.isScreen) {
+      // Buscar específicamente el screen share de este usuario
+      return tracks.find(
+        (t) =>
+          t.participant?.identity === parsed.identity &&
+          t.source === Track.Source.ScreenShare,
+      ) ?? null;
+    }
+    
+    // Buscar el track de cámara (comportamiento original)
     const cam = tracks.find(
       (t) =>
-        t.participant?.identity === uid && t.source === Track.Source.Camera,
+        t.participant?.identity === parsed.identity && 
+        t.source === Track.Source.Camera,
     );
-    return ss ?? cam ?? null;
+    
+    // Fallback: si no hay cámara, buscar screen share del mismo usuario
+    const ss = tracks.find(
+      (t) =>
+        t.participant?.identity === parsed.identity &&
+        t.source === Track.Source.ScreenShare,
+    );
+    
+    return cam ?? ss ?? null;
   }, [tracks, stage.activeUid]);
 
   // Fallback: si no hay pin, usa el primer onStage (prioriza screenshare)

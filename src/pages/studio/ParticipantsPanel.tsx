@@ -26,7 +26,22 @@ import {
   IconPinnedOff,
   IconUserX,
   IconPencil,
+  IconScreenShare,
 } from "@tabler/icons-react";
+import {
+  getScreenShareKey,
+  parseStageKey,
+} from "../../utils/screen-share-utils";
+
+// Representa un item en la lista (puede ser participante o pantalla compartida)
+type StageListItem = {
+  key: string; // Unique key for React
+  stageKey: string; // Key used in stage.onStage (identity or identity:screen)
+  identity: string; // Participant identity
+  name: string; // Display name
+  isScreenShare: boolean;
+  participant: any; // Reference to the actual participant
+};
 
 type Props = {
   role: "host" | "speaker";
@@ -59,26 +74,63 @@ export function ParticipantsPanel({
   const [editingIdentity, setEditingIdentity] = useState<string | null>(null);
   const [tempName, setTempName] = useState("");
 
-  // Orden: speaking primero, luego onStage, luego nombre
-  const sorted = useMemo(() => {
-    const arr = [...participants];
-    arr.sort((a, b) => {
-      const aUid = a.identity;
-      const bUid = b.identity;
+  // Crear lista de items que incluye participantes Y sus pantallas compartidas
+  const stageItems = useMemo(() => {
+    const items: StageListItem[] = [];
 
-      // 1) onStage primero (si quieres mantenerlo)
-      const aStage = stage.onStage[aUid] ? 1 : 0;
-      const bStage = stage.onStage[bUid] ? 1 : 0;
+    participants.forEach((p) => {
+      const uid = p.identity;
+      const screenOn = (p as any).isScreenShareEnabled ?? false;
+
+      // Agregar item de cámara/participante
+      items.push({
+        key: uid,
+        stageKey: uid,
+        identity: uid,
+        name: p.name || uid,
+        isScreenShare: false,
+        participant: p,
+      });
+
+      // Si tiene pantalla compartida, agregar como item separado
+      if (screenOn) {
+        const screenKey = getScreenShareKey(uid);
+        items.push({
+          key: screenKey,
+          stageKey: screenKey,
+          identity: uid,
+          name: `Pantalla de ${p.name || uid}`,
+          isScreenShare: true,
+          participant: p,
+        });
+      }
+    });
+
+    return items;
+  }, [participants]);
+
+  // Orden: onStage primero, luego nombre
+  const sorted = useMemo(() => {
+    const arr = [...stageItems];
+    arr.sort((a, b) => {
+      // 1) onStage primero
+      const aStage = stage.onStage[a.stageKey] ? 1 : 0;
+      const bStage = stage.onStage[b.stageKey] ? 1 : 0;
       if (bStage !== aStage) return bStage - aStage;
 
-      // 2) nombre/uid estable
-      const an = (a.name || aUid || "").toLowerCase();
-      const bn = (b.name || bUid || "").toLowerCase();
+      // 2) Pantallas al final de su grupo
+      if (a.identity === b.identity) {
+        return a.isScreenShare ? 1 : -1;
+      }
+
+      // 3) nombre/uid estable
+      const an = a.name.toLowerCase();
+      const bn = b.name.toLowerCase();
       return an.localeCompare(bn);
     });
 
     return arr;
-  }, [participants, stage.onStage]);
+  }, [stageItems, stage.onStage]);
 
   const handleKick = async (uid: string) => {
     setKicking(uid);
@@ -103,8 +155,29 @@ export function ParticipantsPanel({
     }
   };
 
-  const getDisplayName = (identity: string, originalName: string) => {
+  const getDisplayName = (item: StageListItem) => {
+    const baseName = customNames[item.identity] || item.participant.name || item.identity;
+    if (item.isScreenShare) {
+      return `🖥️ Pantalla de ${baseName}`;
+    }
+    return baseName;
+  };
+
+  // Helper para obtener el nombre base del participante
+  const getBaseName = (identity: string, originalName: string) => {
     return customNames[identity] || originalName || identity;
+  };
+
+  // Helper para parsear activeUid y obtener el nombre correcto
+  const getPinnedDisplayName = () => {
+    if (!stage.activeUid) return "";
+    const parsed = parseStageKey(stage.activeUid);
+    const participant = participants.find((p) => p.identity === parsed.identity);
+    const baseName = getBaseName(parsed.identity, participant?.name || "");
+    if (parsed.isScreen) {
+      return `🖥️ Pantalla de ${baseName}`;
+    }
+    return baseName;
   };
 
   return (
@@ -118,11 +191,7 @@ export function ParticipantsPanel({
           <Text size="xs" c="dimmed">
             Pineado:{" "}
             <Text span fw={600}>
-              {getDisplayName(
-                stage.activeUid,
-                participants.find((p) => p.identity === stage.activeUid)
-                  ?.name || "",
-              )}
+              {getPinnedDisplayName()}
             </Text>
           </Text>
           {!isSpeaker && (
@@ -138,11 +207,13 @@ export function ParticipantsPanel({
       )}
 
       <SimpleGrid cols={{ base: 1, sm: 2, md: 3 }} spacing="sm">
-        {sorted.map((p) => {
-          const uid = p.identity;
+        {sorted.map((item) => {
+          const uid = item.identity;
+          const stageKey = item.stageKey;
           const isMe = !!myUid && uid === myUid;
-          const isOnStage = !!stage.onStage[uid];
-          const isPinned = stage.activeUid === uid;
+          const isOnStage = !!stage.onStage[stageKey];
+          const isPinned = stage.activeUid === stageKey;
+          const p = item.participant;
 
           // Si tu versión no expone esto, déjalo en undefined y no se muestra nada
           const micOn = (p as any).isMicrophoneEnabled ?? undefined;
@@ -151,7 +222,7 @@ export function ParticipantsPanel({
 
           return (
             <Paper
-              key={uid}
+              key={item.key}
               p="sm"
               radius="md"
               withBorder
@@ -160,17 +231,22 @@ export function ParticipantsPanel({
                 display: "flex",
                 flexDirection: "column",
                 gap: 10,
+                borderColor: item.isScreenShare ? "var(--mantine-color-blue-6)" : undefined,
+                background: item.isScreenShare ? "var(--mantine-color-dark-7)" : undefined,
               }}
             >
               {/* Header */}
               <Group justify="space-between" align="flex-start" wrap="nowrap">
                 <div style={{ minWidth: 0, flex: 1 }}>
                   <Group gap={8} wrap="nowrap">
+                    {item.isScreenShare && (
+                      <IconScreenShare size={18} style={{ flexShrink: 0, color: "var(--mantine-color-blue-5)" }} />
+                    )}
                     <Text size="sm" fw={700} truncate style={{ flex: 1 }}>
-                      {getDisplayName(uid, p.name || "")}
+                      {getDisplayName(item)}
                     </Text>
 
-                    {!isSpeaker && (
+                    {!isSpeaker && !item.isScreenShare && (
                       <ActionIcon
                         size="sm"
                         variant="subtle"
@@ -183,8 +259,8 @@ export function ParticipantsPanel({
                   </Group>
                 </div>
 
-                {/* Menu acciones (host) */}
-                {!isSpeaker && (
+                {/* Menu acciones (host) - solo para participantes, no pantallas */}
+                {!isSpeaker && !item.isScreenShare && (
                   <Menu shadow="md" position="bottom-end" withinPortal>
                     <Menu.Target>
                       <ActionIcon variant="subtle" aria-label="Más acciones">
@@ -198,7 +274,7 @@ export function ParticipantsPanel({
                       {!isPinned ? (
                         <Menu.Item
                           leftSection={<IconPin size={16} />}
-                          onClick={() => onPin(uid)}
+                          onClick={() => onPin(stageKey)}
                         >
                           Pinear (Speaker)
                         </Menu.Item>
@@ -224,6 +300,37 @@ export function ParticipantsPanel({
                     </Menu.Dropdown>
                   </Menu>
                 )}
+
+                {/* Menu simplificado para pantallas compartidas */}
+                {!isSpeaker && item.isScreenShare && (
+                  <Menu shadow="md" position="bottom-end" withinPortal>
+                    <Menu.Target>
+                      <ActionIcon variant="subtle" aria-label="Más acciones">
+                        <IconDots size={18} />
+                      </ActionIcon>
+                    </Menu.Target>
+
+                    <Menu.Dropdown>
+                      <Menu.Label>Pantalla compartida</Menu.Label>
+
+                      {!isPinned ? (
+                        <Menu.Item
+                          leftSection={<IconPin size={16} />}
+                          onClick={() => onPin(stageKey)}
+                        >
+                          Pinear pantalla
+                        </Menu.Item>
+                      ) : (
+                        <Menu.Item
+                          leftSection={<IconPinnedOff size={16} />}
+                          onClick={onUnpin}
+                        >
+                          Quitar pin
+                        </Menu.Item>
+                      )}
+                    </Menu.Dropdown>
+                  </Menu>
+                )}
               </Group>
 
               {/* Status chips */}
@@ -238,14 +345,15 @@ export function ParticipantsPanel({
                   {isOnStage ? "🎬 En escena" : "Backstage"}
                 </Badge>
 
-                {(camOn !== undefined || screenOn !== undefined) && (
+                {/* Solo mostrar estado de cámara/mic para participantes, no para pantallas */}
+                {!item.isScreenShare && (camOn !== undefined || screenOn !== undefined) && (
                   <Text size="xs" c="dimmed">
                     {camOn === undefined ? "" : camOn ? "📷 On" : "📷 Off"}{" "}
-                    {screenOn ? "🖥️ On" : ""}
+                    {screenOn ? "🖥️ Screen" : ""}
                   </Text>
                 )}
 
-                {micOn !== undefined && (
+                {!item.isScreenShare && micOn !== undefined && (
                   <Text size="xs" c="dimmed">
                     {micOn
                       ? p.isSpeaking
@@ -255,7 +363,7 @@ export function ParticipantsPanel({
                   </Text>
                 )}
 
-                {isMe && (
+                {isMe && !item.isScreenShare && (
                   <Badge size="xs" variant="outline">
                     Tú
                   </Badge>
@@ -271,7 +379,8 @@ export function ParticipantsPanel({
                   fullWidth
                   size="xs"
                   variant={isOnStage ? "default" : "filled"}
-                  onClick={() => onToggleStage(uid, !isOnStage)}
+                  color={item.isScreenShare ? "blue" : undefined}
+                  onClick={() => onToggleStage(stageKey, !isOnStage)}
                 >
                   {isOnStage ? "Bajar de escena" : "Subir a escena"}
                 </Button>

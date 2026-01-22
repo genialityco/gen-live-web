@@ -407,24 +407,29 @@ export const StudioView: React.FC<StudioViewProps> = ({
   }, [eventSlug, role, displayName, identity, preGeneratedToken]);
 
   // ----- stage handlers (pro) -----
-  const handleToggleStage = async (uid: string, next: boolean) => {
-    await setOnStage(eventSlug, uid, next);
 
+  // Subir/bajar de escena: ahora acepta cualquier key (cámara o pantalla)
+  const handleToggleStage = async (stageKey: string, next: boolean) => {
+    await setOnStage(eventSlug, stageKey, next);
+
+    // Si se sube y no hay pin, pinear ese mismo item
     if (next && !stage.activeUid) {
-      await setActiveUid(eventSlug, uid);
+      await setActiveUid(eventSlug, stageKey);
       await setProgramMode(eventSlug, "speaker");
     }
 
-    if (!next && stage.activeUid === uid) {
+    // Si se baja y está pineado, quitar pin
+    if (!next && stage.activeUid === stageKey) {
       await setActiveUid(eventSlug, "");
     }
   };
 
-  const handlePin = async (uid: string) => {
-    await setActiveUid(eventSlug, uid);
+  // Pinear: acepta cualquier key (cámara o pantalla)
+  const handlePin = async (stageKey: string) => {
+    await setActiveUid(eventSlug, stageKey);
     await setProgramMode(eventSlug, "speaker");
-    if (!stage.onStage[uid]) {
-      await setOnStage(eventSlug, uid, true);
+    if (!stage.onStage[stageKey]) {
+      await setOnStage(eventSlug, stageKey, true);
     }
   };
 
