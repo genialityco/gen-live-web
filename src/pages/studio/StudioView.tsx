@@ -168,29 +168,33 @@ export const StudioView: React.FC<StudioViewProps> = ({
   const [activeVisualId, setActiveVisualId] = useState("");
   const [activeAudioId, setActiveAudioId] = useState("");
   const [mediaEnabled, setMediaEnabled] = useState(false);
-  
+
   // Estados separados para visual y audio
   const [visualUrl, setVisualUrl] = useState("");
-  const [visualType, setVisualType] = useState<"image" | "gif" | "video">("image");
+  const [visualType, setVisualType] = useState<"image" | "gif" | "video">(
+    "image",
+  );
   const [visualMode, setVisualMode] = useState<"overlay" | "full">("overlay");
   const [visualLoop, setVisualLoop] = useState(false);
   const [visualMuted, setVisualMuted] = useState(true);
   const [visualFit, setVisualFit] = useState<"cover" | "contain">("cover");
   const [visualOpacity, setVisualOpacity] = useState(1);
-  
+
   const [audioUrl, setAudioUrl] = useState("");
   const [audioLoop, setAudioLoop] = useState(false);
   const [audioMuted, setAudioMuted] = useState(true);
-  
+
   // Background
   const [backgroundUrl, setBackgroundUrl] = useState("");
-  const [backgroundType, setBackgroundType] = useState<"image" | "gif" | "video">("image");
+  const [backgroundType, setBackgroundType] = useState<
+    "image" | "gif" | "video"
+  >("image");
   const [backgroundColor, setBackgroundColor] = useState("#000000");
-  
+
   // Legacy para backward compatibility
-  const [mediaType, setMediaType] = useState<"image" | "gif" | "video" | "audio">(
-    "image",
-  );
+  const [mediaType, setMediaType] = useState<
+    "image" | "gif" | "video" | "audio"
+  >("image");
   const [mediaUrl, setMediaUrl] = useState("");
   const [mediaMode, setMediaMode] = useState<"overlay" | "full">("overlay");
   const [mediaLoop, setMediaLoop] = useState(false);
@@ -453,13 +457,13 @@ export const StudioView: React.FC<StudioViewProps> = ({
       setActiveVisualId(cfg.activeVisualItemId || "");
       setActiveAudioId(cfg.activeAudioItemId || "");
       setMediaEnabled(!!cfg.mediaEnabled);
-      
+
       console.log("📊 fetchConfig - IDs:", {
         visual: cfg.activeVisualItemId,
         audio: cfg.activeAudioItemId,
-        mediaEnabled: cfg.mediaEnabled
+        mediaEnabled: cfg.mediaEnabled,
       });
-      
+
       // Legacy fields
       setMediaType(cfg.mediaType || "image");
       setMediaUrl(cfg.mediaUrl || "");
@@ -470,15 +474,17 @@ export const StudioView: React.FC<StudioViewProps> = ({
       setMediaOpacity(
         typeof cfg.mediaOpacity === "number" ? cfg.mediaOpacity : 1,
       );
-      
+
       // Obtener effective config para visual y audio
       const effectiveConfig = await getEffectiveMediaConfig(eventSlug);
-      
+
       console.log("📊 effectiveConfig:", effectiveConfig);
-      
+
       if (effectiveConfig.visual) {
         setVisualUrl(effectiveConfig.visual.item.url);
-        setVisualType(effectiveConfig.visual.item.type as "image" | "gif" | "video");
+        setVisualType(
+          effectiveConfig.visual.item.type as "image" | "gif" | "video",
+        );
         setVisualMode(effectiveConfig.visual.config.mode);
         setVisualLoop(effectiveConfig.visual.config.loop);
         setVisualMuted(effectiveConfig.visual.config.muted);
@@ -487,7 +493,7 @@ export const StudioView: React.FC<StudioViewProps> = ({
       } else {
         setVisualUrl("");
       }
-      
+
       if (effectiveConfig.audio) {
         setAudioUrl(effectiveConfig.audio.item.url);
         setAudioLoop(effectiveConfig.audio.config.loop);
@@ -495,7 +501,7 @@ export const StudioView: React.FC<StudioViewProps> = ({
       } else {
         setAudioUrl("");
       }
-      
+
       // Background
       setBackgroundUrl(cfg.backgroundUrl || "");
       setBackgroundType(cfg.backgroundType || "image");
@@ -508,12 +514,12 @@ export const StudioView: React.FC<StudioViewProps> = ({
   // fetch initial config
   useEffect(() => {
     void fetchConfig();
-    
+
     // Polling cada 3 segundos para mantener sincronizado
     const interval = setInterval(() => {
       void fetchConfig();
     }, 3000);
-    
+
     return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [eventSlug]);
@@ -523,7 +529,7 @@ export const StudioView: React.FC<StudioViewProps> = ({
     const isHost = role === "host";
 
     return (
-      <Center h="100vh">
+      <Center>
         <Stack gap="md" align="center" maw={520} px="md">
           <Alert
             icon={<IconAlertTriangle />}
@@ -775,11 +781,11 @@ export const StudioView: React.FC<StudioViewProps> = ({
             <Box
               style={{
                 display: "grid",
-                gridTemplateColumns: role === "host" ? "minmax(0, 1fr) 380px" : "1fr",
+                gridTemplateColumns:
+                  role === "host" ? "minmax(0, 1fr) 380px" : "1fr",
                 gap: 16,
                 height: "100%",
                 minHeight: 0,
-                maxWidth: role === "host" ? "1800px" : "1200px",
                 marginInline: "auto",
                 paddingInline: "1rem",
               }}

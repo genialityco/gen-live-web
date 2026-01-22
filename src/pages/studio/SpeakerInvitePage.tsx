@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 // src/pages/studio/SpeakerInvitePage.tsx
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
@@ -16,6 +17,7 @@ import {
 import { IconAlertCircle, IconVideo } from "@tabler/icons-react";
 import { StudioView } from "./StudioView";
 import { getLivekitToken } from "../../api/livekit-service";
+import { useMediaQuery } from "@mantine/hooks";
 
 /**
  * Página para speakers invitados
@@ -37,6 +39,7 @@ export const SpeakerInvitePage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [generatedToken, setGeneratedToken] = useState<string | null>(null);
   const [isGeneratingToken, setIsGeneratingToken] = useState(false);
+  const isMobile = useMediaQuery("(max-width: 768px)");
 
   // Validar token al montar (solo si viene token en URL)
   useEffect(() => {
@@ -162,8 +165,8 @@ export const SpeakerInvitePage: React.FC = () => {
   // Modal de bienvenida - solicitar nombre
   if (!displayName) {
     return (
-      <Container size="sm" py="xl">
-        <Paper radius="md" p="xl" withBorder>
+      <Container size="sm" py={{ base: "md", sm: "xl" }} px={{ base: "sm", sm: "md" }}>
+        <Paper radius="md" p={{ base: "lg", sm: "xl" }} withBorder>
           <Stack gap="md">
             <div style={{ textAlign: "center" }}>
               <IconVideo size={48} style={{ marginBottom: 16 }} />
@@ -214,7 +217,7 @@ export const SpeakerInvitePage: React.FC = () => {
 
   // Ya tiene nombre - mostrar el studio
   return (
-    <div>
+    <div style={{marginTop: "100px", marginInline: isMobile ? "10px" : "300px" }}>
       <StudioView
         eventSlug={eventSlug!}
         role="speaker"
@@ -233,6 +236,14 @@ export const SpeakerInvitePage: React.FC = () => {
           bottom: 16,
           left: 16,
           zIndex: 1000,
+        }}
+        styles={{
+          root: {
+            '@media (max-width: 768px)': {
+              fontSize: '0.7rem',
+              padding: '4px 8px',
+            },
+          },
         }}
       >
         Cambiar nombre
