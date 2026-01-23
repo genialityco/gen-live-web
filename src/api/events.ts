@@ -95,7 +95,7 @@ export async function setEventStatus(
 
 export async function updateEventStream(
   eventId: string,
-  payload: { provider: "vimeo"; url: string; meta?: any }
+  payload: { provider: "vimeo" | "mux"; url: string; meta?: any }
 ) {
   const { data } = await api.patch(`/events/${eventId}/stream`, payload);
   return data;

@@ -62,6 +62,7 @@ import {
   useTracks,
 } from "@livekit/components-react";
 import { ViewerHlsPlayer } from "../viewer/ViewerHlsPlayer";
+import { VodHlsPlayer } from "../viewer/VodHlsPlayer";
 import { Track } from "livekit-client";
 
 function SpeakerPreview() {
@@ -911,24 +912,26 @@ export default function EventAttendGcore() {
                           finalEvent.stream &&
                           "url" in finalEvent.stream &&
                           finalEvent.stream.url ? (
-                          <iframe
-                            src={
-                              "url" in finalEvent.stream!
-                                ? finalEvent.stream.url
-                                : ""
-                            }
-                            style={{
-                              position: "absolute",
-                              inset: 0,
-                              width: "100%",
-                              height: "100%",
-                              border: "none",
-                            }}
-                            title="Repetición del evento"
-                            frameBorder={0}
-                            allow="autoplay; fullscreen; picture-in-picture"
-                            allowFullScreen
-                          />
+                          <Box style={{ position: "absolute", inset: 0 }}>
+                            {/* Si es URL HLS (.m3u8), usar VodHlsPlayer */}
+                            {finalEvent.stream.url.includes(".m3u8") ? (
+                              <VodHlsPlayer src={finalEvent.stream.url} />
+                            ) : (
+                              /* Si es iframe embebido (YouTube, Vimeo, etc.) */
+                              <iframe
+                                src={finalEvent.stream.url}
+                                style={{
+                                  width: "100%",
+                                  height: "100%",
+                                  border: "none",
+                                }}
+                                title="Repetición del evento"
+                                frameBorder={0}
+                                allow="autoplay; fullscreen; picture-in-picture"
+                                allowFullScreen
+                              />
+                            )}
+                          </Box>
                         ) : status === "upcoming" ? (
                           <Box
                             style={{

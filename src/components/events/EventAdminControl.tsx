@@ -15,8 +15,12 @@ import {
   Center,
   Select,
 } from "@mantine/core";
-import { type EventItem, setEventStatus } from "../../api/events";
+import { IconPlayerPlay, IconRefresh, IconVideo } from "@tabler/icons-react";
+import { notifications } from "@mantine/notifications";
+import { type EventItem, setEventStatus, updateEventStream } from "../../api/events";
+import { getMuxReplayByAsset, listMuxAssets, type MuxAsset } from "../../api/livekit-service";
 import EventStreamForm from "./EventStreamForm";
+import { VodHlsPlayer } from "../../pages/viewer/VodHlsPlayer";
 
 interface EventAdminControlProps {
   event: EventItem;
@@ -34,10 +38,145 @@ export default function EventAdminControl({
     event.status
   );
 
+  // Estado para replay de Mux
+  const [replayLoading, setReplayLoading] = useState(false);
+  const [replayStatus, setReplayStatus] = useState<string | null>(null);
+
+  // Estado para lista de assets (grabaciones)
+  const [assets, setAssets] = useState<MuxAsset[]>([]);
+  const [assetsLoading, setAssetsLoading] = useState(false);
+  const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
+
   // Mantener el estado local sincronizado si cambia desde fuera
   useEffect(() => {
     setLocalStatus(event.status);
   }, [event.status]);
+
+  // Cargar lista de grabaciones al montar
+  useEffect(() => {
+    const loadAssets = async () => {
+      setAssetsLoading(true);
+      try {
+        const result = await listMuxAssets(event.slug);
+        if (result.ok && result.assets.length > 0) {
+          setAssets(result.assets);
+          // Seleccionar el más reciente por defecto
+          setSelectedAssetId(result.assets[result.assets.length - 1].id);
+        }
+      } catch (err) {
+        console.error("Error loading assets:", err);
+      } finally {
+        setAssetsLoading(false);
+      }
+    };
+    void loadAssets();
+  }, [event.slug]);
+
+  // Función para refrescar la lista de grabaciones
+  const handleRefreshAssets = async () => {
+    setAssetsLoading(true);
+    try {
+      const result = await listMuxAssets(event.slug);
+      if (result.ok) {
+        setAssets(result.assets);
+        if (result.assets.length > 0 && !selectedAssetId) {
+          setSelectedAssetId(result.assets[result.assets.length - 1].id);
+        }
+        notifications.show({
+          title: "Lista actualizada",
+          message: result.message,
+          color: "green",
+        });
+      } else {
+        notifications.show({
+          title: "Sin grabaciones",
+          message: result.message,
+          color: "orange",
+        });
+      }
+    } catch (err) {
+      console.error("Error refreshing assets:", err);
+      notifications.show({
+        title: "Error",
+        message: "No se pudo actualizar la lista de grabaciones.",
+        color: "red",
+      });
+    } finally {
+      setAssetsLoading(false);
+    }
+  };
+
+  // Función para activar repetición con el asset seleccionado
+  const handleEnableReplay = async () => {
+    if (!selectedAssetId) {
+      notifications.show({
+        title: "Selecciona una grabación",
+        message: "Debes seleccionar una grabación de la lista.",
+        color: "orange",
+      });
+      return;
+    }
+
+    setReplayLoading(true);
+    setReplayStatus(null);
+
+    try {
+      const result = await getMuxReplayByAsset(event.slug, selectedAssetId);
+
+      if (result.status === "ready" && result.replayUrl) {
+        // Actualizar la URL del stream
+        await updateEventStream(event._id, {
+          provider: "mux",
+          url: result.replayUrl,
+        });
+
+        // Cambiar estado a "replay"
+        await setEventStatus(event._id, "replay");
+
+        // Actualizar el evento local
+        const updatedEvent = {
+          ...event,
+          stream: { url: result.replayUrl, provider: "mux" },
+          status: "replay" as const,
+        };
+        onEventUpdate(updatedEvent);
+        setLocalStatus("replay");
+
+        notifications.show({
+          title: "Repetición activada",
+          message: "El evento ahora muestra la grabación seleccionada.",
+          color: "green",
+        });
+
+        setReplayStatus("ready");
+      } else if (result.status === "preparing") {
+        setReplayStatus("preparing");
+        notifications.show({
+          title: "Procesando",
+          message: result.message,
+          color: "yellow",
+        });
+      } else {
+        setReplayStatus("not_available");
+        notifications.show({
+          title: "No disponible",
+          message: result.message,
+          color: "orange"
+        });
+      }
+    } catch (err: unknown) {
+      console.error("Error enabling replay:", err);
+      const errorMessage = err instanceof Error ? err.message : "Error desconocido";
+      notifications.show({
+        title: "Error",
+        message: errorMessage,
+        color: "red",
+      });
+      setReplayStatus("error");
+    } finally {
+      setReplayLoading(false);
+    }
+  };
 
   const handleStatusChange = async (status: EventItem["status"]) => {
     if (!status || status === localStatus) return;
@@ -145,25 +284,31 @@ export default function EventAdminControl({
             }}
           >
             {/* LIVE / REPLAY con stream */}
-            {["live", "replay"].includes(localStatus) && hasStream && (
-              <iframe
-                src={event.stream!.url}
-                style={{
-                  position: "absolute",
-                  inset: 0,
-                  width: "100%",
-                  height: "100%",
-                  border: "none",
-                }}
-                title={
-                  localStatus === "live"
-                    ? "Preview transmisión en vivo"
-                    : "Preview repetición"
-                }
-                frameBorder={0}
-                allow="autoplay; fullscreen; picture-in-picture"
-                allowFullScreen
-              />
+            {["live", "replay"].includes(localStatus) && hasStream && event.stream?.url && (
+              <Box style={{ position: "absolute", inset: 0 }}>
+                {/* Si es URL HLS (.m3u8), usar VodHlsPlayer */}
+                {event.stream.url.includes(".m3u8") ? (
+                  <VodHlsPlayer src={event.stream.url} autoPlay={false} />
+                ) : (
+                  /* Si es iframe embebido (YouTube, Vimeo, etc.) */
+                  <iframe
+                    src={event.stream.url}
+                    style={{
+                      width: "100%",
+                      height: "100%",
+                      border: "none",
+                    }}
+                    title={
+                      localStatus === "live"
+                        ? "Preview transmisión en vivo"
+                        : "Preview repetición"
+                    }
+                    frameBorder={0}
+                    allow="autoplay; fullscreen; picture-in-picture"
+                    allowFullScreen
+                  />
+                )}
+              </Box>
             )}
 
             {/* LIVE / REPLAY sin stream configurado */}
@@ -368,6 +513,154 @@ export default function EventAdminControl({
                     </Text>
                   </Alert>
                 )}
+              </Stack>
+            </Card>
+
+            {/* Repetición de Mux */}
+            <Card withBorder radius="lg" p="lg">
+              <Stack gap="md">
+                <Group justify="space-between" align="center">
+                  <div>
+                    <Title order={3}>Repetición (Mux)</Title>
+                    <Text size="xs" c="dimmed">
+                      Selecciona una grabación para mostrar como repetición.
+                    </Text>
+                  </div>
+                  <Button
+                    onClick={handleRefreshAssets}
+                    loading={assetsLoading}
+                    variant="subtle"
+                    size="xs"
+                    leftSection={<IconRefresh size={14} />}
+                  >
+                    Actualizar
+                  </Button>
+                </Group>
+
+                {/* Lista de grabaciones */}
+                {assetsLoading ? (
+                  <Center py="md">
+                    <Loader size="sm" />
+                  </Center>
+                ) : assets.length === 0 ? (
+                  <Alert variant="light" color="gray">
+                    <Text size="sm">
+                      No hay grabaciones disponibles. Transmite al menos una vez
+                      para generar una grabación.
+                    </Text>
+                  </Alert>
+                ) : (
+                  <Stack gap="xs">
+                    <Text size="sm" fw={500}>
+                      Grabaciones disponibles ({assets.length}):
+                    </Text>
+                    {assets.map((asset, index) => {
+                      const isSelected = selectedAssetId === asset.id;
+                      const durationMin = asset.duration
+                        ? Math.round(asset.duration / 60)
+                        : null;
+                      const createdDate = asset.createdAt
+                        ? new Date(asset.createdAt).toLocaleString("es-CO", {
+                            day: "2-digit",
+                            month: "short",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })
+                        : "Fecha desconocida";
+
+                      return (
+                        <Box
+                          key={asset.id}
+                          onClick={() => setSelectedAssetId(asset.id)}
+                          style={{
+                            padding: "10px 12px",
+                            borderRadius: 8,
+                            border: isSelected
+                              ? "2px solid var(--mantine-color-blue-5)"
+                              : "1px solid var(--mantine-color-gray-3)",
+                            backgroundColor: isSelected
+                              ? "var(--mantine-color-blue-0)"
+                              : "transparent",
+                            cursor: "pointer",
+                            transition: "all 0.15s ease",
+                          }}
+                        >
+                          <Group justify="space-between" wrap="nowrap">
+                            <Group gap="sm" wrap="nowrap">
+                              <IconVideo
+                                size={18}
+                                color={
+                                  isSelected
+                                    ? "var(--mantine-color-blue-5)"
+                                    : "var(--mantine-color-gray-5)"
+                                }
+                              />
+                              <div>
+                                <Text size="sm" fw={isSelected ? 600 : 400}>
+                                  Grabación #{index + 1}
+                                </Text>
+                                <Text size="xs" c="dimmed">
+                                  {createdDate}
+                                  {durationMin !== null && ` • ${durationMin} min`}
+                                </Text>
+                              </div>
+                            </Group>
+                            <Badge
+                              size="xs"
+                              color={
+                                asset.status === "ready"
+                                  ? "green"
+                                  : asset.status === "preparing"
+                                  ? "yellow"
+                                  : "gray"
+                              }
+                              variant="light"
+                            >
+                              {asset.status === "ready"
+                                ? "Lista"
+                                : asset.status === "preparing"
+                                ? "Procesando"
+                                : asset.status}
+                            </Badge>
+                          </Group>
+                        </Box>
+                      );
+                    })}
+                  </Stack>
+                )}
+
+                {replayStatus === "preparing" && (
+                  <Alert variant="light" color="yellow">
+                    <Text size="sm" fw={500}>
+                      ⏳ Procesando
+                    </Text>
+                    <Text size="xs" mt={4}>
+                      La grabación se está procesando. Intenta de nuevo en unos
+                      minutos.
+                    </Text>
+                  </Alert>
+                )}
+
+                {replayStatus === "ready" && (
+                  <Alert variant="light" color="green">
+                    <Text size="sm" fw={500}>
+                      ✅ Repetición configurada
+                    </Text>
+                    <Text size="xs" mt={4}>
+                      La grabación seleccionada se ha configurado correctamente.
+                    </Text>
+                  </Alert>
+                )}
+
+                <Button
+                  onClick={handleEnableReplay}
+                  loading={replayLoading}
+                  disabled={!selectedAssetId || assets.length === 0}
+                  size="sm"
+                  leftSection={<IconPlayerPlay size={16} />}
+                >
+                  Activar repetición
+                </Button>
               </Stack>
             </Card>
           </Stack>

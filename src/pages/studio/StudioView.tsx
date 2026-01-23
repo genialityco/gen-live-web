@@ -62,6 +62,7 @@ import {
 } from "../../api/live-stage-service";
 import { StudioToolbar } from "./StudioToolbar";
 import { StudioSidePanel } from "./StudioSidePanel";
+import { VirtualBackgroundControl } from "./VirtualBackgroundControl";
 import type { LayoutMode } from "../../types";
 import {
   emergencyResetEventState,
@@ -861,6 +862,13 @@ export const StudioView: React.FC<StudioViewProps> = ({
                   style={{ display: "flex", justifyContent: "center" }}
                 >
                   <ControlBar variation="minimal" />
+                </Paper>
+
+                <Paper p="sm" withBorder radius="md">
+                  <VirtualBackgroundControl
+                    eventSlug={eventSlug}
+                    disabled={isBusy}
+                  />
                 </Paper>
 
                 <Paper p="sm" radius="md" withBorder style={{ minHeight: 0 }}>

@@ -214,3 +214,83 @@ export async function deleteMedia(eventSlug: string) {
   });
   return data;
 }
+
+// ===== REPLAY (Mux) =====
+
+export interface ReplayResponse {
+  ok: boolean;
+  replayUrl: string | null;
+  assetId: string | null;
+  status: "ready" | "preparing" | "not_available" | "error";
+  message: string;
+}
+
+/**
+ * Obtiene la URL de repetición del stream de Mux.
+ * Mux crea automáticamente un Asset (video grabado) cuando termina el stream.
+ */
+export async function getMuxReplayUrl(eventSlug: string): Promise<ReplayResponse> {
+  const { data } = await api.get<ReplayResponse>("/livekit/replay", {
+    params: { eventSlug },
+  });
+  return data;
+}
+
+export interface StreamInfoResponse {
+  ok: boolean;
+  id?: string;
+  status?: string;
+  recentAssetIds?: string[];
+  activeAssetId?: string;
+  message?: string;
+}
+
+/**
+ * Obtiene información del live stream de Mux (status, assets, etc.)
+ */
+export async function getMuxStreamInfo(eventSlug: string): Promise<StreamInfoResponse> {
+  const { data } = await api.get<StreamInfoResponse>("/livekit/stream-info", {
+    params: { eventSlug },
+  });
+  return data;
+}
+
+// ===== ASSETS (Grabaciones) =====
+
+export interface MuxAsset {
+  id: string;
+  status: string;
+  duration: number | null; // duración en segundos
+  createdAt: string | null;
+  playbackId: string | null;
+  replayUrl: string | null;
+}
+
+export interface AssetsListResponse {
+  ok: boolean;
+  assets: MuxAsset[];
+  message: string;
+}
+
+/**
+ * Lista todas las grabaciones (assets) disponibles para un evento
+ */
+export async function listMuxAssets(eventSlug: string): Promise<AssetsListResponse> {
+  const { data } = await api.get<AssetsListResponse>("/livekit/assets", {
+    params: { eventSlug },
+  });
+  return data;
+}
+
+/**
+ * Obtiene la URL de repetición de un asset específico
+ */
+export async function getMuxReplayByAsset(
+  eventSlug: string,
+  assetId: string
+): Promise<ReplayResponse> {
+  const { data } = await api.get<ReplayResponse>("/livekit/replay-by-asset", {
+    params: { eventSlug, assetId },
+  });
+  return data;
+}
