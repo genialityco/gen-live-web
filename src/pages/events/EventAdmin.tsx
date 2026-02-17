@@ -18,6 +18,7 @@ import {
   EventAdminAttendees,
   EventAdminSettings,
   EventAdminMetrics,
+  EventAdminEmail,
 } from "../../components/events";
 import { EventAdminChat } from "../../components/events/EventAdminChat";
 import EventAdminPolls from "../../components/events/EventAdminPolls";
@@ -94,6 +95,10 @@ export default function EventAdmin() {
 
     if (path.endsWith("/chat")) {
       return <EventAdminChat event={event} />;
+    }
+
+    if (path.endsWith("/email")) {
+      return <EventAdminEmail org={org} event={event} />;
     }
 
     if (path.endsWith("/settings")) {

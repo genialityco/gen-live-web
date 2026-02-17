@@ -192,6 +192,14 @@ export const routes = [
         ),
       },
       {
+        path: "/org/:slug/event/:eventSlug/admin/email",
+        element: (
+          <Layout>
+            <EventAdmin />
+          </Layout>
+        ),
+      },
+      {
         path: "/org/:slug/event/:eventSlug/admin/studio",
         element: (
           <Layout>

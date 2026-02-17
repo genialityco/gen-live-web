@@ -117,6 +117,12 @@ export default function EventAdminLayout({
       description: "Administrar el chat del evento",
     },
     {
+      label: "Email",
+      icon: "✉️",
+      href: `/org/${slug}/event/${eventSlug}/admin/email`,
+      description: "Plantillas y envío de correos",
+    },
+    {
       label: "Configuración",
       icon: "⚙️",
       href: `/org/${slug}/event/${eventSlug}/admin/settings`,

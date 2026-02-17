@@ -12,3 +12,4 @@ export { default as EventAdminControl } from './EventAdminControl';
 export { default as EventAdminAttendees } from './EventAdminAttendees';
 export { default as EventAdminSettings } from './EventAdminSettings';
 export { default as EventAdminMetrics } from './EventAdminMetrics';
+export { default as EventAdminEmail } from './EventAdminEmail';
