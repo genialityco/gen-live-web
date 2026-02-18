@@ -18,12 +18,10 @@ import {
   Image,
   ScrollArea,
   ThemeIcon,
-  Spoiler,
 } from "@mantine/core";
 import {
   IconCalendar,
   IconClock,
-  IconArrowRight,
   IconPlayerPlay,
 } from "@tabler/icons-react";
 import { fetchOrgBySlug, type Org } from "../../api/orgs";
@@ -283,132 +281,46 @@ function EventBanner({
 function Hero({
   org,
   nextEvent,
-  orgSlug,
-  onScrollToUpcoming,
+  // orgSlug,
+  // onScrollToUpcoming,
 }: {
   org: Org;
   nextEvent: EventItem | null;
-  orgSlug: string;
-  onScrollToUpcoming: () => void;
+  // orgSlug: string;
+  // onScrollToUpcoming: () => void;
 }) {
-  const navigate = useNavigate();
-  const isMobile = useMediaQuery("(max-width: 768px)");
+  // const isMobile = useMediaQuery("(max-width: 768px)");
 
   const heroImg = org.branding?.header?.backgroundImageUrl || undefined;
   const heroImgMobile =
     org.branding?.header?.backgroundImageMobileUrl || undefined;
-  const title = org.name;
+
   const brandColor =
     org.branding?.colors?.background || "var(--mantine-color-brand-6)";
 
-  // 🔽 Nuevo: alturas/paddings compactos para mobile
-  const heroMinHeight = isMobile ? 220 : 420;
-  const cardMaxWidth = isMobile ? "92vw" : 760;
-  const cardFixedWidth = isMobile ? "100%" : 500;
+  // const heroMinHeight = isMobile ? 260 : 460;
 
   return (
     <Box
       style={{
         position: "relative",
         borderBottom: "1px solid var(--mantine-color-gray-3)",
-        background: isMobile ? brandColor : "transparent",
-        color: isMobile ? "white" : "inherit",
-        minHeight: heroMinHeight, // 🔽 limita la altura en mobile
-        display: "grid", // 🔽 evita crecer de más
+        // minHeight: heroMinHeight,
+        overflow: "hidden",
+        background: brandColor, // fallback si no hay imagen
+        boxShadow: "0 20px 12px rgba(0,0,0,0.1)",
       }}
     >
-      {/* Banner solo desktop */}
-      {!isMobile && (
-        <EventBanner
-          imageUrl={heroImg}
-          imageUrlMobile={heroImgMobile}
-          status={nextEvent?.status || "upcoming"}
-          showOverlay
-        />
-      )}
-
-      {/* Contenido principal */}
-      <Container
-        size="xl"
-        // 🔽 menos padding vertical en mobile
-        py={isMobile ? 12 : 0}
-        m="sm"
-        style={{
-          position: isMobile ? "relative" : "absolute",
-          inset: isMobile ? "auto" : 0,
-          display: "grid",
-          placeItems: isMobile ? "center" : "end start",
-          padding: isMobile ? "8px 0" : "clamp(12px, 2vw, 24px)", // 🔽 reduce padding en mobile
-        }}
-      >
-        <Card
-          radius={isMobile ? "md" : "lg"} // 🔽 radio menor en mobile
-          p={isMobile ? "md" : "lg"} // 🔽 padding menor en mobile
-          mb={isMobile ? "sm" : "lg"} // 🔽 margen menor en mobile
-          style={{
-            backdropFilter: isMobile ? "blur(2px)" : "blur(6px)", // 🔽 menos blur
-            background: isMobile
-              ? "rgba(255,255,255,0.80)"
-              : "rgba(255,255,255,0.85)",
-            maxWidth: cardMaxWidth,
-            width: cardFixedWidth,
-            minWidth: isMobile ? "auto" : 500,
-          }}
-        >
-          <Stack gap={isMobile ? 4 : "xs"}>
-            {" "}
-            {/* 🔽 gaps más chicos */}
-            <Title
-              order={isMobile ? 2 : 1} // 🔽 baja jerarquía en mobile
-              style={{ lineHeight: 1.1, fontSize: isMobile ? 22 : 32 }} // 🔽 fuente menor
-            >
-              {title}
-            </Title>
-            {org.description && (
-              <Spoiler
-                maxHeight={isMobile ? 30 : 50} // ~2-3 líneas
-                showLabel="Ver más"
-                hideLabel="Ver menos"
-                transitionDuration={200}
-              >
-                <Text c="dimmed" size={isMobile ? "sm" : "md"}>
-                  {org.description}
-                </Text>
-              </Spoiler>
-            )}
-            <Group gap={isMobile ? 6 : "sm"} wrap="wrap">
-              {nextEvent ? (
-                <Button
-                  size={isMobile ? "sm" : "md"} // 🔽 botón más pequeño
-                  fullWidth={isMobile} // 🔽 ocupa ancho en mobile
-                  onClick={() =>
-                    navigate(
-                      `/org/${orgSlug}/event/${nextEvent.slug || nextEvent._id}`
-                    )
-                  }
-                  rightSection={<IconArrowRight size={16} />} // 🔽 ícono más chico
-                  variant="gradient"
-                  gradient={{ from: "brand.7", to: "accent.6", deg: 135 }}
-                >
-                  Ver próximo evento
-                </Button>
-              ) : (
-                <Button
-                  size={isMobile ? "sm" : "md"}
-                  fullWidth={isMobile}
-                  variant="light"
-                  onClick={onScrollToUpcoming}
-                >
-                  Explorar eventos
-                </Button>
-              )}
-            </Group>
-          </Stack>
-        </Card>
-      </Container>
+      <EventBanner
+        imageUrl={heroImg}
+        imageUrlMobile={heroImgMobile}
+        status={nextEvent?.status || "upcoming"}
+        showOverlay={false}
+      />
     </Box>
   );
 }
+
 
 function InfoRow({ date }: { date?: string | null }) {
   if (!date) return null;
@@ -732,14 +644,14 @@ export default function OrganizationLanding() {
 
   const upcomingSectionRef = useRef<HTMLDivElement | null>(null);
 
-  const handleScrollToUpcoming = () => {
-    if (upcomingSectionRef.current) {
-      upcomingSectionRef.current.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
-    }
-  };
+  // const handleScrollToUpcoming = () => {
+  //   if (upcomingSectionRef.current) {
+  //     upcomingSectionRef.current.scrollIntoView({
+  //       behavior: "smooth",
+  //       block: "start",
+  //     });
+  //   }
+  // };
 
   const loadOrganization = async () => {
     if (!slug) {
@@ -902,8 +814,8 @@ export default function OrganizationLanding() {
         <Hero
           org={org}
           nextEvent={nextEvent}
-          orgSlug={slug!}
-          onScrollToUpcoming={handleScrollToUpcoming}
+          // orgSlug={slug!}
+          // onScrollToUpcoming={handleScrollToUpcoming}
         />
 
         {/* PROXIMO EVENTO DESTACADO */}

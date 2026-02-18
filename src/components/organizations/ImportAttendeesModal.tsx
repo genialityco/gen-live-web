@@ -12,6 +12,13 @@ import {
   Group,
   FileInput,
   Loader,
+  SimpleGrid,
+  Paper,
+  Badge,
+  Divider,
+  ScrollArea,
+  Box,
+  Code,
 } from "@mantine/core";
 import * as XLSX from "xlsx";
 import { api } from "../../core/api";
@@ -42,6 +49,29 @@ export default function ImportAttendeesModal({
   const [serverSummary, setServerSummary] = useState<any | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const normalizeBoolean = (raw: any): boolean | undefined => {
+    if (raw === null || raw === undefined) return undefined;
+    if (typeof raw === "boolean") return raw;
+    if (typeof raw === "number") return raw !== 0;
+
+    if (typeof raw === "string") {
+      const v = raw.trim().toLowerCase();
+      if (["true", "verdadero", "sí", "si", "yes", "y", "s"].includes(v))
+        return true;
+      if (["false", "falso", "no", "n"].includes(v)) return false;
+      if (["1", "x", "✓"].includes(v)) return true;
+      if (["0"].includes(v)) return false;
+    }
+    return undefined;
+  };
+
+  const getSampleValue = (header?: string) => {
+    if (!header || rows.length === 0) return "-";
+    const v = rows[0]?.[header];
+    if (v === null || v === undefined || v === "") return "-";
+    return String(v);
+  };
+
   const handleFileChange = async (f: File | null) => {
     setFile(f);
     setHeaders([]);
@@ -52,55 +82,59 @@ export default function ImportAttendeesModal({
 
     if (!f) return;
 
-    const data = await f.arrayBuffer();
-    const workbook = XLSX.read(data, { type: "array" });
-    const sheetName = workbook.SheetNames[0];
-    const sheet = workbook.Sheets[sheetName];
-    const json: ExcelRow[] = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+    try {
+      const data = await f.arrayBuffer();
+      const workbook = XLSX.read(data, { type: "array" });
+      const sheetName = workbook.SheetNames[0];
+      const sheet = workbook.Sheets[sheetName];
+      const json: ExcelRow[] = XLSX.utils.sheet_to_json(sheet, { defval: "" });
 
-    if (json.length === 0) {
-      setError("El archivo no contiene filas");
-      return;
-    }
-
-    const firstRow = json[0];
-    const cols = Object.keys(firstRow);
-    setHeaders(cols);
-    setRows(json);
-
-    // mapeo inicial heurístico: intenta emparejar por label o por campo común
-    const initialMapping: Record<string, string> = {};
-
-    // campos base
-    const lowercaseHeaders = cols.map((h) => h.toLowerCase());
-    const emailIdx = lowercaseHeaders.findIndex((h) =>
-      ["email", "correo", "correo electrónico", "correo electronico"].includes(
-        h
-      )
-    );
-    if (emailIdx >= 0) initialMapping["__email"] = cols[emailIdx];
-
-    const nameIdx = lowercaseHeaders.findIndex((h) =>
-      ["nombre", "name"].includes(h)
-    );
-    if (nameIdx >= 0) initialMapping["__name"] = cols[nameIdx];
-
-    const phoneIdx = lowercaseHeaders.findIndex((h) =>
-      ["telefono", "teléfono", "phone", "celular", "cel"].includes(h)
-    );
-    if (phoneIdx >= 0) initialMapping["__phone"] = cols[phoneIdx];
-
-    // campos del registrationForm por label
-    for (const field of registrationForm.fields) {
-      const idx = lowercaseHeaders.findIndex((h) =>
-        h.includes(field.label.toLowerCase())
-      );
-      if (idx >= 0) {
-        initialMapping[field.id] = cols[idx];
+      if (json.length === 0) {
+        setError("El archivo no contiene filas");
+        return;
       }
-    }
 
-    setMapping(initialMapping);
+      const firstRow = json[0];
+      const cols = Object.keys(firstRow);
+      setHeaders(cols);
+      setRows(json);
+
+      // mapeo inicial heurístico
+      const initialMapping: Record<string, string> = {};
+      const lowercaseHeaders = cols.map((h) => h.toLowerCase());
+
+      const emailIdx = lowercaseHeaders.findIndex((h) =>
+        [
+          "email",
+          "correo",
+          "correo electrónico",
+          "correo electronico",
+        ].includes(h),
+      );
+      if (emailIdx >= 0) initialMapping["__email"] = cols[emailIdx];
+
+      const nameIdx = lowercaseHeaders.findIndex((h) =>
+        ["nombre", "name"].includes(h),
+      );
+      if (nameIdx >= 0) initialMapping["__name"] = cols[nameIdx];
+
+      const phoneIdx = lowercaseHeaders.findIndex((h) =>
+        ["telefono", "teléfono", "phone", "celular", "cel"].includes(h),
+      );
+      if (phoneIdx >= 0) initialMapping["__phone"] = cols[phoneIdx];
+
+      for (const field of registrationForm.fields) {
+        const idx = lowercaseHeaders.findIndex((h) =>
+          h.includes(field.label.toLowerCase()),
+        );
+        if (idx >= 0) initialMapping[field.id] = cols[idx];
+      }
+
+      setMapping(initialMapping);
+    } catch (e) {
+      console.error(e);
+      setError("No se pudo leer el archivo. Verifica el formato (xlsx/csv).");
+    }
   };
 
   const handleChangeMapping = (fieldKey: string, header: string | null) => {
@@ -121,34 +155,23 @@ export default function ImportAttendeesModal({
     setServerSummary(null);
 
     try {
-      // Construir payload
       const bulkRows = rows.map((row) => {
         const registrationData: Record<string, any> = {};
         const identifierValues: Record<string, any> = {};
 
-        // Campos del registrationForm
         for (const field of registrationForm.fields) {
           const headerName = mapping[field.id];
           if (headerName) {
             const rawValue = row[headerName];
-            let value: any = rawValue;
-
-            if (field.type === "checkbox") {
-              const boolVal = normalizeBoolean(rawValue);
-              if (boolVal !== undefined) {
-                value = boolVal; // guardamos true/false
-              }
-            }
+            const value = coerceValue(field, rawValue);
+            registrationData[field.id] = value;
+            if (field.isIdentifier) identifierValues[field.id] = value;
 
             registrationData[field.id] = value;
-
-            if (field.isIdentifier) {
-              identifierValues[field.id] = value;
-            }
+            if (field.isIdentifier) identifierValues[field.id] = value;
           }
         }
 
-        // Campos base
         const emailHeader = mapping["__email"];
         const nameHeader = mapping["__name"];
         const phoneHeader = mapping["__phone"];
@@ -157,13 +180,7 @@ export default function ImportAttendeesModal({
         const name = nameHeader ? row[nameHeader] : undefined;
         const phone = phoneHeader ? row[phoneHeader] : undefined;
 
-        return {
-          identifierValues,
-          registrationData,
-          email,
-          name,
-          phone,
-        };
+        return { identifierValues, registrationData, email, name, phone };
       });
 
       const response = await api.post("/org-attendees/bulk-import", {
@@ -172,45 +189,77 @@ export default function ImportAttendeesModal({
       });
 
       setServerSummary(response.data);
-      onImported();
+      onImported(); // refrescar tabla afuera
     } catch (e: any) {
       console.error(e);
       setError(
-        e?.response?.data?.message || "Error al enviar los datos al servidor"
+        e?.response?.data?.message || "Error al enviar los datos al servidor",
       );
     } finally {
       setLoading(false);
     }
   };
 
-  const normalizeBoolean = (raw: any): boolean | undefined => {
-    if (raw === null || raw === undefined) return undefined;
-
-    if (typeof raw === "boolean") return raw;
-
-    if (typeof raw === "number") {
-      // 0 = false, cualquier otro = true
-      return raw !== 0;
-    }
-
-    if (typeof raw === "string") {
-      const v = raw.trim().toLowerCase();
-
-      if (["true", "verdadero", "sí", "si", "yes", "y", "s"].includes(v))
-        return true;
-      if (["false", "falso", "no", "n"].includes(v)) return false;
-
-      if (["1", "x", "✓"].includes(v)) return true;
-      if (["0"].includes(v)) return false;
-    }
-
-    // Si no lo podemos interpretar, devolvemos undefined para no dañarlo
-    return undefined;
+  const selectProps = {
+    data: headers,
+    placeholder: "Selecciona columna",
+    searchable: true,
+    clearable: true,
+    size: "lg" as const,
+    comboboxProps: { withinPortal: true as const },
+    nothingFoundMessage: "No hay coincidencias",
+    styles: { input: { minHeight: 44 } },
   };
 
-//   const identifierFields = registrationForm.fields.filter(
-//     (f) => f.isIdentifier
-//   );
+  const coerceValue = (field: any, raw: any) => {
+    if (raw === null || raw === undefined) return undefined;
+
+    // vacíos típicos
+    if (typeof raw === "string" && raw.trim() === "") return undefined;
+
+    switch (field.type) {
+      case "checkbox": {
+        const b = normalizeBoolean(raw);
+        return b === undefined ? raw : b;
+      }
+
+      case "number": {
+        if (typeof raw === "number") return raw;
+        if (typeof raw === "string") {
+          // soporta "1.234,56" o "1234.56"
+          const cleaned = raw
+            .replace(/\s/g, "")
+            .replace(/\./g, "")
+            .replace(",", ".");
+          const n = Number(cleaned);
+          return Number.isFinite(n) ? n : raw; // si no parsea, no lo dañes
+        }
+        return raw;
+      }
+
+      case "select": {
+        // normalmente quieres guardar el value (string) tal cual
+        return String(raw);
+      }
+
+      case "date": {
+        // Si viene como Date
+        if (raw instanceof Date) return raw.toISOString();
+
+        // Si Excel lo trae como serial number, SheetJS puede convertir con XLSX.SSF
+        // pero aquí lo dejamos simple: si es string, intenta Date()
+        if (typeof raw === "string") {
+          const d = new Date(raw);
+          return isNaN(d.getTime()) ? raw : d.toISOString();
+        }
+
+        return raw;
+      }
+
+      default:
+        return raw;
+    }
+  };
 
   return (
     <Modal
@@ -238,146 +287,204 @@ export default function ImportAttendeesModal({
         {headers.length > 0 && (
           <>
             <Alert variant="light" color="blue">
-              <Text size="sm">Columnas detectadas:</Text>
+              <Text size="sm" fw={600}>
+                Columnas detectadas
+              </Text>
               <Text size="xs" c="dimmed">
                 {headers.join(" · ")}
               </Text>
             </Alert>
 
-            {/* Mapeo de campos base */}
-            <Text fw={600} size="sm">
-              Campos básicos
-            </Text>
-            <Table withColumnBorders>
-              <Table.Thead>
-                <Table.Tr>
-                  <Table.Th>Campo</Table.Th>
-                  <Table.Th>Columna del Excel</Table.Th>
-                </Table.Tr>
-              </Table.Thead>
-              <Table.Tbody>
-                <Table.Tr>
-                  <Table.Td>Email</Table.Td>
-                  <Table.Td>
-                    <Select
-                      data={headers}
-                      placeholder="Selecciona columna"
-                      value={mapping["__email"] || null}
-                      onChange={(value) =>
-                        handleChangeMapping("__email", value)
-                      }
-                      searchable
-                      clearable
-                    />
-                  </Table.Td>
-                </Table.Tr>
-                <Table.Tr>
-                  <Table.Td>Nombre</Table.Td>
-                  <Table.Td>
-                    <Select
-                      data={headers}
-                      placeholder="Selecciona columna"
-                      value={mapping["__name"] || null}
-                      onChange={(value) => handleChangeMapping("__name", value)}
-                      searchable
-                      clearable
-                    />
-                  </Table.Td>
-                </Table.Tr>
-                <Table.Tr>
-                  <Table.Td>Teléfono</Table.Td>
-                  <Table.Td>
-                    <Select
-                      data={headers}
-                      placeholder="Selecciona columna"
-                      value={mapping["__phone"] || null}
-                      onChange={(value) =>
-                        handleChangeMapping("__phone", value)
-                      }
-                      searchable
-                      clearable
-                    />
-                  </Table.Td>
-                </Table.Tr>
-              </Table.Tbody>
-            </Table>
+            {/* Mapeo (mejor UI) */}
+            <Paper withBorder p="md" radius="md">
+              <Stack gap="sm">
+                <Group justify="space-between" align="center">
+                  <Text fw={700} size="sm">
+                    Mapeo de columnas
+                  </Text>
+                  <Badge variant="light">
+                    {headers.length} columnas · {rows.length} filas
+                  </Badge>
+                </Group>
 
-            {/* Mapeo de campos del registrationForm */}
-            <Text fw={600} size="sm" mt="md">
-              Campos del formulario de registro
-            </Text>
-            <Table withColumnBorders>
-              <Table.Thead>
-                <Table.Tr>
-                  <Table.Th>Campo del formulario</Table.Th>
-                  <Table.Th>Es identificador</Table.Th>
-                  <Table.Th>Columna del Excel</Table.Th>
-                </Table.Tr>
-              </Table.Thead>
-              <Table.Tbody>
-                {registrationForm.fields
-                  .slice()
-                  .sort((a, b) => a.order - b.order)
-                  .map((field) => (
-                    <Table.Tr key={field.id}>
-                      <Table.Td>
-                        <Text size="sm">{field.label}</Text>
-                        <Text size="xs" c="dimmed">
-                          ID: {field.id}
+                <Divider />
+
+                <Text fw={600} size="sm">
+                  Campos básicos
+                </Text>
+
+                <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
+                  <Paper withBorder p="sm" radius="md">
+                    <Stack gap={6}>
+                      <Group justify="space-between">
+                        <Text fw={600} size="sm">
+                          Email
                         </Text>
-                      </Table.Td>
-                      <Table.Td>
-                        {field.isIdentifier ? (
-                          <Text size="xs" c="green">
-                            Sí
-                          </Text>
-                        ) : (
-                          <Text size="xs" c="dimmed">
-                            No
-                          </Text>
-                        )}
-                      </Table.Td>
-                      <Table.Td>
-                        <Select
-                          data={headers}
-                          placeholder="Selecciona columna"
-                          value={mapping[field.id] || null}
-                          onChange={(value) =>
-                            handleChangeMapping(field.id, value)
-                          }
-                          searchable
-                          clearable
-                        />
-                      </Table.Td>
-                    </Table.Tr>
-                  ))}
-              </Table.Tbody>
-            </Table>
+                        <Badge variant="light" color="blue">
+                          Base
+                        </Badge>
+                      </Group>
 
-            {/* Muestra las primeras filas como preview */}
+                      <Select
+                        {...selectProps}
+                        value={mapping["__email"] || null}
+                        onChange={(value) =>
+                          handleChangeMapping("__email", value)
+                        }
+                      />
+
+                      <Text size="xs" c="dimmed">
+                        Ejemplo:{" "}
+                        <Code>{getSampleValue(mapping["__email"])}</Code>
+                      </Text>
+                    </Stack>
+                  </Paper>
+
+                  <Paper withBorder p="sm" radius="md">
+                    <Stack gap={6}>
+                      <Group justify="space-between">
+                        <Text fw={600} size="sm">
+                          Nombre
+                        </Text>
+                        <Badge variant="light" color="blue">
+                          Base
+                        </Badge>
+                      </Group>
+
+                      <Select
+                        {...selectProps}
+                        value={mapping["__name"] || null}
+                        onChange={(value) =>
+                          handleChangeMapping("__name", value)
+                        }
+                      />
+
+                      <Text size="xs" c="dimmed">
+                        Ejemplo:{" "}
+                        <Code>{getSampleValue(mapping["__name"])}</Code>
+                      </Text>
+                    </Stack>
+                  </Paper>
+
+                  <Paper withBorder p="sm" radius="md">
+                    <Stack gap={6}>
+                      <Group justify="space-between">
+                        <Text fw={600} size="sm">
+                          Teléfono
+                        </Text>
+                        <Badge variant="light" color="blue">
+                          Base
+                        </Badge>
+                      </Group>
+
+                      <Select
+                        {...selectProps}
+                        value={mapping["__phone"] || null}
+                        onChange={(value) =>
+                          handleChangeMapping("__phone", value)
+                        }
+                      />
+
+                      <Text size="xs" c="dimmed">
+                        Ejemplo:{" "}
+                        <Code>{getSampleValue(mapping["__phone"])}</Code>
+                      </Text>
+                    </Stack>
+                  </Paper>
+                </SimpleGrid>
+
+                <Divider />
+
+                <Group justify="space-between" align="center">
+                  <Text fw={600} size="sm">
+                    Campos del formulario de registro
+                  </Text>
+                  <Text size="xs" c="dimmed">
+                    Tip: escribe dentro del select para buscar
+                  </Text>
+                </Group>
+
+                <ScrollArea h={420} type="auto" offsetScrollbars>
+                  <Stack gap="sm" pr="xs">
+                    {registrationForm.fields
+                      .slice()
+                      .sort((a, b) => a.order - b.order)
+                      .map((field) => (
+                        <Paper key={field.id} withBorder p="sm" radius="md">
+                          <SimpleGrid cols={{ base: 1, md: 3 }} spacing="md">
+                            <Box>
+                              <Group gap="xs" wrap="nowrap">
+                                <Text fw={600} size="sm">
+                                  {field.label}
+                                </Text>
+                                {field.isIdentifier && (
+                                  <Badge color="green" variant="light">
+                                    Identificador
+                                  </Badge>
+                                )}
+                              </Group>
+                              <Text size="xs" c="dimmed">
+                                ID: <Code>{field.id}</Code> · Tipo:{" "}
+                                <Code>{field.type}</Code>
+                              </Text>
+                            </Box>
+
+                            <Box>
+                              <Select
+                                {...selectProps}
+                                value={mapping[field.id] || null}
+                                onChange={(value) =>
+                                  handleChangeMapping(field.id, value)
+                                }
+                              />
+                            </Box>
+
+                            <Box>
+                              <Text size="xs" c="dimmed">
+                                Ejemplo:{" "}
+                                <Code>{getSampleValue(mapping[field.id])}</Code>
+                              </Text>
+                              <Text size="xs" c="dimmed">
+                                Columna:{" "}
+                                <Code>
+                                  {mapping[field.id] ? mapping[field.id] : "-"}
+                                </Code>
+                              </Text>
+                            </Box>
+                          </SimpleGrid>
+                        </Paper>
+                      ))}
+                  </Stack>
+                </ScrollArea>
+              </Stack>
+            </Paper>
+
+            {/* Preview filas */}
             <Text fw={600} size="sm" mt="md">
               Preview (primeras 5 filas)
             </Text>
-            <Table striped withColumnBorders>
-              <Table.Thead>
-                <Table.Tr>
-                  {headers.map((h) => (
-                    <Table.Th key={h}>{h}</Table.Th>
-                  ))}
-                </Table.Tr>
-              </Table.Thead>
-              <Table.Tbody>
-                {rows.slice(0, 5).map((row, idx) => (
-                  <Table.Tr key={idx}>
+            <ScrollArea type="auto" offsetScrollbars>
+              <Table striped withColumnBorders>
+                <Table.Thead>
+                  <Table.Tr>
                     {headers.map((h) => (
-                      <Table.Td key={h}>
-                        <Text size="xs">{String(row[h])}</Text>
-                      </Table.Td>
+                      <Table.Th key={h}>{h}</Table.Th>
                     ))}
                   </Table.Tr>
-                ))}
-              </Table.Tbody>
-            </Table>
+                </Table.Thead>
+                <Table.Tbody>
+                  {rows.slice(0, 5).map((row, idx) => (
+                    <Table.Tr key={idx}>
+                      {headers.map((h) => (
+                        <Table.Td key={h}>
+                          <Text size="xs">{String(row[h])}</Text>
+                        </Table.Td>
+                      ))}
+                    </Table.Tr>
+                  ))}
+                </Table.Tbody>
+              </Table>
+            </ScrollArea>
           </>
         )}
 

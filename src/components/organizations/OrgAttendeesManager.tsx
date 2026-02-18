@@ -18,7 +18,8 @@ import {
   ActionIcon,
   Tooltip,
 } from "@mantine/core";
-import { IconEye, IconUpload } from "@tabler/icons-react";
+import * as XLSX from "xlsx";
+import { IconEye, IconUpload, IconDownload } from "@tabler/icons-react";
 import { api } from "../../core/api";
 import type { RegistrationForm } from "../../types";
 import ImportAttendeesModal from "./ImportAttendeesModal";
@@ -53,7 +54,7 @@ export default function OrgAttendeesManager({
   const [error, setError] = useState<string | null>(null);
   const [viewModalOpen, setViewModalOpen] = useState(false);
   const [selectedAttendee, setSelectedAttendee] = useState<OrgAttendee | null>(
-    null
+    null,
   );
   const [registrationForm, setRegistrationForm] =
     useState<RegistrationForm | null>(null);
@@ -112,7 +113,7 @@ export default function OrgAttendeesManager({
   // Función para formatear el valor según el tipo de campo
   const formatFieldValue = (
     fieldId: string,
-    value: string | number | boolean | null | undefined
+    value: string | number | boolean | null | undefined,
   ): string => {
     if (value === null || value === undefined) return "-";
     if (typeof value === "boolean") return value ? "✓ Sí" : "✗ No";
@@ -125,6 +126,66 @@ export default function OrgAttendeesManager({
     }
 
     return String(value);
+  };
+
+  // Función para exportar a Excel
+  const exportToExcel = () => {
+    if (!registrationForm) return;
+
+    // const identifierFields = getIdentifierFields();
+
+    // // (Opcional) Columnas extra fijas
+    // const baseColumns = [
+    //   { key: "__eventsCount", label: "Eventos" },
+    //   { key: "__registeredAt", label: "Fecha registro" },
+    // ];
+
+    // Encabezados: identificadores + extras + (opcional) TODOS los campos del form
+    const allFormFields = registrationForm.fields;
+
+    // Si quieres exportar SOLO identificadores, usa identifierFields.
+    // Si quieres exportar TODO el form, usa allFormFields.
+    const fieldsToExport = allFormFields;
+
+    const rows = attendees.map((attendee) => {
+      const row: Record<string, any> = {};
+
+      // Campos del form
+      for (const field of fieldsToExport) {
+        const raw = attendee.registrationData?.[field.id];
+        row[field.label] = formatFieldValue(field.id, raw);
+      }
+
+      // Extras
+      row["Eventos"] = attendee.eventIds?.length ?? 0;
+      row["Fecha registro"] = new Date(attendee.registeredAt).toLocaleString(
+        "es-ES",
+      );
+
+      // (Opcional) Email/Name/Phone si están en el root (por si no vienen en registrationData)
+      if (attendee.email) row["Email (root)"] = attendee.email;
+      if (attendee.name) row["Nombre (root)"] = attendee.name;
+      if (attendee.phone) row["Teléfono (root)"] = attendee.phone;
+
+      return row;
+    });
+
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(rows);
+
+    // (Opcional) Ajuste simple de ancho de columnas
+    const colWidths = Object.keys(rows[0] || {}).map((k) => ({
+      wch: Math.min(40, Math.max(12, k.length + 2)),
+    }));
+    (ws as any)["!cols"] = colWidths;
+
+    XLSX.utils.book_append_sheet(wb, ws, "Registros");
+
+    const safeName = (orgName || "organizacion")
+      .replace(/[\\/:*?"<>|]/g, "")
+      .trim();
+
+    XLSX.writeFile(wb, `registros-${safeName}.xlsx`);
   };
 
   useEffect(() => {
@@ -194,13 +255,25 @@ export default function OrgAttendeesManager({
             Visualiza la base de datos de registros de tu organización
           </Text>
         </div>
-        <Button
-          leftSection={<IconUpload size={16} />}
-          variant="light"
-          onClick={() => setImportModalOpen(true)}
-        >
-          Importar desde Excel
-        </Button>
+
+        <Group gap="sm">
+          <Button
+            leftSection={<IconDownload size={16} />}
+            variant="light"
+            onClick={exportToExcel}
+            disabled={attendees.length === 0 || !registrationForm}
+          >
+            Exportar a Excel
+          </Button>
+
+          <Button
+            leftSection={<IconUpload size={16} />}
+            variant="light"
+            onClick={() => setImportModalOpen(true)}
+          >
+            Importar desde Excel
+          </Button>
+        </Group>
       </Group>
 
       {/* Tabla de asistentes */}
@@ -242,7 +315,7 @@ export default function OrgAttendeesManager({
                   <Table.Td>
                     <Text size="xs" c="dimmed">
                       {new Date(attendee.registeredAt).toLocaleDateString(
-                        "es-ES"
+                        "es-ES",
                       )}
                     </Text>
                   </Table.Td>
@@ -321,7 +394,7 @@ export default function OrgAttendeesManager({
                           const label = getFieldLabelById(fieldId);
                           const formattedValue = formatFieldValue(
                             fieldId,
-                            value
+                            value,
                           );
 
                           return (
@@ -347,7 +420,7 @@ export default function OrgAttendeesManager({
                               </Text>
                             </Group>
                           );
-                        }
+                        },
                       )}
                       <Divider my="xs" />
                       <Group justify="space-between">
