@@ -6,7 +6,11 @@ export const api = axios.create({
 });
 
 api.interceptors.request.use(async (config) => {
-  const t = await auth.currentUser?.getIdToken();
-  if (t) config.headers.Authorization = `Bearer ${t}`;
+  try {
+    const t = await auth.currentUser?.getIdToken();
+    if (t) config.headers.Authorization = `Bearer ${t}`;
+  } catch {
+    // Token expirado o dominio no autorizado — continuar sin token
+  }
   return config;
 });
