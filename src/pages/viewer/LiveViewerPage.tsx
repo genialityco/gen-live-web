@@ -158,12 +158,21 @@ export const LiveViewerPage: React.FC = () => {
 
         <Paper p="sm" radius="lg" withBorder>
           {mode === "hls" ? (
-            <ViewerHlsPlayer
-              src={playbackUrl}
-              targetLatencySec={3}
-              maxBehindSec={6}
-              showGoLiveButton
-            />
+            playbackUrl.includes(".m3u8") ? (
+              <ViewerHlsPlayer
+                src={playbackUrl}
+                targetLatencySec={3}
+                maxBehindSec={6}
+                showGoLiveButton
+              />
+            ) : (
+              <iframe
+                src={playbackUrl}
+                style={{ width: "100%", aspectRatio: "16/9", border: 0 }}
+                allow="autoplay; fullscreen; picture-in-picture"
+                allowFullScreen
+              />
+            )
           ) : (
             <LiveKitRoom
               token={speakerToken!}

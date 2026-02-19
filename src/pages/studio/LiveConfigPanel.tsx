@@ -14,6 +14,7 @@ import {
   Divider,
   NumberInput,
   Box,
+  Alert,
 } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { showNotification } from "@mantine/notifications";
@@ -21,13 +22,27 @@ import {
   getLiveConfig,
   updateLiveConfig,
   getPlayback,
+  provisionStream,
+  type StreamProvider,
 } from "../../api/livekit-service";
-import { IconAlertCircle } from "@tabler/icons-react";
+import { IconAlertCircle, IconCloud } from "@tabler/icons-react";
 
 type Props = {
   eventSlug: string;
   disabled?: boolean;
-  defaultOpened?: boolean; // opcional
+  defaultOpened?: boolean;
+};
+
+const PROVIDER_LABELS: Record<string, string> = {
+  vimeo: "Vimeo",
+  mux: "Mux",
+  gcore: "Gcore",
+};
+
+const PROVIDER_COLORS: Record<string, string> = {
+  vimeo: "blue",
+  mux: "orange",
+  gcore: "teal",
 };
 
 export const LiveConfigPanel: React.FC<Props> = ({
@@ -37,6 +52,9 @@ export const LiveConfigPanel: React.FC<Props> = ({
 }) => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [provisioning, setProvisioning] = useState(false);
+  const [currentProvider, setCurrentProvider] = useState<StreamProvider>("mux");
+  const [providerStreamId, setProviderStreamId] = useState("");
 
   const form = useForm({
     initialValues: {
@@ -65,7 +83,7 @@ export const LiveConfigPanel: React.FC<Props> = ({
         return null;
       },
 
-      playbackHlsUrl: (v) => (!v ? "Playback HLS URL requerida" : null),
+      playbackHlsUrl: (v) => (!v ? "Playback URL requerida" : null),
     },
   });
 
@@ -80,31 +98,34 @@ export const LiveConfigPanel: React.FC<Props> = ({
     [form.values.srtIngestUrl]
   );
 
+  const loadConfig = async () => {
+    setLoading(true);
+    try {
+      const cfg = await getLiveConfig(eventSlug);
+      form.setValues({
+        ingestProtocol: cfg.ingestProtocol ?? "rtmp",
+        rtmpServerUrl: cfg.rtmpServerUrl ?? "",
+        rtmpStreamKey: cfg.rtmpStreamKey ?? "",
+        srtIngestUrl: cfg.srtIngestUrl ?? "",
+        playbackHlsUrl: cfg.playbackHlsUrl ?? "",
+        maxParticipants: cfg.maxParticipants ?? 20,
+      });
+      if (cfg.provider) setCurrentProvider(cfg.provider);
+      setProviderStreamId(cfg.providerStreamId ?? "");
+    } catch (e: any) {
+      showNotification({
+        color: "red",
+        icon: <IconAlertCircle />,
+        title: "No se pudo cargar config",
+        message: e?.normalizedMessage || e.message || "Error",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const run = async () => {
-      setLoading(true);
-      try {
-        const cfg = await getLiveConfig(eventSlug);
-        form.setValues({
-          ingestProtocol: cfg.ingestProtocol ?? "rtmp",
-          rtmpServerUrl: cfg.rtmpServerUrl ?? "",
-          rtmpStreamKey: cfg.rtmpStreamKey ?? "",
-          srtIngestUrl: cfg.srtIngestUrl ?? "",
-          playbackHlsUrl: cfg.playbackHlsUrl ?? "",
-          maxParticipants: cfg.maxParticipants ?? 20,
-        });
-      } catch (e: any) {
-        showNotification({
-          color: "red",
-          icon: <IconAlertCircle />,
-          title: "No se pudo cargar config",
-          message: e?.normalizedMessage || e.message || "Error",
-        });
-      } finally {
-        setLoading(false);
-      }
-    };
-    void run();
+    void loadConfig();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [eventSlug]);
 
@@ -122,6 +143,8 @@ export const LiveConfigPanel: React.FC<Props> = ({
         title: "Guardado",
         message: "Configuración del live actualizada",
       });
+      // Recargar para reflejar provider detectado automáticamente por el backend
+      await loadConfig();
     } catch (e: any) {
       showNotification({
         color: "red",
@@ -153,6 +176,32 @@ export const LiveConfigPanel: React.FC<Props> = ({
     }
   };
 
+  const handleProvisionMux = async () => {
+    setProvisioning(true);
+    try {
+      await provisionStream(eventSlug, "mux");
+      showNotification({
+        color: "green",
+        title: "Provisionado con Mux",
+        message: "Credenciales RTMP y URL de playback listas.",
+      });
+      await loadConfig();
+    } catch (e: any) {
+      showNotification({
+        color: "red",
+        icon: <IconAlertCircle />,
+        title: "Error al provisionar Mux",
+        message:
+          e?.response?.data?.message ||
+          e?.normalizedMessage ||
+          e.message ||
+          "Error",
+      });
+    } finally {
+      setProvisioning(false);
+    }
+  };
+
   if (loading) {
     return (
       <Paper p="sm" radius="md" withBorder>
@@ -181,14 +230,73 @@ export const LiveConfigPanel: React.FC<Props> = ({
                   RTMP/SRT · Playback · Límites
                 </Text>
               </Box>
-              <Badge variant="light" style={{ whiteSpace: "nowrap" }}>
-                {eventSlug}
-              </Badge>
+              <Group gap="xs" style={{ whiteSpace: "nowrap" }}>
+                <Badge
+                  variant="light"
+                  color={PROVIDER_COLORS[currentProvider] ?? "gray"}
+                >
+                  {PROVIDER_LABELS[currentProvider] ?? currentProvider}
+                </Badge>
+                <Badge variant="light">{eventSlug}</Badge>
+              </Group>
             </Group>
           </Accordion.Control>
 
           <Accordion.Panel>
             <Stack gap="sm" pt="xs">
+
+              {/* Provisionar con Mux */}
+              <Box>
+                <Text size="sm" fw={500} mb={4}>
+                  Auto-provisionar con Mux
+                </Text>
+                <Button
+                  variant="filled"
+                  color="orange"
+                  leftSection={<IconCloud size={14} />}
+                  loading={provisioning}
+                  disabled={disabled}
+                  onClick={handleProvisionMux}
+                  size="sm"
+                >
+                  {currentProvider === "mux" && providerStreamId
+                    ? "Re-provisionar con Mux"
+                    : "Provisionar con Mux"}
+                </Button>
+
+                {currentProvider === "mux" && providerStreamId && (
+                  <Alert
+                    mt="xs"
+                    variant="light"
+                    color="orange"
+                    icon={<IconAlertCircle size={14} />}
+                  >
+                    <Text size="xs">
+                      Ya provisionado con Mux. "Re-provisionar" creará un nuevo
+                      live stream y reemplazará las credenciales actuales.
+                    </Text>
+                  </Alert>
+                )}
+
+                {currentProvider === "vimeo" && (
+                  <Alert
+                    mt="xs"
+                    variant="light"
+                    color="blue"
+                    icon={<IconAlertCircle size={14} />}
+                  >
+                    <Text size="xs">
+                      Proveedor: <strong>Vimeo</strong>. Ingresa el RTMP server,
+                      stream key y la URL embed del video
+                      (<code>https://player.vimeo.com/video/...</code>) como
+                      Playback URL.
+                    </Text>
+                  </Alert>
+                )}
+              </Box>
+
+              <Divider />
+
               {ingestProtocol === "rtmp" ? (
                 <>
                   <TextInput
@@ -227,8 +335,9 @@ export const LiveConfigPanel: React.FC<Props> = ({
 
               <TextInput
                 disabled={disabled}
-                label="Playback HLS URL"
-                placeholder="https://stream.mux.com/<playbackId>.m3u8"
+                label="Playback URL"
+                placeholder="https://stream.mux.com/xxx.m3u8 o https://player.vimeo.com/video/..."
+                description="HLS .m3u8 (Mux) → player nativo. Vimeo embed URL → iframe en el viewer."
                 {...form.getInputProps("playbackHlsUrl")}
               />
 

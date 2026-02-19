@@ -896,9 +896,16 @@ export default function EventAttendGcore() {
                                 </Stack>
                               </LiveKitRoom>
                             ) : playbackUrl ? (
-                              <>
+                              playbackUrl.includes(".m3u8") ? (
                                 <ViewerHlsPlayer src={playbackUrl} />
-                              </>
+                              ) : (
+                                <iframe
+                                  src={playbackUrl}
+                                  style={{ width: "100%", height: "100%", border: 0 }}
+                                  allow="autoplay; fullscreen; picture-in-picture"
+                                  allowFullScreen
+                                />
+                              )
                             ) : (
                               <Center h="100%">
                                 <Stack align="center" gap="xs">

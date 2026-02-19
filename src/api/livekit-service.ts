@@ -4,8 +4,12 @@ import { api } from "../core/api";
 export type LiveRole = "host" | "speaker" | "viewer";
 export type LayoutMode = "speaker" | "grid";
 
+export type StreamProvider = "vimeo" | "mux" | "gcore";
+
 export interface LiveConfig {
   eventSlug: string;
+  provider?: StreamProvider;
+  providerStreamId?: string;
   ingestProtocol: "rtmp" | "srt";
   rtmpServerUrl?: string;
   rtmpStreamKey?: string; // vendrá '****' o vacío
@@ -215,10 +219,37 @@ export async function deleteMedia(eventSlug: string) {
   return data;
 }
 
-// ===== REPLAY (Mux) =====
+// ===== PROVISION (solo Mux) =====
+
+export interface ProvisionResponse {
+  ok: boolean;
+  provider: StreamProvider;
+  providerStreamId: string;
+  rtmpServerUrl: string;
+  rtmpStreamKey: string; // siempre '****' en la respuesta
+  playbackHlsUrl: string;
+}
+
+/**
+ * Provisiona o re-provisiona el stream con Mux via API.
+ * Para Vimeo, las credenciales se ingresan manualmente en la configuración.
+ */
+export async function provisionStream(
+  eventSlug: string,
+  provider: "mux",
+): Promise<ProvisionResponse> {
+  const { data } = await api.post<ProvisionResponse>("/livekit/provision", {
+    eventSlug,
+    provider,
+  });
+  return data;
+}
+
+// ===== REPLAY =====
 
 export interface ReplayResponse {
   ok: boolean;
+  provider?: StreamProvider;
   replayUrl: string | null;
   assetId: string | null;
   status: "ready" | "preparing" | "not_available" | "error";
@@ -226,8 +257,7 @@ export interface ReplayResponse {
 }
 
 /**
- * Obtiene la URL de repetición del stream de Mux.
- * Mux crea automáticamente un Asset (video grabado) cuando termina el stream.
+ * Obtiene la URL de repetición del stream (Mux o Vimeo según proveedor configurado).
  */
 export async function getMuxReplayUrl(eventSlug: string): Promise<ReplayResponse> {
   const { data } = await api.get<ReplayResponse>("/livekit/replay", {
@@ -257,18 +287,22 @@ export async function getMuxStreamInfo(eventSlug: string): Promise<StreamInfoRes
 
 // ===== ASSETS (Grabaciones) =====
 
-export interface MuxAsset {
+export interface StreamAsset {
   id: string;
   status: string;
-  duration: number | null; // duración en segundos
+  duration: number | null;
   createdAt: string | null;
   playbackId: string | null;
   replayUrl: string | null;
 }
 
+/** @deprecated Use StreamAsset */
+export type MuxAsset = StreamAsset;
+
 export interface AssetsListResponse {
   ok: boolean;
-  assets: MuxAsset[];
+  provider?: StreamProvider;
+  assets: StreamAsset[];
   message: string;
 }
 
