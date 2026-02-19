@@ -68,7 +68,7 @@ interface ConditionalRule {
 // Evalúa UNA condición
 function evaluateCondition(
   condition: ConditionalCondition,
-  values: FormValues
+  values: FormValues,
 ): boolean {
   const fieldValue = values[condition.field];
 
@@ -131,7 +131,7 @@ function shouldShowField(field: FormField, values: FormValues): boolean {
 function isFieldEffectivelyVisible(
   field: FormField,
   values: FormValues,
-  allFields: FormField[]
+  allFields: FormField[],
 ): boolean {
   // 1. Si depende de otro campo, heredamos visibilidad y valor del padre
   if (field.dependsOn) {
@@ -141,7 +141,7 @@ function isFieldEffectivelyVisible(
       const parentVisible = isFieldEffectivelyVisible(
         parentField,
         values,
-        allFields
+        allFields,
       );
       const parentValue = values[parentField.id];
 
@@ -175,7 +175,7 @@ function uniqueOptions<T extends { value: any }>(options: T[]): T[] {
 function resolveCountryCode(
   currentValues: FormValues,
   sortedFields: FormField[],
-  countryOptions: SelectOption[]
+  countryOptions: SelectOption[],
 ): string | undefined {
   // Busca el campo de país, pero ignora los que son código (ej: codigo_pais, countrycode)
   const countryField = sortedFields.find((f) => {
@@ -225,6 +225,7 @@ const FormFieldComponent = memo(
       required: field.required,
       style: { display: field.hidden ? "none" : "block" },
       size: "sm" as const,
+      radius: "lg" as const,
       description: helpText,
       disabled: isFieldDisabled,
       autoComplete: "new-password",
@@ -248,6 +249,7 @@ const FormFieldComponent = memo(
             data={(filteredOptions as any) || (field.options as any) || []}
             searchable
             clearable
+            comboboxProps={{ withinPortal: true }}
             {...inputProps}
           />
         );
@@ -257,14 +259,12 @@ const FormFieldComponent = memo(
           <Checkbox
             key={field.id}
             size="sm"
+            radius="lg"
             required={field.required}
             style={{ display: field.hidden ? "none" : "block" }}
             styles={{
-              label: {
-                whiteSpace: "normal",
-                lineHeight: 1.4,
-                fontSize: "0.8rem",
-              },
+              body: { alignItems: "flex-start" },
+              label: { whiteSpace: "normal", lineHeight: 1.2 },
             }}
             {...inputProps}
             label={
@@ -288,7 +288,7 @@ const FormFieldComponent = memo(
       default:
         return null;
     }
-  }
+  },
 );
 
 FormFieldComponent.displayName = "FormFieldComponent";
@@ -326,7 +326,7 @@ export function AdvancedRegistrationForm({
   // Campos identificadores (los mismos que usas en OrgAccess)
   const identifierFields = useMemo(
     () => formConfig?.fields.filter((f) => f.isIdentifier) ?? [],
-    [formConfig]
+    [formConfig],
   );
 
   // Opciones de países precalculadas (value = isoCode, label = nombre)
@@ -339,9 +339,9 @@ export function AdvancedRegistrationForm({
           .map((country) => ({
             value: country.isoCode,
             label: country.name,
-          }))
+          })),
       ),
-    []
+    [],
   );
 
   useEffect(() => {
@@ -430,7 +430,7 @@ export function AdvancedRegistrationForm({
     const resolvedCountryCode = resolveCountryCode(
       form.values,
       sortedFields,
-      countryOptions
+      countryOptions,
     );
 
     if (!resolvedCountryCode) return;
@@ -479,7 +479,7 @@ export function AdvancedRegistrationForm({
       const countryCode = resolveCountryCode(
         currentValues,
         sortedFields,
-        countryOptions
+        countryOptions,
       );
 
       // Si no hay país seleccionado, no mostramos estados/ciudades todavía
@@ -498,7 +498,7 @@ export function AdvancedRegistrationForm({
             .map((s) => ({
               value: s.name,
               label: s.name,
-            }))
+            })),
         );
       }
 
@@ -508,7 +508,7 @@ export function AdvancedRegistrationForm({
           (f) =>
             f.id.toLowerCase().includes("estado") ||
             f.id.toLowerCase().includes("departamento") ||
-            f.id.toLowerCase().includes("state")
+            f.id.toLowerCase().includes("state"),
         );
 
         const selectedState =
@@ -535,7 +535,7 @@ export function AdvancedRegistrationForm({
                 value: city.name, // guardas solo el nombre
                 label: stateName ? `${city.name} (${stateName})` : city.name,
               };
-            })
+            }),
         );
       }
 
@@ -550,7 +550,7 @@ export function AdvancedRegistrationForm({
             (opt: SelectOption) => {
               if (!opt.parentValue) return true;
               return opt.parentValue === parentValue;
-            }
+            },
           );
 
           if (filteredByParent.length > 0) {
@@ -561,7 +561,7 @@ export function AdvancedRegistrationForm({
 
       return uniqueOptions(field.options as any);
     },
-    [sortedFields, countryOptions]
+    [sortedFields, countryOptions],
   );
 
   // Buscar si existe OrgAttendee cuando se llenan campos identificadores
@@ -624,7 +624,7 @@ export function AdvancedRegistrationForm({
         const visible = isFieldEffectivelyVisible(
           field,
           visibilityValues,
-          sortedFields
+          sortedFields,
         );
 
         if (!visible) {
@@ -640,7 +640,7 @@ export function AdvancedRegistrationForm({
       const countryField = sortedFields.find(
         (f) =>
           f.id.toLowerCase().includes("country") ||
-          f.id.toLowerCase().includes("pais")
+          f.id.toLowerCase().includes("pais"),
       );
       const phoneField = sortedFields.find((f) => f.type === "tel");
 
@@ -648,7 +648,7 @@ export function AdvancedRegistrationForm({
         const resolvedCountryCode = resolveCountryCode(
           processedValues,
           sortedFields,
-          countryOptions
+          countryOptions,
         );
         const dialCode = resolvedCountryCode
           ? getDialCodeByCountry(resolvedCountryCode)
@@ -657,7 +657,7 @@ export function AdvancedRegistrationForm({
         const countryCodeField = sortedFields.find(
           (f) =>
             f.id.toLowerCase().includes("countrycode") ||
-            f.id.toLowerCase().includes("codigo")
+            f.id.toLowerCase().includes("codigo"),
         );
 
         if (countryCodeField && dialCode) {
@@ -674,7 +674,7 @@ export function AdvancedRegistrationForm({
         (f) =>
           f.id.toLowerCase().includes("name") ||
           f.id.toLowerCase().includes("nombre") ||
-          f.type === "text"
+          f.type === "text",
       );
       const nameValue = nameField
         ? (processedValues[nameField.id] as string)
@@ -694,7 +694,7 @@ export function AdvancedRegistrationForm({
         "🔐 Created/updated anonymous session with UID:",
         userUID,
         "for email:",
-        emailValue
+        emailValue,
       );
 
       localStorage.setItem("user-email", emailValue);
@@ -721,7 +721,7 @@ export function AdvancedRegistrationForm({
       } else {
         if (!eventId) {
           console.error(
-            "❌ registrationScope is 'org+event' pero falta eventId"
+            "❌ registrationScope is 'org+event' pero falta eventId",
           );
           notifications.show({
             color: "red",
@@ -800,20 +800,24 @@ export function AdvancedRegistrationForm({
     <form onSubmit={form.onSubmit(handleSubmit)} autoComplete="off">
       <Stack gap="md">
         {mode === "page" && (
-          <Stack gap={4} ta="center">
-            <Title order={3}>
+          <Stack gap={6} ta="center" mb={6}>
+            <Text fz={34} lh={1}>
+              {existingData ? "🛠️" : "📝"}
+            </Text>
+
+            <Title order={3} fw={900}>
               {existingData
                 ? "Actualizar información"
                 : formConfig.title ||
-                  (isOrgOnly
-                    ? "Registro en la organización"
-                    : "Registro al evento")}
+                  (isOrgOnly ? "Registro" : "Registro al evento")}
             </Title>
-            {formConfig.description && (
+
+            {/* Si NO quieres descripción, puedes dejar solo esto (o borrar por completo) */}
+            {/* {formConfig.description && (
               <Text c="dimmed" size="sm">
                 {formConfig.description}
               </Text>
-            )}
+            )} */}
           </Stack>
         )}
 
@@ -824,105 +828,130 @@ export function AdvancedRegistrationForm({
               id="existing-warning"
               color="yellow"
               variant="light"
-              radius="md"
-              icon="⚠️"
+              radius="lg"
               title="Registro encontrado"
               styles={{
-                title: { fontWeight: 700 },
-                root: { fontSize: "0.95rem" },
+                title: { fontWeight: 800 },
+                root: { border: "1px solid rgba(0,0,0,.06)" },
               }}
             >
-              {existingWarning.attendeeName
-                ? `Ya existe un registro a nombre de "${existingWarning.attendeeName}". `
-                : "Ya existe un registro con estos datos. "}
-              Si ya te habías registrado antes,&nbsp;
-              <Text
-                span
-                c="blue"
-                fw={600}
-                style={{
-                  textDecoration: "underline",
-                  cursor: "pointer",
-                }}
-                size="sm"
-                onClick={onCancel}
-              >
-                haz clic aquí para ingresar
-              </Text>
-              .
-              {checkingExisting && (
-                <Text mt={4} size="xs" c="dimmed">
-                  Verificando datos...
+              <Stack gap={6}>
+                <Text size="sm">
+                  {existingWarning.attendeeName
+                    ? `Ya existe un registro a nombre de "${existingWarning.attendeeName}".`
+                    : "Ya existe un registro con estos datos."}
                 </Text>
-              )}
+
+                <Text size="sm">
+                  Si ya te habías registrado antes,{" "}
+                  <Text
+                    span
+                    fw={800}
+                    c="blue"
+                    style={{ textDecoration: "underline", cursor: "pointer" }}
+                    onClick={onCancel}
+                  >
+                    haz clic aquí para ingresar
+                  </Text>
+                  .
+                </Text>
+
+                {checkingExisting && (
+                  <Text size="xs" c="dimmed">
+                    Verificando datos...
+                  </Text>
+                )}
+              </Stack>
             </Alert>
           </Stack>
         )}
 
-        <Stack gap="sm" maw={600} mx="auto" w="100%">
-          {sortedFields.map((field) => {
-            const currentValues = form.values;
+        <Card
+          withBorder
+          radius="xl"
+          p="lg"
+          shadow="xs"
+          maw={680}
+          mx="auto"
+          w="100%"
+          style={{
+            background: "rgba(255,255,255,.85)",
+            backdropFilter: "blur(6px)",
+          }}
+        >
+          <Stack gap="sm">
+            {sortedFields.map((field) => {
+              const currentValues = form.values;
 
-            const visible = isFieldEffectivelyVisible(
-              field,
-              currentValues,
-              sortedFields
-            );
-            if (!visible) return null;
+              const visible = isFieldEffectivelyVisible(
+                field,
+                currentValues,
+                sortedFields,
+              );
+              if (!visible) return null;
 
-            const filteredOptions = getFilteredOptions(field, currentValues);
+              const filteredOptions = getFilteredOptions(field, currentValues);
 
-            const baseInputProps =
-              field.type === "checkbox"
-                ? form.getInputProps(field.id, { type: "checkbox" })
-                : form.getInputProps(field.id);
+              const baseInputProps =
+                field.type === "checkbox"
+                  ? form.getInputProps(field.id, { type: "checkbox" })
+                  : form.getInputProps(field.id);
 
-            // 👇 Hack anti-autocompletado para campos de texto / email / tel / number / textarea
-            const autoCompleteProps =
-              field.type === "text" ||
-              field.type === "email" ||
-              field.type === "tel" ||
-              field.type === "number" ||
-              field.type === "textarea"
-                ? { autoComplete: "new-password" as const }
-                : {};
+              // 👇 Hack anti-autocompletado para campos de texto / email / tel / number / textarea
+              const autoCompleteProps =
+                field.type === "text" ||
+                field.type === "email" ||
+                field.type === "tel" ||
+                field.type === "number" ||
+                field.type === "textarea"
+                  ? { autoComplete: "new-password" as const }
+                  : {};
 
-            //  si el campo es identificador, añadimos onBlur para disparar la búsqueda
-            const inputProps = field.isIdentifier
-              ? {
-                  ...baseInputProps,
-                  ...autoCompleteProps,
-                  onBlur: (e: any) => {
-                    if (typeof baseInputProps.onBlur === "function") {
-                      baseInputProps.onBlur(e);
-                    }
-                    void checkExistingByIdentifiers();
-                  },
-                }
-              : { ...baseInputProps, ...autoCompleteProps };
+              //  si el campo es identificador, añadimos onBlur para disparar la búsqueda
+              const inputProps = field.isIdentifier
+                ? {
+                    ...baseInputProps,
+                    ...autoCompleteProps,
+                    onBlur: (e: any) => {
+                      if (typeof baseInputProps.onBlur === "function") {
+                        baseInputProps.onBlur(e);
+                      }
+                      void checkExistingByIdentifiers();
+                    },
+                  }
+                : { ...baseInputProps, ...autoCompleteProps };
 
-            return (
-              <FormFieldComponent
-                key={field.id}
-                field={field}
-                inputProps={inputProps}
-                filteredOptions={filteredOptions}
-              />
-            );
-          })}
-        </Stack>
+              return (
+                <FormFieldComponent
+                  key={field.id}
+                  field={field}
+                  inputProps={inputProps}
+                  filteredOptions={filteredOptions}
+                />
+              );
+            })}
+          </Stack>
+        </Card>
 
-        <Stack gap={8} maw={400} mx="auto" w="100%">
-          <Button type="submit" loading={loading} size="sm" fullWidth>
-            {existingData
-              ? "Actualizar información"
-              : isOrgOnly
-              ? "Registrarme"
-              : "Registrarme"}
+        <Stack gap={10} maw={420} mx="auto" w="100%" mt={4}>
+          <Button
+            type="submit"
+            loading={loading}
+            size="md"
+            radius="xl"
+            fullWidth
+          >
+            {existingData ? "Guardar cambios" : "Registrarme"}
           </Button>
 
           {onCancel && (
-            <Button variant="subtle" size="xs" onClick={onCancel} fullWidth>
+            <Button
+              variant="subtle"
+              size="sm"
+              radius="xl"
+              onClick={onCancel}
+              fullWidth
+            >
               Volver
             </Button>
           )}
@@ -940,10 +969,12 @@ export function AdvancedRegistrationForm({
           existingData
             ? "Actualizar información"
             : formConfig.title ||
-              (isOrgOnly ? "Registro en la organización" : "Registro al evento")
+              (isOrgOnly ? "Registro" : "Registro al evento")
         }
         size="md"
         centered
+        radius="lg"
+        overlayProps={{ blur: 3, opacity: 0.35 }}
       >
         {formContent}
       </Modal>

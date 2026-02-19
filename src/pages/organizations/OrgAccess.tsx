@@ -209,7 +209,7 @@ export default function OrgAccess() {
         setEvent(foundEvent);
 
         if (!config.enabled) {
-          navigate(`/org/${slug}/event/${eventSlugFromQuery}/attend`);
+          navigate(`/org/${slug}/event/${foundEvent.slug}/attend`);
           return;
         }
 
@@ -240,7 +240,7 @@ export default function OrgAccess() {
               console.log(
                 "✅ OrgAccess(EventMode): Already registered, redirecting to /attend"
               );
-              navigate(`/org/${slug}/event/${eventSlugFromQuery}/attend`);
+              navigate(`/org/${slug}/event/${foundEvent.slug}/attend`);
               return;
             }
 
@@ -260,7 +260,7 @@ export default function OrgAccess() {
               console.log(
                 "✅ OrgAccess(EventMode): Auto-registration successful"
               );
-              navigate(`/org/${slug}/event/${eventSlugFromQuery}/attend`);
+              navigate(`/org/${slug}/event/${foundEvent.slug}/attend`);
               return;
             }
           } catch (autoRegError) {
@@ -301,11 +301,11 @@ export default function OrgAccess() {
   }, [formConfig, isEventMode]);
 
   const handleSuccessEventMode = () => {
-    navigate(`/org/${slug}/event/${eventSlugFromQuery}/attend`);
+    navigate(`/org/${slug}/event/${event?.slug ?? eventSlugFromQuery}/attend`);
   };
 
   const handleCancelEventMode = () => {
-    navigate(`/org/${slug}/event/${eventSlugFromQuery}`);
+    navigate(`/org/${slug}/event/${event?.slug ?? eventSlugFromQuery}`);
   };
 
   const extractEmailFromOrgAttendee = (
@@ -699,7 +699,7 @@ export default function OrgAccess() {
             >
               {org.name}
             </Button>
-            <UserSession orgId={org._id} />
+            <UserSession orgId={org._id} showLoginButton={false} />
           </Group>
 
           {identifierFields.length > 0 ? (
@@ -971,14 +971,14 @@ export default function OrgAccess() {
         <Group justify="space-between" align="center">
           <Button
             component={Link}
-            to={`/org/${slug}/event/${eventSlugFromQuery}`}
+            to={`/org/${slug}/event/${event.slug}`}
             variant="subtle"
             size="sm"
             leftSection="←"
           >
             {event.title}
           </Button>
-          <UserSession eventId={event?._id} orgId={org?._id} />
+          <UserSession eventId={event?._id} orgId={org?._id} showLoginButton={false} />
         </Group>
 
         <Box>

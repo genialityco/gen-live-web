@@ -8,6 +8,9 @@ import {
   Alert,
   Title,
   Group,
+  Box,
+  Divider,
+  Select,
 } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { useState, useEffect } from "react";
@@ -29,7 +32,7 @@ interface RegistrationVerificationFormProps {
   onVerificationComplete: (
     result: EventCheckResponse & {
       identifierFields: Record<string, any>;
-    }
+    },
   ) => void;
   onNewRegistration?: () => void;
 }
@@ -126,7 +129,7 @@ export function RegistrationVerificationForm({
             if (fieldId in values) {
               form.setFieldError(
                 fieldId,
-                "Este dato no coincide con nuestro registro"
+                "Este dato no coincide con nuestro registro",
               );
             }
           });
@@ -284,7 +287,7 @@ export function RegistrationVerificationForm({
     }
 
     const fieldDef = identifierFields.find(
-      (f) => f.id === recoveryIdentifierId
+      (f) => f.id === recoveryIdentifierId,
     );
 
     if (!fieldDef) {
@@ -298,7 +301,7 @@ export function RegistrationVerificationForm({
 
     const normalized = normalizeIdentifierValue(
       recoveryIdentifierValue,
-      fieldDef.type
+      fieldDef.type,
     );
 
     if (fieldDef.type === "number" && Number.isNaN(normalized)) {
@@ -328,7 +331,7 @@ export function RegistrationVerificationForm({
     } catch (error) {
       console.error(
         "❌ Error enviando correo de recuperación (event-mode):",
-        error
+        error,
       );
       notifications.show({
         color: "red",
@@ -361,64 +364,65 @@ export function RegistrationVerificationForm({
   }
 
   if (viewMode === "recover") {
-    // 🔹 Pantalla de recuperación
     return (
-      <Card shadow="sm" padding="lg" radius="md" withBorder>
-        <Stack gap="md">
-          <Stack gap={2}>
-            <Title order={4}>Recordar mis datos</Title>
-            <Text size="xs" c="dimmed">
-              Si ya te registraste antes pero no recuerdas con qué datos,
-              podemos enviarte un correo con un recordatorio.
-              <br />
-              Elige qué dato recuerdas (por ejemplo, tu correo o documento) y
-              escríbelo a continuación.
+      <Card withBorder radius="2xl" p="xl" shadow="sm">
+        <Stack gap="lg">
+          <Group gap="sm" wrap="nowrap">
+            <Text fz={28} lh={1}>
+              🧠
             </Text>
-          </Stack>
+            <Box>
+              <Title order={4} fw={900}>
+                Recordar mis datos
+              </Title>
+              <Text size="sm" c="dimmed">
+                Te enviaremos un recordatorio si encontramos un registro con ese
+                dato.
+              </Text>
+            </Box>
+          </Group>
 
-          <Stack gap="xs">
-            <Text size="sm" fw={500}>
-              ¿Qué dato recuerdas?
-            </Text>
-            <select
+          <Divider />
+
+          <Stack gap="sm">
+            <Select
+              label="¿Qué dato recuerdas?"
+              placeholder="Selecciona un tipo de dato"
               value={recoveryIdentifierId ?? ""}
-              onChange={(e) => setRecoveryIdentifierId(e.target.value || null)}
-              style={{
-                padding: "8px 12px",
-                borderRadius: 8,
-                border: "1px solid #ced4da",
-                fontSize: 14,
-              }}
-            >
-              <option value="">Selecciona un tipo de dato</option>
-              {identifierFields.map((field) => (
-                <option key={field.id} value={field.id}>
-                  {field.label}
-                </option>
-              ))}
-            </select>
+              onChange={(v) => setRecoveryIdentifierId(v || null)}
+              data={identifierFields.map((f) => ({
+                value: f.id,
+                label: f.label,
+              }))}
+              searchable
+              nothingFoundMessage="No hay opciones"
+              radius="lg"
+              size="md"
+            />
 
             <TextInput
-              mt="xs"
-              label="Valor del dato"
-              placeholder="Escribe aquí tu correo, documento u otro identificador"
+              label="Valor"
+              placeholder="Escribe tu correo, documento u otro identificador"
               value={recoveryIdentifierValue}
               onChange={(e) =>
                 setRecoveryIdentifierValue(e.currentTarget.value)
               }
+              radius="lg"
+              size="md"
             />
           </Stack>
 
-          <Group justify="space-between" mt="md">
+          <Group justify="space-between" mt="xs">
             <Button
               variant="subtle"
-              size="xs"
+              radius="xl"
               onClick={() => setViewMode("verify")}
             >
-              ← Volver a verificación
+              ← Volver
             </Button>
-            <Button size="sm" loading={recovering} onClick={handleRecover}>
-              Enviarme un recordatorio
+
+            <Button radius="xl" loading={recovering} onClick={handleRecover}>
+              Enviarme recordatorio
             </Button>
           </Group>
         </Stack>
@@ -426,90 +430,98 @@ export function RegistrationVerificationForm({
     );
   }
 
-  return (
-    <Card shadow="sm" padding="lg" radius="md" withBorder>
-      <form onSubmit={form.onSubmit(handleVerify)}>
-        <Stack gap="md">
-          <Stack gap={2}>
-            <Title order={4}>Ingresar</Title>
-            <Text size="xs" c="dimmed">
-              Verifica si ya estás registrado.
+return (
+  <Card withBorder radius="2xl" p="xl" shadow="sm">
+    <form onSubmit={form.onSubmit(handleVerify)}>
+      <Stack gap="lg">
+        <Group gap="sm" wrap="nowrap">
+          <Text fz={28} lh={1}>
+            👋
+          </Text>
+          <Box>
+            <Title order={4} fw={900}>
+              Ingresar
+            </Title>
+            <Text size="sm" c="dimmed">
+              Verifica si ya estás registrado en este evento.
             </Text>
-          </Stack>
+          </Box>
+        </Group>
 
-          <Stack gap="xs">
-            {identifierFields.map((field) => {
-              const isMismatched = mismatchedFields.includes(field.id);
+        <Divider />
 
-              return (
-                <TextInput
-                  key={field.id}
-                  label={field.label}
-                  placeholder={field.placeholder}
-                  type={
-                    field.type === "email"
-                      ? "email"
-                      : field.type === "tel"
-                      ? "tel"
-                      : "text"
-                  }
-                  required={field.required}
-                  size="sm"
-                  {...form.getInputProps(field.id)}
-                  styles={(theme) => ({
-                    input: {
-                      backgroundColor: isMismatched
-                        ? theme.colors.red[0]
-                        : undefined,
-                      borderColor: isMismatched
-                        ? theme.colors.red[6]
-                        : undefined,
-                    },
-                    label: {
-                      color: isMismatched ? theme.colors.red[6] : undefined,
-                      fontWeight: isMismatched ? 600 : undefined,
-                    },
-                  })}
-                />
-              );
-            })}
-          </Stack>
+        <Stack gap="sm">
+          {identifierFields.map((field) => {
+            const isMismatched = mismatchedFields.includes(field.id);
 
-          <Text size="xs" c="dimmed">
-            ¿No recuerdas con qué datos te registraste?{" "}
-            <Button
-              variant="subtle"
-              size="xs"
-              px={0}
-              onClick={() => setViewMode("recover")}
-            >
-              Recordar mis datos
-            </Button>
+            return (
+              <TextInput
+                key={field.id}
+                label={field.label}
+                placeholder={field.placeholder}
+                type={
+                  field.type === "email"
+                    ? "email"
+                    : field.type === "tel"
+                    ? "tel"
+                    : "text"
+                }
+                required={field.required}
+                size="md"
+                radius="lg"
+                {...form.getInputProps(field.id)}
+                error={form.errors[field.id] as string | undefined}
+                styles={(theme) => ({
+                  label: {
+                    color: isMismatched ? theme.colors.red[7] : undefined,
+                    fontWeight: 700,
+                  },
+                })}
+              />
+            );
+          })}
+        </Stack>
+
+        <Group justify="center" align="center" mt={-4}>
+          <Text size="sm" c="dimmed">
+            ¿No recuerdas tus datos?
           </Text>
 
-          <Stack gap="xs" mt={4}>
-            <Button type="submit" size="sm" loading={loading} fullWidth>
-              Ingresar
-            </Button>
+          <Button
+            variant="subtle"
+            size="sm"
+            radius="xl"
+            px={10}
+            onClick={() => setViewMode("recover")}
+          >
+            Recordar mis datos
+          </Button>
+        </Group>
 
-            {onNewRegistration && (
-              <Group justify="center" gap={4}>
-                <Text size="xs" c="dimmed">
-                  ¿Primera vez aquí?
-                </Text>
-                <Button
-                  variant="subtle"
-                  size="xs"
-                  px="xs"
-                  onClick={onNewRegistration}
-                >
-                  Registrarme
-                </Button>
-              </Group>
-            )}
-          </Stack>
+        <Stack gap="sm" mt="xs">
+          <Button type="submit" size="md" radius="xl" loading={loading} fullWidth>
+            Ingresar
+          </Button>
+
+          {onNewRegistration && (
+            <Group justify="center" gap="xs">
+              <Text size="sm" c="dimmed">
+                ¿Primera vez aquí?
+              </Text>
+              <Button
+                variant="light"
+                size="sm"
+                radius="xl"
+                onClick={onNewRegistration}
+              >
+                Registrarme
+              </Button>
+            </Group>
+          )}
         </Stack>
-      </form>
-    </Card>
-  );
+      </Stack>
+    </form>
+  </Card>
+);
+
 }

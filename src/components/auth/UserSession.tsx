@@ -13,7 +13,7 @@ import { useAuth } from "../../auth/AuthProvider";
 import { signOut } from "firebase/auth";
 import { auth } from "../../core/firebase";
 import { notifications } from "@mantine/notifications";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { fetchOrgAttendeeByEmail } from "../../api/org-attendees";
 
 interface UserSessionProps {
@@ -40,13 +40,16 @@ export default function UserSession({
   const { user, loading, setSessionName } = useAuth();
   const [orgAttendee, setOrgAttendee] = useState<OrgAttendee | null>(null);
   const navigate = useNavigate();
-  const { slug, eventSlug } = useParams<{
+  const { slug, eventSlug: eventSlugParam } = useParams<{
     slug?: string;
     eventSlug?: string;
   }>();
+  const [searchParams] = useSearchParams();
+  // Soporta eventSlug como parámetro de ruta (:eventSlug) o query string (?eventSlug=)
+  const eventSlug =
+    eventSlugParam || searchParams.get("eventSlug") || undefined;
 
   // Cargar datos del usuario desde el backend (solo lectura)
-
   const loadUserData = async () => {
     if (!user?.uid || !orgId) return;
 
@@ -144,7 +147,7 @@ export default function UserSession({
       return;
     }
 
-    // Si estamos en contexto de evento, o tenemos eventId, pasamos el eventSlug como query
+    // Usa el eventSlug del contexto actual (ruta o query) o el eventId como fallback
     const eventSlugToUse = eventSlug || eventId;
     const base = `/org/${slug}/access`;
     const url = eventSlugToUse ? `${base}?eventSlug=${eventSlugToUse}` : base;
@@ -219,7 +222,7 @@ export default function UserSession({
         <Button
           variant="subtle"
           rightSection={
-            <Avatar size="sm" radius="xl" color="blue">
+            <Avatar size="sm" radius="xl">
               {userEmail ? userEmail[0]?.toUpperCase() : "U"}
             </Avatar>
           }

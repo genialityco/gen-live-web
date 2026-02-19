@@ -1,5 +1,4 @@
-import type React from "react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import {
   Stack,
@@ -24,6 +23,12 @@ import { BrandedHeader, BrandedFooter } from "../../components/branding";
 import UserSession from "../../components/auth/UserSession";
 import { signOut } from "firebase/auth";
 import { auth } from "../../core/firebase";
+import {
+  cssVars,
+  makeTheme,
+  pageBackground,
+  resolveBrandingColorsFromBranding,
+} from "../../utils/branding";
 
 export default function EventLanding() {
   const { slug, eventSlug } = useParams<{ slug: string; eventSlug: string }>();
@@ -35,7 +40,12 @@ export default function EventLanding() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // 🔹 Saber si el usuario actual está registrado a este evento
+  // Branding del evento con fallback al de la organización
+  const eventBranding = eventData?.branding || org?.branding;
+  const brand = resolveBrandingColorsFromBranding(eventBranding?.colors);
+  const theme = useMemo(() => makeTheme(brand), [brand]);
+
+  // Saber si el usuario actual está registrado a este evento
   const [isRegisteredForEvent, setIsRegisteredForEvent] = useState<
     boolean | null
   >(null);
@@ -137,7 +147,7 @@ export default function EventLanding() {
     // 🟢 2) Si ya sabemos que está registrado → ir directo al attend
     if (isRegisteredForEvent && slug && eventSlug) {
       console.log(
-        "✅ User already registered (prefetched), redirecting to /attend"
+        "✅ User already registered (prefetched), redirecting to /attend",
       );
       navigate(`/org/${slug}/event/${eventSlug}/attend`);
       return;
@@ -161,18 +171,17 @@ export default function EventLanding() {
           eventId: eventData._id,
           orgId: org._id,
           hasUID: !!user.uid,
-        }
+        },
       );
 
       try {
-        const { checkIfRegistered, registerToEventWithFirebase } = await import(
-          "../../api/events"
-        );
+        const { checkIfRegistered, registerToEventWithFirebase } =
+          await import("../../api/events");
         const result = await checkIfRegistered(eventData._id, userEmail);
 
         if (result.isRegistered) {
           console.log(
-            "✅ EventLanding: User already registered, redirecting to /attend"
+            "✅ EventLanding: User already registered, redirecting to /attend",
           );
           navigate(`/org/${slug}/event/${eventSlug}/attend`);
           return;
@@ -180,7 +189,7 @@ export default function EventLanding() {
 
         if (result.orgAttendee) {
           console.log(
-            "🎯 EventLanding: User has OrgAttendee, auto-registering to event"
+            "🎯 EventLanding: User has OrgAttendee, auto-registering to event",
           );
 
           await registerToEventWithFirebase(eventData._id, {
@@ -191,26 +200,26 @@ export default function EventLanding() {
           });
 
           console.log(
-            "✅ EventLanding: Auto-registration successful, redirecting to /attend"
+            "✅ EventLanding: Auto-registration successful, redirecting to /attend",
           );
           navigate(`/org/${slug}/event/${eventSlug}/attend`);
           return;
         }
 
         console.log(
-          "⚠️ EventLanding: User has session but no OrgAttendee for this org"
+          "⚠️ EventLanding: User has session but no OrgAttendee for this org",
         );
       } catch (error) {
         console.error(
           "❌ EventLanding: Error in auto-registration flow:",
-          error
+          error,
         );
       }
     }
 
     // 4) Usuario logueado pero sin OrgAttendee/EventUser → forzar logout y limpiar sesión
     console.log(
-      "EventLanding: Logged user but no OrgAttendee/EventUser → forcing logout"
+      "EventLanding: Logged user but no OrgAttendee/EventUser → forcing logout",
     );
 
     try {
@@ -230,7 +239,7 @@ export default function EventLanding() {
         .forEach((k) => localStorage.removeItem(k));
 
       console.log(
-        "✅ EventLanding: Session cleaned, user must go through /access again"
+        "✅ EventLanding: Session cleaned, user must go through /access again",
       );
     } catch (error) {
       console.error("❌ EventLanding: Error cleaning session:", error);
@@ -358,7 +367,7 @@ export default function EventLanding() {
 
     const now = new Date();
     const eventDate = new Date(
-      eventData.startDate || eventData.schedule?.startsAt || ""
+      eventData.startDate || eventData.schedule?.startsAt || "",
     );
     const diffMs = eventDate.getTime() - now.getTime();
 
@@ -366,7 +375,7 @@ export default function EventLanding() {
 
     const days = Math.floor(diffMs / (1000 * 60 * 60 * 24));
     const hours = Math.floor(
-      (diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)
+      (diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60),
     );
     const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
 
@@ -384,154 +393,183 @@ export default function EventLanding() {
   const timeUntilEvent = getTimeUntilEvent();
 
   // Branding del evento con fallback al de la organización
-  const eventBranding = eventData?.branding || org?.branding;
+  // const eventBranding = eventData?.branding || org?.branding;
 
-  const brandingColors = eventBranding?.colors;
-  const brandingStyle = brandingColors
-    ? ({
-        "--primary-color": brandingColors.primary || undefined,
-        "--secondary-color": brandingColors.secondary || undefined,
-        "--accent-color": brandingColors.accent || undefined,
-        "--bg-color": brandingColors.background || undefined,
-        "--text-color": brandingColors.text || undefined,
-      } as React.CSSProperties)
-    : {};
+  // const brandingColors = eventBranding?.colors;
+  // const brandingStyle = brandingColors
+  //   ? ({
+  //       "--primary-color": brandingColors.primary || undefined,
+  //       "--secondary-color": brandingColors.secondary || undefined,
+  //       "--accent-color": brandingColors.accent || undefined,
+  //       "--bg-color": brandingColors.background || undefined,
+  //       "--text-color": brandingColors.text || undefined,
+  //     } as React.CSSProperties)
+  //   : {};
 
-  const primaryColor = eventBranding?.colors?.primary || "#228BE6";
-  // MantineColorsTuple must be an array of exactly 10 color strings
-  const brandColors: [
-    string,
-    string,
-    string,
-    string,
-    string,
-    string,
-    string,
-    string,
-    string,
-    string
-  ] = Array(10)
-    .fill(primaryColor)
-    .map((c, i) => (i === 5 ? eventBranding?.colors?.accent || c : c)) as [
-    string,
-    string,
-    string,
-    string,
-    string,
-    string,
-    string,
-    string,
-    string,
-    string
-  ];
+  // const primaryColor = eventBranding?.colors?.primary || "#228BE6";
+  // const accentColor = eventBranding?.colors?.accent || "#7C3AED";
+  // const secondaryColor = eventBranding?.colors?.secondary || "#14B8A6";
 
-  const customTheme = eventBranding?.colors?.primary
-    ? {
-        colors: {
-          brand: brandColors,
-        },
-        primaryColor: "brand" as const,
-      }
-    : {};
+  // // MantineColorsTuple must be an array of exactly 10 color strings
+  // const brandColors: [
+  //   string,
+  //   string,
+  //   string,
+  //   string,
+  //   string,
+  //   string,
+  //   string,
+  //   string,
+  //   string,
+  //   string,
+  // ] = Array(10)
+  //   .fill(primaryColor)
+  //   .map((c, i) => (i === 5 ? eventBranding?.colors?.accent || c : c)) as [
+  //   string,
+  //   string,
+  //   string,
+  //   string,
+  //   string,
+  //   string,
+  //   string,
+  //   string,
+  //   string,
+  //   string,
+  // ];
 
-  console.log(eventBranding);
+  // const customTheme = eventBranding?.colors?.primary
+  //   ? {
+  //       colors: {
+  //         brand: brandColors,
+  //       },
+  //       primaryColor: "brand" as const,
+  //     }
+  //   : {};
 
   return (
-    <MantineProvider theme={customTheme}>
-      <Box style={brandingStyle}>
+    <MantineProvider theme={theme} withCssVariables>
+      <Box
+        style={{
+          ...cssVars(brand),
+          ...pageBackground(brand),
+          minHeight: "100vh",
+        }}
+        c="var(--text-color)"
+      >
         <BrandedHeader config={eventBranding?.header} />
 
-        <Container size="md" py="xl">
-          {/* Header con UserSession */}
-          <Group justify="space-between" align="center" mb="xl">
+        {/* Background / Hero */}
+        <Container size="md" py={{ base: "lg", sm: "xl" }}>
+          {/* Top bar */}
+          <Group
+            justify="space-between"
+            align="center"
+            mb={{ base: "md", sm: "xl" }}
+            wrap="wrap"
+          >
             <Button
               component={Link}
               to={`/org/${slug}`}
               variant="subtle"
               size="sm"
+              radius="xl"
               leftSection="←"
+              style={{ flexShrink: 0 }}
             >
               {org.name}
             </Button>
+
             <UserSession eventId={eventData?._id} orgId={org?._id} />
           </Group>
 
-          <Stack gap="xl" align="center">
+          <Stack gap={"lg"} align="center">
+            {/* Main card */}
             <Card
-              shadow="xl"
-              padding="xl"
-              radius="xl"
               withBorder
+              radius="2xl"
+              shadow="xl"
+              p={{ base: "lg", sm: "xl" }}
               w="100%"
-              maw={800}
-              style={{
-                backgroundColor: brandingColors?.background
-                  ? `${brandingColors.background}08`
-                  : undefined,
-                borderColor: brandingColors?.primary
-                  ? `${brandingColors.primary}20`
-                  : undefined,
-              }}
+              maw={860}
             >
-              <Stack gap="xl" align="center">
-                {/* Estado del evento */}
-                <Group justify="center" gap="md">
+              <Stack gap={"lg"} align="center">
+                {/* Status */}
+                <Group justify="center" gap="sm" wrap="wrap">
                   <Badge
                     color={getStatusColor(status)}
                     size="xl"
+                    radius="xl"
                     variant={status === "live" ? "filled" : "light"}
-                    p="md"
+                    styles={{ root: { paddingInline: 14, paddingBlock: 10 } }}
                   >
                     {status === "live" && "🔴 "}
                     {getStatusText(status)}
                   </Badge>
-                  {/* {nowCount > 0 && (
-                    <Badge variant="light" color="gray" size="lg" p="md">
-                      👥 {nowCount}{" "}
-                      {nowCount === 1 ? "persona viendo" : "personas viendo"}
+
+                  {timeUntilEvent && status === "upcoming" && (
+                    <Badge color="gray" variant="light" size="xl" radius="xl">
+                      ⏰ Faltan {timeUntilEvent}
                     </Badge>
-                  )} */}
+                  )}
                 </Group>
 
-                {/* Título */}
-                <Box ta="center">
-                  <Title order={1} size="2.5rem" fw={700} lh={1.2} mb="sm">
+                {/* Title */}
+                <Stack gap={6} ta="center">
+                  <Title
+                    order={1}
+                    fw={900}
+                    style={{
+                      fontSize: "clamp(1.7rem, 4vw, 2.7rem)",
+                      lineHeight: 1.1,
+                      letterSpacing: -0.4,
+                    }}
+                  >
                     {event.title}
                   </Title>
-                </Box>
 
-                {/* Fecha y tiempo */}
+                  <Text c="dimmed" size="sm">
+                    {isRegisteredForEvent
+                      ? "✅ Ya estás identificado"
+                      : "🎫 Check-in rápido para ingresar"}
+                  </Text>
+                </Stack>
+
+                {/* Date box */}
                 {(eventData?.startDate || eventData?.schedule?.startsAt) && (
-                  <Alert
-                    variant="light"
-                    color={status === "live" ? "green" : "blue"}
-                    radius="md"
+                  <Card
+                    withBorder
+                    radius="xl"
+                    p="md"
                     w="100%"
+                    styles={{
+                      root: {
+                        background: "rgba(255,255,255,.55)",
+                        borderColor: "rgba(0,0,0,.08)",
+                      },
+                    }}
                   >
-                    <Stack gap="xs" align="center">
-                      <Text size="lg" fw={600} ta="center">
+                    <Stack gap={6} align="center">
+                      <Text
+                        fw={800}
+                        ta="center"
+                        style={{ fontSize: "clamp(1rem, 2.2vw, 1.2rem)" }}
+                      >
                         📅{" "}
                         {formatEventDateForUser(
                           eventData.startDate ||
                             eventData.schedule?.startsAt ||
-                            null
+                            null,
                         )}
                       </Text>
 
                       <Text size="xs" c="dimmed" ta="center">
                         Hora mostrada según tu zona horaria ({userTimeZone})
                       </Text>
-
-                      {timeUntilEvent && (
-                        <Text size="md" c="dimmed" ta="center">
-                          ⏰ Faltan {timeUntilEvent} para el inicio
-                        </Text>
-                      )}
                     </Stack>
-                  </Alert>
+                  </Card>
                 )}
 
-                {/* Botón principal */}
+                {/* Main action */}
                 <Button
                   onClick={handleMainAction}
                   size="xl"
@@ -547,71 +585,86 @@ export default function EventLanding() {
                     status === "live"
                       ? undefined
                       : eventBranding?.colors?.primary
-                      ? "brand"
-                      : getStatusColor(status)
+                        ? "brand"
+                        : getStatusColor(status)
                   }
                   w="100%"
-                  maw={400}
-                  h={60}
-                  fz="lg"
-                  fw={600}
+                  maw={480}
+                  styles={{
+                    root: {
+                      boxShadow: "0 18px 40px rgba(0,0,0,.12)",
+                      height: "auto", // 👈 clave
+                      paddingTop: 14, // 👈 buen touch target
+                      paddingBottom: 14,
+                      whiteSpace: "normal", // 👈 permite salto de línea
+                    },
+                    label: {
+                      whiteSpace: "normal", // 👈 permite 2 líneas
+                      textAlign: "center",
+                      lineHeight: 1.15,
+                    },
+                    inner: {
+                      alignItems: "center",
+                    },
+                  }}
                 >
                   {getActionButtonText(status, !!isRegisteredForEvent)}
                 </Button>
 
-                {/* Mensajes según estado */}
+                {/* Context message (single consistent alert style) */}
                 {status === "live" && (
-                  <Alert color="red" variant="light" w="100%">
+                  <Alert color="red" variant="light" radius="xl" w="100%">
                     <Text size="sm" ta="center">
                       🔥 El evento está en vivo ahora.{" "}
                       {isRegisteredForEvent
                         ? "Ingresa para ver la transmisión."
-                        : "Regístrate para unirte a la transmisión."}
+                        : "Regístrate para unirte."}
                     </Text>
                   </Alert>
                 )}
 
                 {status === "upcoming" && (
-                  <Alert color="blue" variant="light" w="100%">
+                  <Alert color="blue" variant="light" radius="xl" w="100%">
                     <Text size="sm" ta="center">
                       📝{" "}
                       {isRegisteredForEvent
-                        ? "Ya estás registrado, presiona en ingresar al evento."
+                        ? "Ya estás registrado, presiona ingresar cuando quieras."
                         : "Regístrate ahora para reservar tu lugar."}
                     </Text>
                   </Alert>
                 )}
 
                 {status === "ended" && (
-                  <Alert color="gray" variant="light" w="100%">
+                  <Alert color="gray" variant="light" radius="xl" w="100%">
                     <Text size="sm" ta="center">
                       📋 El evento ha finalizado.{" "}
                       {isRegisteredForEvent
                         ? "Ingresa para ver la información disponible."
-                        : "Puedes registrarte para ver la información disponible si el organizador la habilitó."}
+                        : "Puedes registrarte si el organizador habilitó contenido."}
                     </Text>
                   </Alert>
                 )}
 
                 {status === "replay" && (
-                  <Alert color="orange" variant="light" w="100%">
+                  <Alert color="orange" variant="light" radius="xl" w="100%">
                     <Text size="sm" ta="center">
                       ▶️ La repetición está disponible.{" "}
                       {isRegisteredForEvent
                         ? "Ingresa para ver el contenido grabado."
-                        : "Regístrate o ingresa para acceder al contenido grabado."}
+                        : "Regístrate o ingresa para acceder."}
                     </Text>
                   </Alert>
                 )}
               </Stack>
             </Card>
 
+            {/* Owner CTA */}
             {isOwner && (
               <Button
                 component={Link}
                 to={`/org/${slug}/event/${eventSlug}/admin`}
                 variant="light"
-                size="sm"
+                radius="xl"
                 leftSection="🎛️"
               >
                 Panel de administración
@@ -619,9 +672,9 @@ export default function EventLanding() {
             )}
           </Stack>
         </Container>
-
-        <BrandedFooter config={eventBranding?.footer} />
       </Box>
+
+      <BrandedFooter config={eventBranding?.footer} />
     </MantineProvider>
   );
 }

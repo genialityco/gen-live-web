@@ -47,7 +47,11 @@ import UserSession from "../../components/auth/UserSession";
 import { markEventUserAsAttended } from "../../api/event-users";
 import LivePollViewer from "../../components/events/LivePollViewer";
 
-import { ensureRoom, getPlayback, getLiveConfig } from "../../api/livekit-service";
+import {
+  ensureRoom,
+  getPlayback,
+  getLiveConfig,
+} from "../../api/livekit-service";
 import {
   requestToJoin,
   subscribeJoinDecision,
@@ -68,7 +72,7 @@ import { Track } from "livekit-client";
 function SpeakerPreview() {
   const tracks = useTracks(
     [{ source: Track.Source.Camera, withPlaceholder: true }],
-    { onlySubscribed: false }
+    { onlySubscribed: false },
   );
 
   return (
@@ -114,7 +118,7 @@ function makeTheme(brand: ReturnType<typeof resolveBrandingColors>) {
       string,
       string,
       string,
-      string
+      string,
     ];
 
   return {
@@ -142,7 +146,7 @@ function makeTheme(brand: ReturnType<typeof resolveBrandingColors>) {
 }
 
 function cssVars(
-  brand: ReturnType<typeof resolveBrandingColors>
+  brand: ReturnType<typeof resolveBrandingColors>,
 ): React.CSSProperties {
   return {
     ["--primary-color" as any]: brand.primary,
@@ -198,7 +202,7 @@ const getStatusText = (status: string) => {
 };
 
 function getJoinMessage(
-  joinState: "idle" | "pending" | "approved" | "rejected" | "kicked"
+  joinState: "idle" | "pending" | "approved" | "rejected" | "kicked",
 ) {
   switch (joinState) {
     case "pending":
@@ -217,6 +221,8 @@ function getJoinMessage(
 // --------------------------------------------------------------
 // Header reutilizable para la página de asistencia
 // --------------------------------------------------------------
+import { useMantineTheme } from "@mantine/core";
+
 function EventAttendHeader({
   org,
   slug,
@@ -233,6 +239,9 @@ function EventAttendHeader({
   orgId?: string;
   eventId?: string;
 }) {
+  const theme = useMantineTheme();
+  const isMobile = useMediaQuery(`(max-width: ${theme.breakpoints.sm})`);
+
   return (
     <Box
       style={{
@@ -246,6 +255,7 @@ function EventAttendHeader({
     >
       <Container size="xl" py="sm">
         <Group justify="space-between" align="center" wrap="nowrap">
+          {/* IZQUIERDA */}
           <Group gap="sm" wrap="nowrap" style={{ minWidth: 0 }}>
             {slug && eventSlug && (
               <Button
@@ -254,44 +264,51 @@ function EventAttendHeader({
                 variant="subtle"
                 size="xs"
                 leftSection={<IconArrowLeft size={14} />}
+                style={{ flexShrink: 0 }}
               >
                 Volver
               </Button>
             )}
 
+            {/* Logo SIEMPRE visible */}
             <Group gap="sm" wrap="nowrap" style={{ minWidth: 0 }}>
               {org?.branding?.logoUrl ? (
                 <Image
                   src={org.branding.logoUrl}
                   alt={org.name}
-                  h={34}
+                  h={isMobile ? 24 : 30}
                   w="auto"
                   fit="contain"
+                  style={{ flexShrink: 0 }}
                 />
               ) : (
                 <ThemeIcon
                   radius="md"
                   variant="light"
                   color="brand"
-                  size={34}
+                  size={isMobile ? 28 : 34}
                 >
-                  <IconPlayerPlay size={18} />
+                  <IconPlayerPlay size={16} />
                 </ThemeIcon>
               )}
 
-              <Box style={{ minWidth: 0 }}>
-                <Text fw={800} style={{ lineHeight: 1.1 }} truncate>
-                  {org?.name || "Evento"}
-                </Text>
-                <Text size="xs" c="dimmed" truncate>
-                  Asistencia / transmisión
-                </Text>
-              </Box>
+              {/* Texto SOLO en desktop */}
+              {!isMobile && (
+                <Box style={{ minWidth: 0 }}>
+                  <Text fw={800} style={{ lineHeight: 1.1 }} truncate>
+                    {org?.name || "Evento"}
+                  </Text>
+                  <Text size="xs" c="dimmed" truncate>
+                    Asistencia / transmisión
+                  </Text>
+                </Box>
+              )}
             </Group>
           </Group>
 
-          <Group gap="sm" wrap="nowrap">
-            {isOwner && slug && (
+          {/* DERECHA */}
+          <Group gap="sm" wrap="nowrap" style={{ flexShrink: 0 }}>
+            {isOwner && slug && !isMobile && (
               <Button
                 component={Link}
                 to={`/org/${slug}/admin`}
@@ -303,11 +320,7 @@ function EventAttendHeader({
               </Button>
             )}
 
-            <UserSession
-              orgId={orgId}
-              eventId={eventId}
-              showLoginButton={true}
-            />
+            <UserSession orgId={orgId} eventId={eventId} showLoginButton />
           </Group>
         </Group>
       </Container>
@@ -322,6 +335,7 @@ export default function EventAttendGcore() {
   const { slug, eventSlug } = useParams<{ slug: string; eventSlug: string }>();
   const navigate = useNavigate();
   const isMobile = useMediaQuery("(max-width: 768px)");
+  const chatHeight = isMobile ? 360 : 520;
   const { user, sessionName } = useAuth();
 
   const [org, setOrg] = useState<Org | null>(null);
@@ -434,7 +448,7 @@ export default function EventAttendGcore() {
             } catch (syncError) {
               console.warn(
                 "⚠️ EventAttend: Could not sync UID, but user is registered:",
-                syncError
+                syncError,
               );
             }
           }
@@ -482,7 +496,7 @@ export default function EventAttendGcore() {
     if (!checkingRegistration && !loading && !eventLoading) {
       if (!isRegistered && !isOwner) {
         console.log(
-          "🔒 EventAttend: User not registered, redirecting to event landing"
+          "🔒 EventAttend: User not registered, redirecting to event landing",
         );
         navigate(`/org/${slug}/event/${eventSlug}`, { replace: true });
       }
@@ -762,8 +776,11 @@ export default function EventAttendGcore() {
 
         {/* CONTENIDO PRINCIPAL */}
         {!contentLoading && !error && org && finalEvent && (
-          <Container size="xl" py={isMobile ? "lg" : "xl"} pb={isMobile ? 84 : undefined}>
-
+          <Container
+            size="xl"
+            py={isMobile ? "lg" : "xl"}
+            pb={isMobile ? 84 : undefined}
+          >
             <Stack gap="lg">
               {/* Hero del evento */}
               <Card radius="lg" withBorder p={isMobile ? "md" : "lg"}>
@@ -772,17 +789,11 @@ export default function EventAttendGcore() {
                     <Box style={{ minWidth: 0, flex: 1 }}>
                       <Title
                         order={2}
-                        size={isMobile ? "h4" : "h3"}
                         style={{
                           lineHeight: 1.15,
-                          ...(isMobile
-                            ? { whiteSpace: "normal", wordBreak: "break-word" }
-                            : {
-                                overflow: "hidden",
-                                textOverflow: "ellipsis",
-                                whiteSpace: "nowrap",
-                              }),
+                          fontSize: isMobile ? rem(22) : rem(28),
                         }}
+                        lineClamp={isMobile ? 3 : 1}
                       >
                         {finalEvent.title}
                       </Title>
@@ -838,9 +849,12 @@ export default function EventAttendGcore() {
                             <IconMicrophone2 size={18} />
                           </ThemeIcon>
                           <Box>
-                            <Text fw={700}>¿Quieres participar en el estudio?</Text>
+                            <Text fw={700}>
+                              ¿Quieres participar en el estudio?
+                            </Text>
                             <Text size="xs" c="dimmed">
-                              Envía una solicitud al anfitrión para habilitar tu micrófono/cámara.
+                              Envía una solicitud al anfitrión para habilitar tu
+                              micrófono/cámara.
                             </Text>
                           </Box>
                         </Group>
@@ -875,6 +889,7 @@ export default function EventAttendGcore() {
                           position: "relative",
                           width: "100%",
                           paddingTop: "56.25%", // 16:9
+                          maxHeight: isMobile ? 260 : 520,
                         }}
                       >
                         {status === "live" ? (
@@ -901,7 +916,11 @@ export default function EventAttendGcore() {
                               ) : (
                                 <iframe
                                   src={playbackUrl}
-                                  style={{ width: "100%", height: "100%", border: 0 }}
+                                  style={{
+                                    width: "100%",
+                                    height: "100%",
+                                    border: 0,
+                                  }}
                                   allow="autoplay; fullscreen; picture-in-picture"
                                   allowFullScreen
                                 />
@@ -977,7 +996,8 @@ export default function EventAttendGcore() {
                               )}
 
                               <Text size="sm" c="dimmed">
-                                Mantén esta ventana abierta. La transmisión se iniciará automáticamente.
+                                Mantén esta ventana abierta. La transmisión se
+                                iniciará automáticamente.
                               </Text>
                             </Stack>
                           </Box>
@@ -1002,7 +1022,8 @@ export default function EventAttendGcore() {
                                 style={{
                                   padding: "4px 12px",
                                   borderRadius: 999,
-                                  border: "1px solid var(--mantine-color-gray-3)",
+                                  border:
+                                    "1px solid var(--mantine-color-gray-3)",
                                   fontSize: 12,
                                   textTransform: "uppercase",
                                   letterSpacing: 0.5,
@@ -1017,7 +1038,8 @@ export default function EventAttendGcore() {
                               </Text>
 
                               <Text size="sm" c="dimmed">
-                                Este evento ha terminado y en este momento no hay transmisión disponible.
+                                Este evento ha terminado y en este momento no
+                                hay transmisión disponible.
                               </Text>
 
                               {slug && eventSlug && (
@@ -1046,7 +1068,18 @@ export default function EventAttendGcore() {
                 </Grid.Col>
 
                 <Grid.Col span={{ base: 12, md: 4 }}>
-                  <Stack gap="lg" style={{ position: "sticky", top: rem(86) }}>
+                  <Stack
+                    gap="lg"
+                    style={
+                      isMobile
+                        ? undefined
+                        : {
+                            position: "sticky",
+                            top: rem(86),
+                            alignSelf: "flex-start",
+                          }
+                    }
+                  >
                     {/* Chat con tabs Chat/Preguntas */}
                     <Card radius="lg" withBorder>
                       <Stack gap="md">
@@ -1069,10 +1102,11 @@ export default function EventAttendGcore() {
                             <Tabs.Panel value="chat" pt="md">
                               <Box
                                 style={{
-                                  height: 400,
+                                  height: chatHeight,
                                   borderRadius: 12,
                                   overflow: "hidden",
-                                  border: "1px solid var(--mantine-color-gray-3)",
+                                  border:
+                                    "1px solid var(--mantine-color-gray-3)",
                                   background: "white",
                                 }}
                               >
@@ -1086,7 +1120,7 @@ export default function EventAttendGcore() {
                                       eventid: event._id,
                                       view: "chat",
                                       message_highlighted: "",
-                                    }
+                                    },
                                   ).toString()}`}
                                   width="100%"
                                   height="100%"
@@ -1110,7 +1144,8 @@ export default function EventAttendGcore() {
                                   height: 400,
                                   borderRadius: 12,
                                   overflow: "hidden",
-                                  border: "1px solid var(--mantine-color-gray-3)",
+                                  border:
+                                    "1px solid var(--mantine-color-gray-3)",
                                   background: "white",
                                 }}
                               >
@@ -1124,7 +1159,7 @@ export default function EventAttendGcore() {
                                       eventid: event._id,
                                       view: "questions",
                                       message_highlighted: "",
-                                    }
+                                    },
                                   ).toString()}`}
                                   width="100%"
                                   height="100%"
@@ -1145,7 +1180,8 @@ export default function EventAttendGcore() {
                         ) : (
                           <Center h={200}>
                             <Text size="sm" c="dimmed" ta="center">
-                              El chat estará disponible cuando se cargue completamente el evento.
+                              El chat estará disponible cuando se cargue
+                              completamente el evento.
                             </Text>
                           </Center>
                         )}
@@ -1175,18 +1211,25 @@ export default function EventAttendGcore() {
           >
             <Container size="xl" p={0}>
               <Stack gap={6}>
-
-                  <Text size="xs" c="dimmed" ta="center">
-                    ¿Quieres participar en el estudio? Envía una solicitud.
-                  </Text>
+                <Text size="xs" c="dimmed" ta="center">
+                  ¿Quieres participar en el estudio? Envía una solicitud.
+                </Text>
 
                 <Button
                   fullWidth
-                  size="xs"
+                  size="sm"
                   radius="xl"
                   onClick={handleJoinRequest}
                   disabled={!canRequestJoin}
                   leftSection={<IconMicrophone2 size={16} />}
+                  styles={{
+                    root: { height: "auto", paddingTop: 10, paddingBottom: 10 },
+                    label: {
+                      whiteSpace: "normal",
+                      textAlign: "center",
+                      lineHeight: 1.15,
+                    },
+                  }}
                 >
                   Solicitar unirme al estudio
                 </Button>
