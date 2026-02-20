@@ -22,6 +22,7 @@ import {
   SegmentedControl,
   Divider,
   Collapse,
+  Progress,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import {
@@ -40,7 +41,7 @@ import {
 } from "@tabler/icons-react";
 import {
   listMediaItems,
-  uploadMediaItem,
+  uploadMediaItemWithProgress,
   deleteMediaItem,
   activateMediaItem,
   deactivateMedia,
@@ -71,6 +72,7 @@ export function MediaLibrary({
   const [loading, setLoading] = useState(true);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterType, setFilterType] = useState<string>("all");
   const [selectedItem, setSelectedItem] = useState<MediaItem | null>(null);
@@ -137,7 +139,8 @@ export function MediaLibrary({
   const handleUpload = async (file: File, metadata: CreateMediaItemDto) => {
     try {
       setUploading(true);
-      await uploadMediaItem(eventSlug, file, metadata);
+      setUploadProgress(0);
+      await uploadMediaItemWithProgress(eventSlug, file, metadata, setUploadProgress);
       notifications.show({ message: "Media subida exitosamente", color: "green" });
       await loadItems();
     } catch (err: any) {
@@ -148,6 +151,7 @@ export function MediaLibrary({
       });
     } finally {
       setUploading(false);
+      setUploadProgress(0);
     }
   };
 
@@ -510,6 +514,21 @@ export function MediaLibrary({
           </Button>
         </Group>
       </Group>
+
+      {/* Progreso de upload */}
+      {uploading && (
+        <Stack gap={4}>
+          <Group justify="space-between">
+            <Text size="xs" c="dimmed">
+              Subiendo archivo...
+            </Text>
+            <Text size="xs" c="dimmed">
+              {uploadProgress}%
+            </Text>
+          </Group>
+          <Progress value={uploadProgress} size="sm" animated />
+        </Stack>
+      )}
 
       {/* Search + Filter */}
       <Group grow>

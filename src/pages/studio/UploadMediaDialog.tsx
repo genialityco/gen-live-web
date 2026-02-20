@@ -87,16 +87,16 @@ export function UploadMediaDialog({
     }
 
     const maxImage = 10 * 1024 * 1024;
-    const maxVideo = 60 * 1024 * 1024;
+    const maxVideo = 1024 * 1024 * 1024; // 1 GB
     const maxAudio = 20 * 1024 * 1024;
     const isVideo = selectedFile.type.startsWith("video/");
     const isAudio = selectedFile.type.startsWith("audio/");
     const maxSize = isVideo ? maxVideo : isAudio ? maxAudio : maxImage;
-    
+
     if (selectedFile.size > maxSize) {
       notifications.show({
         message: isVideo
-          ? "Video muy grande (máx 60MB)"
+          ? "Video muy grande (máx 1GB)"
           : isAudio
           ? "Audio muy grande (máx 20MB)"
           : "Imagen/GIF muy grande (máx 10MB)",
@@ -199,7 +199,7 @@ export function UploadMediaDialog({
               <IconUpload size={32} />
               <Text size="sm">Click para seleccionar archivo</Text>
               <Text size="xs" c="dimmed">
-                PNG, JPEG, GIF (max 10MB), MP4/WEBM/MPEG (max 60MB) o MP3/WAV/OGG (max 20MB)
+                PNG, JPEG, GIF (max 10MB), MP4/WEBM/MPEG (max 1GB) o MP3/WAV/OGG (max 20MB)
               </Text>
             </Stack>
           ) : (
