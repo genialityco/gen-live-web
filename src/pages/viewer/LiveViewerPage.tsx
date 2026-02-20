@@ -2,6 +2,7 @@
 // src/viewer/LiveViewerPage.tsx
 import React, { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
+import { useEventRealtime } from "../../hooks/useEventRealtime";
 import {
   Container,
   Paper,
@@ -22,6 +23,9 @@ import { LIVEKIT_WS_URL } from "../../core/livekitConfig";
 
 export const LiveViewerPage: React.FC = () => {
   const { eventSlug } = useParams<{ eventSlug: string }>();
+
+  // Registra presencia en RTDB para que las métricas del evento cuenten este viewer
+  useEventRealtime(eventSlug ?? "");
 
   const [playbackUrl, setPlaybackUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
