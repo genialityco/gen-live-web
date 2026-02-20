@@ -69,7 +69,8 @@ function savePreferences(storageKey: string, state: Partial<VirtualBgState>) {
 export function useVirtualBackground(eventSlug: string) {
   const { localParticipant } = useLocalParticipant();
   const processorRef = useRef<ReturnType<typeof BackgroundBlur> | ReturnType<typeof VirtualBackground> | null>(null);
-  const appliedRef = useRef(false);
+  // Rastrea el último track al que se aplicó el procesador — detecta cambio de cámara
+  const lastAppliedTrackRef = useRef<LocalVideoTrack | null>(null);
   const storageKey = getStorageKey(eventSlug, localParticipant?.identity);
 
   const [state, setState] = useState<VirtualBgState>({
@@ -193,13 +194,16 @@ export function useVirtualBackground(eventSlug: string) {
     }
   }, [applyProcessor, storageKey]);
 
-  // Aplicar efecto guardado cuando el video track esté disponible
+  // Aplicar efecto cuando el video track esté disponible o cuando cambie la cámara
   useEffect(() => {
     const track = getVideoTrack();
-    if (!track || state.type === "none" || appliedRef.current) return;
+    if (!track || state.type === "none") return;
 
-    // Evitar aplicar múltiples veces
-    appliedRef.current = true;
+    // Si es el mismo track al que ya se aplicó, no volver a aplicar
+    if (lastAppliedTrackRef.current === track) return;
+
+    // Track nuevo (primera vez o cambio de cámara) — marcar y re-aplicar
+    lastAppliedTrackRef.current = track;
 
     const applyStoredEffect = async () => {
       if (state.type === "blur") {
@@ -213,7 +217,9 @@ export function useVirtualBackground(eventSlug: string) {
     const timeout = setTimeout(applyStoredEffect, 500);
 
     return () => clearTimeout(timeout);
-  }, [getVideoTrack, state.type, state.blurIntensity, state.imageUrl, setBlur, setImage]);
+    // localParticipant como dependencia para detectar cambios de track
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [localParticipant, getVideoTrack, state.type, state.blurIntensity, state.imageUrl, setBlur, setImage]);
 
   // Cleanup al desmontar
   useEffect(() => {

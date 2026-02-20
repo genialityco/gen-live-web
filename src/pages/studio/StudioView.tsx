@@ -63,6 +63,7 @@ import {
 import { StudioToolbar } from "./StudioToolbar";
 import { StudioSidePanel } from "./StudioSidePanel";
 import { VirtualBackgroundControl } from "./VirtualBackgroundControl";
+import { DeviceSelectorPanel } from "./DeviceSelectorPanel";
 import type { LayoutMode } from "../../types";
 import {
   emergencyResetEventState,
@@ -862,6 +863,10 @@ export const StudioView: React.FC<StudioViewProps> = ({
                   style={{ display: "flex", justifyContent: "center" }}
                 >
                   <ControlBar variation="minimal" />
+                </Paper>
+
+                <Paper p="sm" withBorder radius="md">
+                  <DeviceSelectorPanel />
                 </Paper>
 
                 <Paper p="sm" withBorder radius="md">
