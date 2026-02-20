@@ -1,3 +1,5 @@
+import { ref, uploadBytesResumable } from "firebase/storage";
+import { storage } from "../core/firebase";
 import { api } from "../core/api";
 
 export interface MediaItem {
@@ -169,28 +171,28 @@ async function uploadSmallMediaItem(
   return data.item;
 }
 
-// Flujo signed URL: archivo grande → Firebase Storage directo (sin pasar por el servidor)
+// Flujo Firebase SDK: archivo grande → Firebase Storage directo con el token del usuario
 async function uploadLargeMediaItem(
   eventSlug: string,
   file: File,
   metadata: CreateMediaItemDto,
   onProgress: (percent: number) => void
 ): Promise<MediaItem> {
-  // Paso 1: pedir URL firmada al backend
-  const { data: urlData } = await api.post<{
-    uploadUrl: string;
-    filePath: string;
-  }>("/livekit/media-library/request-upload", {
-    eventSlug,
-    name: metadata.name,
-    mimeType: file.type,
-    fileSize: file.size,
-  });
+  // Paso 1: pedir al backend el path donde guardar el archivo
+  const { data: urlData } = await api.post<{ filePath: string }>(
+    "/livekit/media-library/request-upload",
+    {
+      eventSlug,
+      name: metadata.name,
+      mimeType: file.type,
+      fileSize: file.size,
+    }
+  );
 
-  // Paso 2: subir directo a Firebase Storage con progreso real via XHR
-  await uploadToSignedUrl(urlData.uploadUrl, file, file.type, onProgress);
+  // Paso 2: subir directo a Firebase Storage usando el SDK (maneja auth + progreso nativamente)
+  await uploadFileWithFirebaseSDK(urlData.filePath, file, onProgress);
 
-  // Paso 3: confirmar al backend para crear el documento en MongoDB
+  // Paso 3: confirmar al backend para hacer público + crear documento en MongoDB
   const { data: confirmData } = await api.post<{ ok: boolean; item: MediaItem }>(
     "/livekit/media-library/confirm-upload",
     {
@@ -211,31 +213,29 @@ async function uploadLargeMediaItem(
   return confirmData.item;
 }
 
-// XHR con progreso para el PUT al signed URL de Firebase Storage
-function uploadToSignedUrl(
-  url: string,
+// Upload con Firebase Web SDK — usa el token de autenticación del usuario actual
+function uploadFileWithFirebaseSDK(
+  filePath: string,
   file: File,
-  contentType: string,
   onProgress: (percent: number) => void
 ): Promise<void> {
   return new Promise((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    xhr.open("PUT", url);
-    xhr.setRequestHeader("Content-Type", contentType);
+    const storageRef = ref(storage, filePath);
+    const uploadTask = uploadBytesResumable(storageRef, file, {
+      contentType: file.type,
+    });
 
-    xhr.upload.onprogress = (e) => {
-      if (e.lengthComputable) {
-        onProgress(Math.round((e.loaded / e.total) * 100));
-      }
-    };
-
-    xhr.onload = () => {
-      if (xhr.status >= 200 && xhr.status < 300) resolve();
-      else reject(new Error(`Upload falló con status ${xhr.status}`));
-    };
-
-    xhr.onerror = () => reject(new Error("Error de red durante el upload"));
-    xhr.send(file);
+    uploadTask.on(
+      "state_changed",
+      (snapshot) => {
+        const percent = Math.round(
+          (snapshot.bytesTransferred / snapshot.totalBytes) * 100
+        );
+        onProgress(percent);
+      },
+      (error) => reject(error),
+      () => resolve()
+    );
   });
 }
 
