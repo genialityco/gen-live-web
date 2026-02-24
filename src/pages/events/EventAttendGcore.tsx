@@ -19,7 +19,7 @@ import {
   Image,
   MantineProvider,
   Tabs,
-  Divider,
+  // Divider,
   ThemeIcon,
   rem,
 } from "@mantine/core";
@@ -28,7 +28,7 @@ import {
   IconArrowLeft,
   IconSettings,
   IconPlayerPlay,
-  IconMicrophone2,
+  // IconMicrophone2,
   IconCircleDot,
   IconInfoCircle,
 } from "@tabler/icons-react";
@@ -53,7 +53,7 @@ import {
   getLiveConfig,
 } from "../../api/livekit-service";
 import {
-  requestToJoin,
+  // requestToJoin,
   subscribeJoinDecision,
 } from "../../api/live-join-service";
 import { LIVEKIT_WS_URL } from "../../core/livekitConfig";
@@ -636,23 +636,23 @@ export default function EventAttendGcore() {
     return () => unsub?.();
   }, [eventSlugToUse, status]);
 
-  const handleJoinRequest = async () => {
-    if (!eventSlugToUse) return;
-    if (!isRegistered && !isOwner) return;
+  // const handleJoinRequest = async () => {
+  //   if (!eventSlugToUse) return;
+  //   if (!isRegistered && !isOwner) return;
 
-    setJoinState("pending");
-    try {
-      const displayName =
-        sessionName ||
-        user?.displayName ||
-        (user?.email ? user.email.split("@")[0] : "Invitado");
+  //   setJoinState("pending");
+  //   try {
+  //     const displayName =
+  //       sessionName ||
+  //       user?.displayName ||
+  //       (user?.email ? user.email.split("@")[0] : "Invitado");
 
-      await requestToJoin(eventSlugToUse, displayName);
-    } catch (e: any) {
-      setJoinState("idle");
-      console.warn(e?.message || e);
-    }
-  };
+  //     await requestToJoin(eventSlugToUse, displayName);
+  //   } catch (e: any) {
+  //     setJoinState("idle");
+  //     console.warn(e?.message || e);
+  //   }
+  // };
 
   // Poll frame config every 2s
   useEffect(() => {
@@ -699,11 +699,11 @@ export default function EventAttendGcore() {
   const scale = 0.8;
 
   const joinMessage = status === "live" ? getJoinMessage(joinState) : "";
-  const canRequestJoin =
-    status === "live" &&
-    (isRegistered || isOwner) &&
-    mode !== "studio" &&
-    joinState !== "pending";
+  // const canRequestJoin =
+  //   status === "live" &&
+  //   (isRegistered || isOwner) &&
+  //   mode !== "studio" &&
+  //   joinState !== "pending";
 
   return (
     <MantineProvider theme={theme} withCssVariables>
@@ -835,7 +835,7 @@ export default function EventAttendGcore() {
                   </Group>
 
                   {/* CTA Desktop */}
-                  {status === "live" && !isMobile && (
+                  {/* {status === "live" && !isMobile && (
                     <>
                       <Divider my="xs" />
                       <Group justify="space-between" align="center" wrap="wrap">
@@ -870,7 +870,7 @@ export default function EventAttendGcore() {
                         </Button>
                       </Group>
                     </>
-                  )}
+                  )} */}
                 </Stack>
               </Card>
 
@@ -1195,7 +1195,7 @@ export default function EventAttendGcore() {
         )}
 
         {/* CTA fijo en móvil */}
-        {status === "live" && isMobile && mode !== "studio" && (
+        {/* {status === "live" && isMobile && mode !== "studio" && (
           <Box
             style={{
               position: "fixed",
@@ -1236,7 +1236,7 @@ export default function EventAttendGcore() {
               </Stack>
             </Container>
           </Box>
-        )}
+        )} */}
 
         {/* Live Poll Viewer - Drawer de encuestas en tiempo real */}
         {slug && eventSlug && event?._id && (
