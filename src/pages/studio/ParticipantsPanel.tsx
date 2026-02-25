@@ -1,6 +1,6 @@
 // src/ParticipantsPanel.tsx
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { useParticipants, useLocalParticipant } from "@livekit/components-react";
+import { useParticipants } from "@livekit/components-react";
 import {
   Stack,
   Text,
@@ -116,7 +116,6 @@ export function ParticipantsPanel({
   onUnpin,
 }: Props) {
   const participants = useParticipants();
-  const { localParticipant } = useLocalParticipant();
   const [, setKicking] = useState<string | null>(null);
   const myUid = auth.currentUser?.uid ?? null;
   const isSpeaker = role === "speaker";
