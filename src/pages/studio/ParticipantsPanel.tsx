@@ -1,6 +1,6 @@
 // src/ParticipantsPanel.tsx
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { useParticipants } from "@livekit/components-react";
+import { useParticipants, useLocalParticipant } from "@livekit/components-react";
 import {
   Stack,
   Text,
@@ -14,8 +14,10 @@ import {
   SimpleGrid,
   Paper,
   Flex,
+  Box,
+  AspectRatio,
 } from "@mantine/core";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import { auth } from "../../core/firebase";
 import { kickSpeaker } from "../../api/live-join-service";
 import type { StageState } from "../../hooks/useStage";
@@ -27,11 +29,59 @@ import {
   IconUserX,
   IconPencil,
   IconScreenShare,
+  IconVideoOff,
 } from "@tabler/icons-react";
 import {
   getScreenShareKey,
   parseStageKey,
 } from "../../utils/screen-share-utils";
+
+// Componente para renderizar el video de un participante
+function ParticipantVideo({ participant, isScreenShare }: { participant: any; isScreenShare: boolean }) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  useEffect(() => {
+    if (!participant || !videoRef.current) return;
+
+    // Buscar el track de video correcto
+    let videoTrack = null;
+    
+    if (isScreenShare) {
+      // Para pantalla compartida
+      const screenSharePub = participant.getTrackPublication("screen_share");
+      videoTrack = screenSharePub?.videoTrack;
+    } else {
+      // Para cámara
+      const cameraPub = participant.getTrackPublication("camera");
+      videoTrack = cameraPub?.videoTrack;
+    }
+
+    if (videoTrack && videoRef.current) {
+      videoTrack.attach(videoRef.current);
+    }
+
+    return () => {
+      if (videoTrack && videoRef.current) {
+        videoTrack.detach(videoRef.current);
+      }
+    };
+  }, [participant, isScreenShare]);
+
+  return (
+    <video
+      ref={videoRef}
+      autoPlay
+      playsInline
+      muted
+      style={{
+        width: "100%",
+        height: "100%",
+        objectFit: isScreenShare ? "contain" : "cover",
+        background: "#000",
+      }}
+    />
+  );
+}
 
 // Representa un item en la lista (puede ser participante o pantalla compartida)
 type StageListItem = {
@@ -66,9 +116,11 @@ export function ParticipantsPanel({
   onUnpin,
 }: Props) {
   const participants = useParticipants();
+  const { localParticipant } = useLocalParticipant();
   const [, setKicking] = useState<string | null>(null);
   const myUid = auth.currentUser?.uid ?? null;
   const isSpeaker = role === "speaker";
+
 
   // Estados para editar nombre
   const [editingIdentity, setEditingIdentity] = useState<string | null>(null);
@@ -332,6 +384,38 @@ export function ParticipantsPanel({
                   </Menu>
                 )}
               </Group>
+
+              {/* Vista previa de cámara */}
+              {!item.isScreenShare && camOn && (
+                <AspectRatio ratio={16 / 9} style={{ width: "100%", borderRadius: 8, overflow: "hidden" }}>
+                  <ParticipantVideo participant={p} isScreenShare={false} />
+                </AspectRatio>
+              )}
+
+              {/* Placeholder cuando la cámara está apagada */}
+              {!item.isScreenShare && !camOn && (
+                <AspectRatio ratio={16 / 9} style={{ width: "100%", borderRadius: 8, overflow: "hidden" }}>
+                  <Box
+                    style={{
+                      width: "100%",
+                      height: "100%",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      background: "var(--mantine-color-dark-6)",
+                    }}
+                  >
+                    <IconVideoOff size={32} color="var(--mantine-color-gray-6)" />
+                  </Box>
+                </AspectRatio>
+              )}
+
+              {/* Vista previa de pantalla compartida */}
+              {item.isScreenShare && screenOn && (
+                <AspectRatio ratio={16 / 9} style={{ width: "100%", borderRadius: 8, overflow: "hidden" }}>
+                  <ParticipantVideo participant={p} isScreenShare={true} />
+                </AspectRatio>
+              )}
 
               {/* Status chips */}
               <Flex gap={6} wrap="wrap">

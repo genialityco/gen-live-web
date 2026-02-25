@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 // src/pages/studio/SpeakerInvitePage.tsx
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   Container,
@@ -15,11 +15,303 @@ import {
   Loader,
   Box,
   Modal,
+  AspectRatio,
+  ActionIcon,
+  Select,
 } from "@mantine/core";
 import { useDisclosure, useMediaQuery } from "@mantine/hooks";
-import { IconAlertCircle, IconVideo } from "@tabler/icons-react";
+import { IconAlertCircle, IconVideo, IconVideoOff, IconRefresh } from "@tabler/icons-react";
 import { StudioView } from "./StudioView";
 import { getLivekitToken } from "../../api/livekit-service";
+
+// Componente para vista previa de cámara local
+function LocalCameraPreview() {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const animationFrameRef = useRef<number | null>(null);
+
+  const [stream, setStream] = useState<MediaStream | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
+  const [selectedCamera, setSelectedCamera] = useState<string>("");
+  const [selectedMicrophone, setSelectedMicrophone] = useState<string>("");
+  const [micLevel, setMicLevel] = useState<number>(0);
+  const [devicesLoaded, setDevicesLoaded] = useState(false);
+
+  const startCamera = async (cameraId?: string, micId?: string) => {
+    setIsLoading(true);
+    setError(null);
+
+    // Detener stream anterior si existe
+    if (stream) {
+      stream.getTracks().forEach((track) => track.stop());
+    }
+
+    // Detener análisis de audio anterior
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+    }
+    if (audioContextRef.current) {
+      audioContextRef.current.close();
+    }
+
+    try {
+      const constraints: MediaStreamConstraints = {
+        video: cameraId
+          ? { deviceId: { exact: cameraId }, width: 1280, height: 720 }
+          : { width: 1280, height: 720 },
+        audio: micId
+          ? { deviceId: { exact: micId } }
+          : true,
+      };
+
+      const mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
+
+      setStream(mediaStream);
+
+      if (videoRef.current) {
+        videoRef.current.srcObject = mediaStream;
+      }
+
+      // Configurar análisis de audio para visualizar nivel de micrófono
+      const audioContext = new AudioContext();
+      const analyser = audioContext.createAnalyser();
+      const microphone = audioContext.createMediaStreamSource(mediaStream);
+
+      analyser.fftSize = 256;
+      microphone.connect(analyser);
+
+      audioContextRef.current = audioContext;
+      analyserRef.current = analyser;
+
+      // Actualizar nivel de micrófono
+      const updateMicLevel = () => {
+        if (!analyserRef.current) return;
+
+        const dataArray = new Uint8Array(analyserRef.current.frequencyBinCount);
+        analyserRef.current.getByteFrequencyData(dataArray);
+
+        const average = dataArray.reduce((a, b) => a + b) / dataArray.length;
+        setMicLevel(Math.min(100, (average / 255) * 100 * 2)); // Amplificar un poco
+
+        animationFrameRef.current = requestAnimationFrame(updateMicLevel);
+      };
+
+      updateMicLevel();
+    } catch (err: any) {
+      console.error("Error accessing camera:", err);
+      setError("No se pudo acceder a la cámara o micrófono. Verifica los permisos.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  useEffect(() => {
+  if (stream && videoRef.current) {
+    videoRef.current.srcObject = stream;
+    videoRef.current.play().catch(e => console.log("Auto-play falló:", e));
+  }
+}, [stream]);
+
+  // Cargar dispositivos inicialmente
+  useEffect(() => {
+    const initDevices = async () => {
+      try {
+        // Primero solicitar permisos
+        const tempStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+
+        // Obtener lista de dispositivos
+        const deviceList = await navigator.mediaDevices.enumerateDevices();
+        setDevices(deviceList);
+
+        // Seleccionar dispositivos por defecto
+        const defaultCamera = deviceList.find(d => d.kind === "videoinput");
+        const defaultMic = deviceList.find(d => d.kind === "audioinput");
+
+        if (defaultCamera) {
+          setSelectedCamera(defaultCamera.deviceId);
+        }
+        if (defaultMic) {
+          setSelectedMicrophone(defaultMic.deviceId);
+        }
+
+        // Detener el stream temporal
+        tempStream.getTracks().forEach(track => track.stop());
+
+        setDevicesLoaded(true);
+      } catch (err) {
+        console.error("Error loading devices:", err);
+        setError("No se pudo acceder a los dispositivos. Verifica los permisos.");
+        setIsLoading(false);
+      }
+    };
+
+    void initDevices();
+
+    return () => {
+      if (stream) {
+        stream.getTracks().forEach((track) => track.stop());
+      }
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
+      if (audioContextRef.current) {
+        audioContextRef.current.close();
+      }
+    };
+  }, []);
+
+  // Iniciar cámara cuando los dispositivos estén cargados
+  useEffect(() => {
+    if (devicesLoaded && selectedCamera && selectedMicrophone) {
+      void startCamera(selectedCamera, selectedMicrophone);
+    }
+  }, [devicesLoaded, selectedCamera, selectedMicrophone]);
+
+  const handleRetry = () => {
+    void startCamera(selectedCamera, selectedMicrophone);
+  };
+
+  const cameras = devices.filter(d => d.kind === "videoinput");
+  const microphones = devices.filter(d => d.kind === "audioinput");
+
+  if (isLoading) {
+    return (
+      <Box>
+        <AspectRatio ratio={16 / 9} style={{ width: "100%", borderRadius: 8, overflow: "hidden" }}>
+          <Box
+            style={{
+              width: "100%",
+              height: "100%",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              background: "var(--mantine-color-dark-6)",
+            }}
+          >
+            <Stack align="center" gap="xs">
+              <Loader size="md" />
+              <Text size="sm" c="dimmed">
+                Cargando dispositivos...
+              </Text>
+            </Stack>
+          </Box>
+        </AspectRatio>
+      </Box>
+    );
+  }
+
+  if (error) {
+    return (
+      <Box>
+        <AspectRatio ratio={16 / 9} style={{ width: "100%", borderRadius: 8, overflow: "hidden" }}>
+          <Box
+            style={{
+              width: "100%",
+              height: "100%",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              background: "var(--mantine-color-dark-6)",
+              gap: 12,
+              padding: 16,
+            }}
+          >
+            <IconVideoOff size={32} color="var(--mantine-color-gray-6)" />
+            <Text size="sm" c="dimmed" ta="center">
+              {error}
+            </Text>
+            <ActionIcon onClick={handleRetry} variant="light" size="lg">
+              <IconRefresh size={20} />
+            </ActionIcon>
+          </Box>
+        </AspectRatio>
+      </Box>
+    );
+  }
+
+  return (
+    <Stack gap="xs">
+      <AspectRatio ratio={16 / 9} style={{ width: "100%", borderRadius: 8, overflow: "hidden" }}>
+        <video
+          ref={videoRef}
+          autoPlay
+          playsInline
+          muted
+          style={{
+            width: "100%",
+            height: "100%",
+            objectFit: "cover",
+            background: "#000",
+            transform: "scaleX(-1)", // Efecto espejo
+          }}
+        />
+      </AspectRatio>
+
+      {/* Selectores de dispositivos */}
+      <Stack gap="xs">
+        <Select
+          label="Cámara"
+          placeholder="Selecciona una cámara"
+          value={selectedCamera}
+          onChange={(value) => setSelectedCamera(value || "")}
+          data={cameras.map(cam => ({
+            value: cam.deviceId,
+            label: cam.label || `Cámara ${cameras.indexOf(cam) + 1}`,
+          }))}
+          size="sm"
+        />
+
+        <Box>
+          <Select
+            label="Micrófono"
+            placeholder="Selecciona un micrófono"
+            value={selectedMicrophone}
+            onChange={(value) => setSelectedMicrophone(value || "")}
+            data={microphones.map(mic => ({
+              value: mic.deviceId,
+              label: mic.label || `Micrófono ${microphones.indexOf(mic) + 1}`,
+            }))}
+            size="sm"
+          />
+
+          {/* Indicador de nivel de micrófono */}
+          <Box mt="xs">
+            <Text size="xs" c="dimmed" mb={4}>
+              Nivel de audio
+            </Text>
+            <Box
+              style={{
+                width: "100%",
+                height: 6,
+                background: "var(--mantine-color-dark-5)",
+                borderRadius: 3,
+                overflow: "hidden",
+              }}
+            >
+              <Box
+                style={{
+                  width: `${micLevel}%`,
+                  height: "100%",
+                  background: micLevel > 70
+                    ? "var(--mantine-color-green-6)"
+                    : micLevel > 30
+                    ? "var(--mantine-color-yellow-6)"
+                    : "var(--mantine-color-gray-6)",
+                  transition: "width 0.1s ease-out",
+                }}
+              />
+            </Box>
+          </Box>
+        </Box>
+      </Stack>
+    </Stack>
+  );
+}
+
 
 /**
  * Página para speakers invitados
@@ -206,6 +498,17 @@ export const SpeakerInvitePage: React.FC = () => {
                 {eventSlug}
               </Text>
             </div>
+
+            {/* Vista previa de la cámara */}
+            <Box>
+              <Text size="sm" fw={500} mb="xs">
+                Configura tu cámara y micrófono
+              </Text>
+              <LocalCameraPreview />
+              <Text size="xs" c="dimmed" mt="xs" ta="center">
+                Selecciona tus dispositivos y verifica que funcionen correctamente
+              </Text>
+            </Box>
 
             <TextInput
               label="Tu nombre"
