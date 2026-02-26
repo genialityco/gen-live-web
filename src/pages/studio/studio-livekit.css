@@ -1,0 +1,12 @@
+/* Override LiveKit participant name styles for visibility on dark video backgrounds */
+
+.lk-participant-name {
+  color: #ffffff !important;
+  text-shadow:
+    0 1px 3px rgba(0, 0, 0, 0.9),
+    0 0 6px rgba(0, 0, 0, 0.7);
+}
+
+.lk-participant-metadata-item {
+  color: #ffffff !important;
+}

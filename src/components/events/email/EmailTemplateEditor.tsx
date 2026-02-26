@@ -24,23 +24,16 @@ import {
 import EmailVariablesPanel from "./EmailVariablesPanel";
 import EmailPreviewModal from "./EmailPreviewModal";
 
-interface EmailTemplateEditorProps {
-  orgId: string;
-  eventId: string;
-}
+type EmailTemplateType = "WELCOME" | "INVITATION" | "REMINDER";
 
-export default function EmailTemplateEditor({
-  orgId,
-  eventId,
-}: EmailTemplateEditorProps) {
-  const [template, setTemplate] = useState<EmailTemplate | null>(null);
-  const [variables, setVariables] = useState<AvailableVariable[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-
-  // Default template content for new templates
-  const DEFAULT_SUBJECT = "¡Bienvenido/a a {{event.title}}!";
-  const DEFAULT_BODY = `<h2>¡Hola!</h2>
+const TEMPLATE_DEFAULTS: Record<
+  EmailTemplateType,
+  { name: string; subject: string; body: string }
+> = {
+  WELCOME: {
+    name: "Email de bienvenida",
+    subject: "¡Bienvenido/a a {{event.title}}!",
+    body: `<h2>¡Hola!</h2>
 
 <p>Tu registro al evento <strong>{{event.title}}</strong> ha sido confirmado.</p>
 
@@ -67,12 +60,90 @@ export default function EmailTemplateEditor({
 <p>Puedes acceder al evento desde el siguiente enlace:</p>
 <p><a href="{{event.joinUrl}}" style="display: inline-block; padding: 10px 24px; background-color: #4263eb; color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600;">Ir al evento</a></p>
 
-<p>¡Te esperamos!</p>`;
+<p>¡Te esperamos!</p>`,
+  },
+  INVITATION: {
+    name: "Email de invitación",
+    subject: "Te invitamos a {{event.title}}",
+    body: `<h2>¡Hola!</h2>
+
+<p>Te invitamos a participar en nuestro próximo evento: <strong>{{event.title}}</strong>.</p>
+
+<table cellpadding="0" cellspacing="0" style="width: 100%; margin: 16px 0; border-collapse: collapse;">
+  <tr>
+    <td style="padding: 12px 16px; background-color: #f8f9fa; border-radius: 8px;">
+      <table cellpadding="0" cellspacing="0" style="width: 100%; border-collapse: collapse;">
+        <tr>
+          <td style="padding: 4px 0; color: #868e96; font-size: 13px; width: 110px;">Fecha</td>
+          <td style="padding: 4px 0; font-size: 13px;">{{event.schedule.startsAt.date}}</td>
+        </tr>
+        <tr>
+          <td style="padding: 4px 0; color: #868e96; font-size: 13px;">Hora</td>
+          <td style="padding: 4px 0; font-size: 13px;">{{event.schedule.startsAt.time}} ({{event.schedule.startsAt.timezone}})</td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>
+
+<p>Regístrate y accede al evento desde el siguiente enlace:</p>
+<p><a href="{{event.joinUrl}}" style="display: inline-block; padding: 10px 24px; background-color: #4263eb; color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600;">Ver evento</a></p>
+
+<p>¡Esperamos contar con tu presencia!</p>`,
+  },
+  REMINDER: {
+    name: "Email de recordatorio",
+    subject: "Recordatorio: {{event.title}} empieza pronto",
+    body: `<h2>¡Hola!</h2>
+
+<p>Te recordamos que el evento <strong>{{event.title}}</strong> al que estás registrado/a comienza pronto.</p>
+
+<table cellpadding="0" cellspacing="0" style="width: 100%; margin: 16px 0; border-collapse: collapse;">
+  <tr>
+    <td style="padding: 12px 16px; background-color: #f8f9fa; border-radius: 8px;">
+      <table cellpadding="0" cellspacing="0" style="width: 100%; border-collapse: collapse;">
+        <tr>
+          <td style="padding: 4px 0; color: #868e96; font-size: 13px; width: 110px;">Fecha</td>
+          <td style="padding: 4px 0; font-size: 13px;">{{event.schedule.startsAt.date}}</td>
+        </tr>
+        <tr>
+          <td style="padding: 4px 0; color: #868e96; font-size: 13px;">Hora</td>
+          <td style="padding: 4px 0; font-size: 13px;">{{event.schedule.startsAt.time}} ({{event.schedule.startsAt.timezone}})</td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>
+
+<p>Accede al evento en el momento indicado desde este enlace:</p>
+<p><a href="{{event.joinUrl}}" style="display: inline-block; padding: 10px 24px; background-color: #4263eb; color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600;">Ir al evento</a></p>
+
+<p>¡Hasta pronto!</p>`,
+  },
+};
+
+interface EmailTemplateEditorProps {
+  orgId: string;
+  eventId: string;
+  type?: EmailTemplateType;
+}
+
+export default function EmailTemplateEditor({
+  orgId,
+  eventId,
+  type = "WELCOME",
+}: EmailTemplateEditorProps) {
+  const [template, setTemplate] = useState<EmailTemplate | null>(null);
+  const [variables, setVariables] = useState<AvailableVariable[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  const defaults = TEMPLATE_DEFAULTS[type];
 
   // Form state
-  const [name, setName] = useState("Email de bienvenida");
-  const [subject, setSubject] = useState(DEFAULT_SUBJECT);
-  const [body, setBody] = useState(DEFAULT_BODY);
+  const [name, setName] = useState(defaults.name);
+  const [subject, setSubject] = useState(defaults.subject);
+  const [body, setBody] = useState(defaults.body);
   const [enabled, setEnabled] = useState(true);
 
   // Track which field is focused for variable insertion
@@ -93,8 +164,8 @@ export default function EmailTemplateEditor({
 
       setVariables(vars);
 
-      // Find WELCOME template (event-level or inherited)
-      const welcomeTemplate = templates.find((t) => t.type === "WELCOME");
+      // Find template by type (event-level or inherited)
+      const welcomeTemplate = templates.find((t) => t.type === type);
       if (welcomeTemplate) {
         setTemplate(welcomeTemplate);
         setName(welcomeTemplate.name);
@@ -111,7 +182,7 @@ export default function EmailTemplateEditor({
     } finally {
       setLoading(false);
     }
-  }, [orgId, eventId]);
+  }, [orgId, eventId, type]);
 
   useEffect(() => {
     loadData();
@@ -123,7 +194,7 @@ export default function EmailTemplateEditor({
       const result = await upsertEmailTemplate({
         orgId,
         eventId,
-        type: "WELCOME",
+        type,
         name,
         subject,
         body,
@@ -153,7 +224,7 @@ export default function EmailTemplateEditor({
       const result = await upsertEmailTemplate({
         orgId,
         eventId,
-        type: "WELCOME",
+        type,
         name,
         subject,
         body,

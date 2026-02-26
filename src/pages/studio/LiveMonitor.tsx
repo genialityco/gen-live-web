@@ -1,6 +1,7 @@
 // src/components/live/LiveMonitor.tsx
-import { useMemo } from "react";
-import { Box, Center, Text } from "@mantine/core";
+import { useMemo, useRef, useState, useEffect, useCallback } from "react";
+import { Box, Center, Text, ActionIcon, Tooltip } from "@mantine/core";
+import { IconMaximize, IconMinimize } from "@tabler/icons-react";
 import {
   FocusLayout,
   GridLayout,
@@ -48,6 +49,9 @@ type Props = {
   mediaMuted: boolean;
   mediaFit: "cover" | "contain";
   mediaOpacity: number;
+
+  /** Oculta controles de UI (ej: botón fullscreen) cuando se renderiza para egress */
+  hideControls?: boolean;
 };
 
 export function LiveMonitor({
@@ -56,6 +60,7 @@ export function LiveMonitor({
   stage,
   layoutMode,
   mediaEnabled,
+  hideControls = false,
   visualUrl,
   visualType,
   visualMode,
@@ -141,6 +146,26 @@ export function LiveMonitor({
     return ss ?? cam ?? null;
   }, [stageTracks]);
 
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  useEffect(() => {
+    const onFsChange = () => {
+      setIsFullscreen(document.fullscreenElement === containerRef.current);
+    };
+    document.addEventListener("fullscreenchange", onFsChange);
+    return () => document.removeEventListener("fullscreenchange", onFsChange);
+  }, []);
+
+  const toggleFullscreen = useCallback(() => {
+    if (!containerRef.current) return;
+    if (!document.fullscreenElement) {
+      containerRef.current.requestFullscreen();
+    } else {
+      document.exitFullscreen();
+    }
+  }, []);
+
   const effectiveMode = layoutMode;
   const focus = pinnedTrack ?? fallbackSpeaker;
 
@@ -160,9 +185,11 @@ export function LiveMonitor({
 
   return (
     <Box
+      ref={containerRef}
       style={{
         width: "100%",
-        aspectRatio: "16 / 9",
+        aspectRatio: isFullscreen ? undefined : "16 / 9",
+        height: isFullscreen ? "100%" : undefined,
         background: backgroundColor || "#000",
         overflow: "hidden",
         position: "relative",
@@ -332,6 +359,33 @@ export function LiveMonitor({
           />
         </Box>
       )}
+
+      {/* FULLSCREEN BUTTON (zIndex 30) — oculto en egress */}
+      {!hideControls && <Tooltip
+        label={isFullscreen ? "Salir de pantalla completa" : "Pantalla completa"}
+        position="left"
+        withArrow
+      >
+        <ActionIcon
+          onClick={toggleFullscreen}
+          variant="filled"
+          color="dark"
+          size="sm"
+          radius="sm"
+          style={{
+            position: "absolute",
+            top: 8,
+            right: 8,
+            zIndex: 30,
+            opacity: 0.7,
+            transition: "opacity 0.2s",
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.opacity = "1")}
+          onMouseLeave={(e) => (e.currentTarget.style.opacity = "0.7")}
+        >
+          {isFullscreen ? <IconMinimize size={14} /> : <IconMaximize size={14} />}
+        </ActionIcon>
+      </Tooltip>}
 
       {/* VIDEO TILES (zIndex 1) */}
       {renderVideoTiles && (

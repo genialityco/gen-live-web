@@ -21,6 +21,7 @@ import {
 import { Track } from "livekit-client";
 
 import "@livekit/components-styles";
+import "./studio-livekit.css";
 import {
   Box,
   Text,

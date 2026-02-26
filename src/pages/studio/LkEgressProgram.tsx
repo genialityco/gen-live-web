@@ -181,6 +181,7 @@ function ProgramCanvas({ eventSlug }: { eventSlug: string }) {
       <RoomAudioRenderer />
 
       <LiveMonitor
+        hideControls
         showFrame={showFrame && frameLoaded}
         frameUrl={frameUrl}
         stage={stage}
