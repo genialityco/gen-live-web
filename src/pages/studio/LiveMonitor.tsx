@@ -3,15 +3,17 @@ import { useMemo, useRef, useState, useEffect, useCallback } from "react";
 import { Box, Center, Text, ActionIcon, Tooltip } from "@mantine/core";
 import { IconMaximize, IconMinimize } from "@tabler/icons-react";
 import {
-  FocusLayout,
-  GridLayout,
-  ParticipantTile,
   useTracks,
+  type TrackReference,
 } from "@livekit/components-react";
 import { Track } from "livekit-client";
 import type { StageState } from "../../hooks/useStage";
 import type { LayoutMode } from "../../types";
-import { getStageKeyForTrack, parseStageKey } from "../../utils/screen-share-utils";
+import {
+  getStageKeyForTrack,
+  parseStageKey,
+} from "../../utils/screen-share-utils";
+import { CleanTile } from "../../components/studio/CleanTile";
 
 type Props = {
   showFrame: boolean;
@@ -35,7 +37,7 @@ type Props = {
   audioUrl: string;
   audioLoop: boolean;
   audioMuted: boolean;
-  
+
   // Background
   backgroundUrl: string;
   backgroundType: "image" | "gif" | "video";
@@ -96,10 +98,10 @@ export function LiveMonitor({
     return tracks.filter((t) => {
       const uid = t.participant?.identity;
       if (!uid) return false;
-      
+
       // Generar la key específica para este track
       const stageKey = getStageKeyForTrack(uid, t.source);
-      
+
       // Solo mostrar si la key específica está en escena
       return !!stage.onStage[stageKey];
     });
@@ -112,30 +114,32 @@ export function LiveMonitor({
 
     // Parsear la key para ver si es un track específico
     const parsed = parseStageKey(activeKey);
-    
+
     if (parsed.isScreen) {
       // Buscar específicamente el screen share de este usuario
-      return tracks.find(
-        (t) =>
-          t.participant?.identity === parsed.identity &&
-          t.source === Track.Source.ScreenShare,
-      ) ?? null;
+      return (
+        tracks.find(
+          (t) =>
+            t.participant?.identity === parsed.identity &&
+            t.source === Track.Source.ScreenShare,
+        ) ?? null
+      );
     }
-    
+
     // Buscar el track de cámara (comportamiento original)
     const cam = tracks.find(
       (t) =>
-        t.participant?.identity === parsed.identity && 
+        t.participant?.identity === parsed.identity &&
         t.source === Track.Source.Camera,
     );
-    
+
     // Fallback: si no hay cámara, buscar screen share del mismo usuario
     const ss = tracks.find(
       (t) =>
         t.participant?.identity === parsed.identity &&
         t.source === Track.Source.ScreenShare,
     );
-    
+
     return cam ?? ss ?? null;
   }, [tracks, stage.activeUid]);
 
@@ -361,31 +365,39 @@ export function LiveMonitor({
       )}
 
       {/* FULLSCREEN BUTTON (zIndex 30) — oculto en egress */}
-      {!hideControls && <Tooltip
-        label={isFullscreen ? "Salir de pantalla completa" : "Pantalla completa"}
-        position="left"
-        withArrow
-      >
-        <ActionIcon
-          onClick={toggleFullscreen}
-          variant="filled"
-          color="dark"
-          size="sm"
-          radius="sm"
-          style={{
-            position: "absolute",
-            top: 8,
-            right: 8,
-            zIndex: 30,
-            opacity: 0.7,
-            transition: "opacity 0.2s",
-          }}
-          onMouseEnter={(e) => (e.currentTarget.style.opacity = "1")}
-          onMouseLeave={(e) => (e.currentTarget.style.opacity = "0.7")}
+      {!hideControls && (
+        <Tooltip
+          label={
+            isFullscreen ? "Salir de pantalla completa" : "Pantalla completa"
+          }
+          position="left"
+          withArrow
         >
-          {isFullscreen ? <IconMinimize size={14} /> : <IconMaximize size={14} />}
-        </ActionIcon>
-      </Tooltip>}
+          <ActionIcon
+            onClick={toggleFullscreen}
+            variant="filled"
+            color="dark"
+            size="sm"
+            radius="sm"
+            style={{
+              position: "absolute",
+              top: 8,
+              right: 8,
+              zIndex: 30,
+              opacity: 0.7,
+              transition: "opacity 0.2s",
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.opacity = "1")}
+            onMouseLeave={(e) => (e.currentTarget.style.opacity = "0.7")}
+          >
+            {isFullscreen ? (
+              <IconMinimize size={14} />
+            ) : (
+              <IconMaximize size={14} />
+            )}
+          </ActionIcon>
+        </Tooltip>
+      )}
 
       {/* VIDEO TILES (zIndex 1) */}
       {renderVideoTiles && (
@@ -394,16 +406,58 @@ export function LiveMonitor({
             switch (effectiveMode) {
               case "grid":
                 return (
-                  <GridLayout tracks={stageTracks}>
-                    <ParticipantTile />
-                  </GridLayout>
+                  <Box
+                    style={{
+                      width: "100%",
+                      height: "100%",
+                      display: "grid",
+                      gridTemplateColumns:
+                        "repeat(auto-fit, minmax(260px, 1fr))",
+                      gap: 10,
+                      padding: 10,
+                    }}
+                  >
+                    {stageTracks.map((t) => (
+                      <Box
+                        key={`${t.participant?.identity}-${t.source}`}
+                        style={{
+                          position: "relative",
+                          width: "100%",
+                          aspectRatio: "16 / 9",
+                          overflow: "hidden",
+                          borderRadius: 12,
+                          background: "#111",
+                        }}
+                      >
+                        <CleanTile trackRef={t as TrackReference} />
+                      </Box>
+                    ))}
+                  </Box>
                 );
 
               case "speaker":
                 return focus ? (
-                  <FocusLayout trackRef={focus}>
-                    <ParticipantTile trackRef={focus} />
-                  </FocusLayout>
+                  <Box
+                    style={{
+                      width: "100%",
+                      height: "100%",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    <Box
+                      style={{
+                        width: "100%",
+                        maxWidth: "100%",
+                        aspectRatio: "16/9",
+                        maxHeight: "100%",
+                        position: "relative",
+                      }}
+                    >
+                      <CleanTile trackRef={focus as TrackReference} />
+                    </Box>
+                  </Box>
                 ) : (
                   <Center h="100%">
                     <Text c="dimmed">Nadie en escena</Text>
@@ -448,18 +502,12 @@ export function LiveMonitor({
                               style={{
                                 width: "100%",
                                 aspectRatio: "16 / 9",
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "center",
+                                position: "relative",
                               }}
                             >
-                              <ParticipantTile
-                                trackRef={t}
-                                style={{
-                                  width: "100%",
-                                  height: "100%",
-                                  objectFit: "contain",
-                                }}
+                              <CleanTile
+                                trackRef={t as TrackReference}
+                                nameTagSize="sm"
                               />
                             </Box>
                           </Box>
@@ -483,19 +531,10 @@ export function LiveMonitor({
                           maxWidth: "100%",
                           aspectRatio: "16 / 9",
                           maxHeight: "100%",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
+                          position: "relative",
                         }}
                       >
-                        <ParticipantTile
-                          trackRef={focus}
-                          style={{
-                            width: "100%",
-                            height: "100%",
-                            objectFit: "contain",
-                          }}
-                        />
+                        <CleanTile trackRef={focus as TrackReference} />
                       </Box>
                     </Box>
                   </Box>
@@ -523,19 +562,10 @@ export function LiveMonitor({
                         maxWidth: "100%",
                         aspectRatio: "16/9",
                         maxHeight: "100%",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
+                        position: "relative",
                       }}
                     >
-                      <ParticipantTile
-                        trackRef={focus}
-                        style={{
-                          width: "100%",
-                          height: "100%",
-                          objectFit: "contain",
-                        }}
-                      />
+                      <CleanTile trackRef={focus as TrackReference} />
                     </Box>
 
                     <Box
@@ -568,18 +598,12 @@ export function LiveMonitor({
                                 width: "100%",
                                 height: "100%",
                                 aspectRatio: "16/9",
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "center",
+                                position: "relative",
                               }}
                             >
-                              <ParticipantTile
-                                trackRef={t}
-                                style={{
-                                  width: "100%",
-                                  height: "100%",
-                                  objectFit: "contain",
-                                }}
+                              <CleanTile
+                                trackRef={t as TrackReference}
+                                nameTagSize="sm"
                               />
                             </Box>
                           </Box>
@@ -614,19 +638,10 @@ export function LiveMonitor({
                           maxWidth: "100%",
                           aspectRatio: "16/9",
                           maxHeight: "100%",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
+                          position: "relative",
                         }}
                       >
-                        <ParticipantTile
-                          trackRef={first}
-                          style={{
-                            width: "100%",
-                            height: "100%",
-                            objectFit: "contain",
-                          }}
-                        />
+                        <CleanTile trackRef={first as TrackReference} />
                       </Box>
                     </Box>
 
@@ -646,19 +661,10 @@ export function LiveMonitor({
                           maxWidth: "100%",
                           aspectRatio: "16/9",
                           maxHeight: "100%",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
+                          position: "relative",
                         }}
                       >
-                        <ParticipantTile
-                          trackRef={second}
-                          style={{
-                            width: "100%",
-                            height: "100%",
-                            objectFit: "contain",
-                          }}
-                        />
+                        <CleanTile trackRef={second as TrackReference} />
                       </Box>
                     </Box>
                   </Box>
@@ -678,19 +684,10 @@ export function LiveMonitor({
                         maxWidth: "100%",
                         aspectRatio: "16/9",
                         maxHeight: "100%",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
+                        position: "relative",
                       }}
                     >
-                      <ParticipantTile
-                        trackRef={first}
-                        style={{
-                          width: "100%",
-                          height: "100%",
-                          objectFit: "contain",
-                        }}
-                      />
+                      <CleanTile trackRef={first as TrackReference} />
                     </Box>
                   </Box>
                 ) : (

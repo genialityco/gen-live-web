@@ -98,7 +98,8 @@ type Props = {
   eventSlug: string;
   stage: StageState;
   customNames: Record<string, string>;
-  onChangeParticipantName: (identity: string, newName: string) => void;
+  customSubtitles?: Record<string, string>;
+  onChangeParticipantName: (identity: string, newName: string, newSubtitle?: string) => void;
   onToggleStage: (uid: string, next: boolean) => Promise<void>;
   onPin: (uid: string) => Promise<void>;
   onUnpin: () => Promise<void>;
@@ -110,6 +111,7 @@ export function ParticipantsPanel({
   eventSlug,
   stage,
   customNames,
+  customSubtitles = {},
   onChangeParticipantName,
   onToggleStage,
   onPin,
@@ -120,10 +122,10 @@ export function ParticipantsPanel({
   const myUid = auth.currentUser?.uid ?? null;
   const isSpeaker = role === "speaker";
 
-
-  // Estados para editar nombre
+  // Estados para editar nombre y subtítulo
   const [editingIdentity, setEditingIdentity] = useState<string | null>(null);
   const [tempName, setTempName] = useState("");
+  const [tempSubtitle, setTempSubtitle] = useState("");
 
   // Crear lista de items que incluye participantes Y sus pantallas compartidas
   const stageItems = useMemo(() => {
@@ -196,13 +198,21 @@ export function ParticipantsPanel({
   const handleOpenEditName = (identity: string, currentName: string) => {
     setEditingIdentity(identity);
     setTempName(customNames[identity] || currentName);
+    // Cargar subtítulo: primero del estado local, luego del metadata de LiveKit
+    const participant = participants.find((p) => p.identity === identity);
+    const metaSubtitle = (() => {
+      try { return JSON.parse(participant?.metadata ?? "{}").subtitle ?? ""; }
+      catch { return ""; }
+    })();
+    setTempSubtitle(customSubtitles[identity] ?? metaSubtitle);
   };
 
   const handleSaveName = () => {
     if (editingIdentity && tempName.trim()) {
-      onChangeParticipantName(editingIdentity, tempName.trim());
+      onChangeParticipantName(editingIdentity, tempName.trim(), tempSubtitle);
       setEditingIdentity(null);
       setTempName("");
+      setTempSubtitle("");
     }
   };
 
@@ -297,7 +307,7 @@ export function ParticipantsPanel({
                       {getDisplayName(item)}
                     </Text>
 
-                    {!isSpeaker && !item.isScreenShare && (
+                    {!item.isScreenShare && (!isSpeaker || uid === myUid) && (
                       <ActionIcon
                         size="sm"
                         variant="subtle"
@@ -479,29 +489,36 @@ export function ParticipantsPanel({
         </Text>
       ) : null}
 
-      {/* Modal para editar nombre */}
+      {/* Modal para editar nombre y subtítulo */}
       <Modal
         opened={!!editingIdentity}
-        onClose={() => setEditingIdentity(null)}
-        title="Cambiar nombre del participante"
+        onClose={() => { setEditingIdentity(null); setTempSubtitle(""); }}
+        title="Editar participante"
         centered
         size="sm"
       >
         <Stack gap="md">
           <TextInput
             label="Nombre"
-            placeholder="Ingresa el nuevo nombre"
+            placeholder="Ingresa el nombre"
             value={tempName}
             onChange={(e) => setTempName(e.currentTarget.value)}
             onKeyDown={(e) => {
-              if (e.key === "Enter" && tempName.trim()) {
-                handleSaveName();
-              }
+              if (e.key === "Enter" && tempName.trim()) handleSaveName();
             }}
             autoFocus
           />
+          <TextInput
+            label="Subtítulo / Cargo"
+            placeholder="Ej: Dr. Especialista, CEO, Ponente…"
+            value={tempSubtitle}
+            onChange={(e) => setTempSubtitle(e.currentTarget.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && tempName.trim()) handleSaveName();
+            }}
+          />
           <Group justify="flex-end">
-            <Button variant="subtle" onClick={() => setEditingIdentity(null)}>
+            <Button variant="subtle" onClick={() => { setEditingIdentity(null); setTempSubtitle(""); }}>
               Cancelar
             </Button>
             <Button onClick={handleSaveName} disabled={!tempName.trim()}>

@@ -219,6 +219,22 @@ export async function deleteMedia(eventSlug: string) {
   return data;
 }
 
+/**
+ * Cambia el nombre y/o subtítulo de un participante en la sala LiveKit en tiempo real.
+ * El subtítulo queda en el metadata del participante y se propaga a todos los clientes.
+ */
+export async function renameParticipant(
+  eventSlug: string,
+  identity: string,
+  params: { name?: string; subtitle?: string },
+): Promise<{ ok: boolean }> {
+  const { data } = await api.patch<{ ok: boolean }>(
+    "/livekit/participant/rename",
+    { eventSlug, identity, ...params },
+  );
+  return data;
+}
+
 // ===== PROVISION (solo Mux) =====
 
 export interface ProvisionResponse {

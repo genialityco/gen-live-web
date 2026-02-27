@@ -516,8 +516,8 @@ function PastEventCard({
       // onClick={() => (window.location.href = event.stream?.url as string)}
     >
       <EventBanner
-        imageUrl={event.branding?.header?.backgroundImageMobileUrl}
-        imageUrlMobile={event.branding?.header?.backgroundImageMobileUrl}
+        imageUrl={event.branding?.coverImageUrl}
+        imageUrlMobile={event.branding?.coverImageMobileUrl}
         height={bannerHeight}
         status={event.status}
         showOverlay

@@ -9,6 +9,7 @@ import {
   getEgressStatus,
   getLiveConfig,
   updateLiveConfig,
+  renameParticipant,
 } from "../../api/livekit-service";
 import { getEffectiveMediaConfig } from "../../api/media-library-service";
 import {
@@ -278,8 +279,9 @@ export const StudioView: React.FC<StudioViewProps> = ({
   // Nombre por defecto: "Producción" para host
   const displayName = initialDisplayName || (role === "host" ? "Producción" : undefined);
 
-  // Estado para nombres personalizados de participantes (identity -> nombre)
+  // Estado para nombres y subtítulos personalizados de participantes (identity -> valor)
   const [customNames, setCustomNames] = useState<Record<string, string>>({});
+  const [customSubtitles, setCustomSubtitles] = useState<Record<string, string>>({});
 
   // single source of truth
   const stage = useStage(eventSlug);
@@ -444,11 +446,15 @@ export const StudioView: React.FC<StudioViewProps> = ({
     await setProgramMode(eventSlug, m);
   };
 
-  const handleChangeParticipantName = (identity: string, newName: string) => {
-    setCustomNames((prev) => ({
-      ...prev,
-      [identity]: newName,
-    }));
+  const handleChangeParticipantName = (identity: string, newName: string, newSubtitle?: string) => {
+    setCustomNames((prev) => ({ ...prev, [identity]: newName }));
+    if (newSubtitle !== undefined) {
+      setCustomSubtitles((prev) => ({ ...prev, [identity]: newSubtitle }));
+    }
+    // Propagar el cambio a LiveKit en tiempo real (fire-and-forget)
+    renameParticipant(eventSlug, identity, { name: newName, subtitle: newSubtitle }).catch((err) => {
+      console.error("Error al actualizar participante en LiveKit:", err);
+    });
   };
 
   // Función de reset de emergencia
@@ -885,6 +891,7 @@ export const StudioView: React.FC<StudioViewProps> = ({
                       eventSlug={eventSlug}
                       stage={stage}
                       customNames={customNames}
+                      customSubtitles={customSubtitles}
                       onChangeParticipantName={handleChangeParticipantName}
                       onToggleStage={handleToggleStage}
                       onPin={handlePin}
