@@ -1,6 +1,6 @@
 // src/hooks/useStage.ts
 import { useEffect, useState } from "react";
-import { subscribeStageState, type ProgramMode } from "../api/live-stage-service";
+import { subscribeStageState, type ProgramMode, type NameTagStyle } from "../api/live-stage-service";
 import type { LayoutMode } from "../types";
 
 export type StageState = {
@@ -10,6 +10,7 @@ export type StageState = {
   layoutMode: LayoutMode;
   egressId?: string | null;
   egressStatus?: string | null;
+  nameTags: Record<string, NameTagStyle>;
 };
 
 const DEFAULT_STAGE: StageState = {
@@ -19,6 +20,7 @@ const DEFAULT_STAGE: StageState = {
   layoutMode: "speaker",
   egressId: null,
   egressStatus: null,
+  nameTags: {},
 };
 
 export function useStage(eventSlug: string) {
@@ -27,7 +29,7 @@ export function useStage(eventSlug: string) {
   useEffect(() => {
     console.log("🎭 useStage - Subscribing to eventSlug:", eventSlug);
     if (!eventSlug) return;
-    
+
     const unsubscribe = subscribeStageState(eventSlug, (s) => {
       console.log("🎭 useStage - Received stage update:", s);
       setStage({
@@ -37,9 +39,10 @@ export function useStage(eventSlug: string) {
         layoutMode: s?.layoutMode ?? "speaker",
         egressId: s?.egressId ?? null,
         egressStatus: s?.egressStatus ?? null,
+        nameTags: s?.nameTags ?? {},
       });
     });
-    
+
     return () => {
       console.log("🎭 useStage - Unsubscribing from eventSlug:", eventSlug);
       unsubscribe();

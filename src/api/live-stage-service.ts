@@ -10,6 +10,13 @@ import type { LayoutMode } from "../types";
 
 export type ProgramMode = "speaker" | "grid";
 
+export type NameTagStyle = {
+  accentColor?: string;
+  bgColor?: string;
+  textColor?: string;
+  fontFamily?: string;
+};
+
 export function setOnStage(eventSlug: string, uid: string, onStage: boolean) {
   const db = getDatabase();
   return set(ref(db, `/live/${eventSlug}/stage/onStage/${uid}`), onStage);
@@ -43,6 +50,15 @@ export function setEgressState(
   });
 }
 
+export function setNameTagStyle(
+  eventSlug: string,
+  identity: string,
+  style: NameTagStyle
+) {
+  const db = getDatabase();
+  return set(ref(db, `/live/${eventSlug}/nameTags/${identity}`), style);
+}
+
 export function subscribeStageState(
   eventSlug: string,
   cb: (s: {
@@ -52,6 +68,7 @@ export function subscribeStageState(
     layoutMode: LayoutMode;
     egressId?: string | null;
     egressStatus?: string | null;
+    nameTags: Record<string, NameTagStyle>;
   }) => void
 ) {
   const db = getDatabase();
@@ -61,7 +78,6 @@ export function subscribeStageState(
     const val = snap.val() ?? {};
     const stage = val.stage ?? {};
     const egress = val.egress ?? {};
-    console.log(`🔥 Firebase RTDB - /live/${eventSlug}:`, val);
     cb({
       onStage: stage.onStage ?? {},
       programMode: (stage.programMode as ProgramMode) ?? "speaker",
@@ -69,6 +85,7 @@ export function subscribeStageState(
       layoutMode: (stage.layoutMode as LayoutMode) ?? "speaker",
       egressId: egress.egressId ?? null,
       egressStatus: egress.status ?? null,
+      nameTags: (val.nameTags as Record<string, NameTagStyle>) ?? {},
     });
   };
 

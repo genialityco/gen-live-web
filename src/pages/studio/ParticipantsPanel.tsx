@@ -21,7 +21,7 @@ import { useMemo, useState, useEffect, useRef } from "react";
 import { auth } from "../../core/firebase";
 import { kickSpeaker } from "../../api/live-join-service";
 import type { StageState } from "../../hooks/useStage";
-import type { ProgramMode } from "../../api/live-stage-service";
+import type { ProgramMode, NameTagStyle } from "../../api/live-stage-service";
 import {
   IconDots,
   IconPin,
@@ -35,6 +35,7 @@ import {
   getScreenShareKey,
   parseStageKey,
 } from "../../utils/screen-share-utils";
+import { NameTagStyleEditor } from "../../components/studio/NameTagStyleEditor";
 
 // Componente para renderizar el video de un participante
 function ParticipantVideo({ participant, isScreenShare }: { participant: any; isScreenShare: boolean }) {
@@ -99,6 +100,7 @@ type Props = {
   stage: StageState;
   customNames: Record<string, string>;
   customSubtitles?: Record<string, string>;
+  nameTags?: Record<string, NameTagStyle>;
   onChangeParticipantName: (identity: string, newName: string, newSubtitle?: string) => void;
   onToggleStage: (uid: string, next: boolean) => Promise<void>;
   onPin: (uid: string) => Promise<void>;
@@ -112,6 +114,7 @@ export function ParticipantsPanel({
   stage,
   customNames,
   customSubtitles = {},
+  nameTags = {},
   onChangeParticipantName,
   onToggleStage,
   onPin,
@@ -308,14 +311,23 @@ export function ParticipantsPanel({
                     </Text>
 
                     {!item.isScreenShare && (!isSpeaker || uid === myUid) && (
-                      <ActionIcon
-                        size="sm"
-                        variant="subtle"
-                        onClick={() => handleOpenEditName(uid, p.name || "")}
-                        aria-label="Editar nombre"
-                      >
-                        <IconPencil size={16} />
-                      </ActionIcon>
+                      <>
+                        <ActionIcon
+                          size="sm"
+                          variant="subtle"
+                          onClick={() => handleOpenEditName(uid, p.name || "")}
+                          aria-label="Editar nombre"
+                        >
+                          <IconPencil size={16} />
+                        </ActionIcon>
+                        <NameTagStyleEditor
+                          eventSlug={eventSlug}
+                          identity={uid}
+                          participantName={getBaseName(uid, p.name || "")}
+                          currentStyle={nameTags[uid] ?? {}}
+                          canEdit={!isSpeaker || uid === myUid}
+                        />
+                      </>
                     )}
                   </Group>
                 </div>

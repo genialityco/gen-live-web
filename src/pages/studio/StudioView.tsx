@@ -512,12 +512,6 @@ export const StudioView: React.FC<StudioViewProps> = ({
       setActiveAudioId(cfg.activeAudioItemId || "");
       setMediaEnabled(!!cfg.mediaEnabled);
 
-      console.log("📊 fetchConfig - IDs:", {
-        visual: cfg.activeVisualItemId,
-        audio: cfg.activeAudioItemId,
-        mediaEnabled: cfg.mediaEnabled,
-      });
-
       // Legacy fields
       setMediaType(cfg.mediaType || "image");
       setMediaUrl(cfg.mediaUrl || "");
@@ -529,8 +523,6 @@ export const StudioView: React.FC<StudioViewProps> = ({
 
       // Obtener effective config para visual y audio
       const effectiveConfig = await getEffectiveMediaConfig(eventSlug);
-
-      console.log("📊 effectiveConfig:", effectiveConfig);
 
       if (effectiveConfig.visual) {
         setVisualUrl(effectiveConfig.visual.item.url);
@@ -839,6 +831,7 @@ export const StudioView: React.FC<StudioViewProps> = ({
                     frameUrl={frameUrl}
                     stage={stage}
                     layoutMode={stage.layoutMode}
+                    nameTags={stage.nameTags}
                     mediaEnabled={mediaEnabled}
                     visualUrl={visualUrl}
                     visualType={visualType}
@@ -892,6 +885,7 @@ export const StudioView: React.FC<StudioViewProps> = ({
                       stage={stage}
                       customNames={customNames}
                       customSubtitles={customSubtitles}
+                      nameTags={stage.nameTags}
                       onChangeParticipantName={handleChangeParticipantName}
                       onToggleStage={handleToggleStage}
                       onPin={handlePin}

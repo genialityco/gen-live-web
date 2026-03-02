@@ -20,8 +20,6 @@ import {
   Switch,
   Slider,
   SegmentedControl,
-  Divider,
-  Collapse,
   Progress,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
@@ -36,8 +34,6 @@ import {
   IconPhoto,
   IconVideo,
   IconMusic,
-  IconChevronDown,
-  IconChevronRight,
 } from "@tabler/icons-react";
 import {
   listMediaItems,
@@ -49,6 +45,7 @@ import {
   type CreateMediaItemDto,
 } from "../../api/media-library-service";
 import { UploadMediaDialog } from "./UploadMediaDialog";
+import { EditMediaDialog } from "./EditMediaDialog";
 
 interface MediaLibraryProps {
   eventSlug: string;
@@ -76,18 +73,14 @@ export function MediaLibrary({
   const [searchTerm, setSearchTerm] = useState("");
   const [filterType, setFilterType] = useState<string>("all");
   const [selectedItem, setSelectedItem] = useState<MediaItem | null>(null);
+  const [editingItem, setEditingItem] = useState<MediaItem | null>(null);
 
   // Quick controls
   const [quickMode, setQuickMode] = useState<QuickMode>("full");
-  const [quickLoop, setQuickLoop] = useState(false);
-  const [quickMuted, setQuickMuted] = useState(true);
+  const [quickLoop, setQuickLoop] = useState(true);
+  const [quickMuted, setQuickMuted] = useState(false);
   const [quickFit, setQuickFit] = useState<QuickFit>("cover");
   const [quickOpacity, setQuickOpacity] = useState(1);
-
-  // UX: secciones
-  const [openAudio, setOpenAudio] = useState(true);
-  const [openVideo, setOpenVideo] = useState(true);
-  const [openImages, setOpenImages] = useState(true);
 
   // Debounce apply
   const applyTimerRef = useRef<number | null>(null);
@@ -249,18 +242,16 @@ export function MediaLibrary({
     }
   };
 
-  // ✅ Click card => toggle activar/desactivar
+  // Click card => seleccionar para ver/editar config; si no está activo, activarlo
   const handleCardClick = async (item: MediaItem) => {
     setSelectedItem(item);
 
     if (disabled) return;
 
-    const active = isItemActive(item);
-    if (active) {
-      await handleDeactivateByItem(item);
-    } else {
+    if (!isItemActive(item)) {
       await handleActivate(item);
     }
+    // Si ya está activo, solo lo seleccionamos para editar su config en el panel inferior
   };
 
   const filteredItems = useMemo(() => {
@@ -271,13 +262,6 @@ export function MediaLibrary({
       return matchesSearch && matchesType;
     });
   }, [items, searchTerm, filterType]);
-
-  const groups = useMemo(() => {
-    const audio = filteredItems.filter((i) => i.type === "audio");
-    const video = filteredItems.filter((i) => i.type === "video");
-    const images = filteredItems.filter((i) => i.type === "image" || i.type === "gif");
-    return { audio, video, images };
-  }, [filteredItems]);
 
   const renderGrid = (list: MediaItem[]) => (
     <SimpleGrid cols={{ base: 1, sm: 2, md: 3 }} spacing="sm">
@@ -383,16 +367,14 @@ export function MediaLibrary({
                 )}
 
                 {/* Hint de acción */}
-                {!disabled && (
+                {!disabled && !isActive && (
                   <Badge
                     size="xs"
                     variant="light"
                     style={{ position: "absolute", bottom: 6, right: 6 }}
-                    leftSection={
-                      isActive ? <IconPlayerStop size={12} /> : <IconPlayerPlay size={12} />
-                    }
+                    leftSection={<IconPlayerPlay size={12} />}
                   >
-                    {isActive ? "Click: apagar" : "Click: activar"}
+                    Click: activar
                   </Badge>
                 )}
               </Box>
@@ -418,10 +400,7 @@ export function MediaLibrary({
                     leftSection={<IconEdit size={16} />}
                     onClick={(e) => {
                       e.stopPropagation();
-                      notifications.show({
-                        message: "Edición próximamente",
-                        color: "blue",
-                      });
+                      setEditingItem(item);
                     }}
                   >
                     Editar
@@ -553,7 +532,7 @@ export function MediaLibrary({
         />
       </Group>
 
-      {/* Secciones por tipo */}
+      {/* Galería de media */}
       {filteredItems.length === 0 ? (
         <Paper p="xl" withBorder>
           <Center>
@@ -566,73 +545,7 @@ export function MediaLibrary({
           </Center>
         </Paper>
       ) : (
-        <Stack gap="md">
-          {/* AUDIO */}
-          <Paper p="sm" withBorder>
-            <Group justify="space-between">
-              <Group gap="xs">
-                <ActionIcon
-                  variant="subtle"
-                  onClick={() => setOpenAudio((v) => !v)}
-                >
-                  {openAudio ? <IconChevronDown size={16} /> : <IconChevronRight size={16} />}
-                </ActionIcon>
-                <Badge leftSection={<IconMusic size={12} />}>Audio</Badge>
-                <Text size="sm" c="dimmed">
-                  {groups.audio.length}
-                </Text>
-              </Group>
-            </Group>
-            <Collapse in={openAudio}>
-              <Divider my="sm" />
-              {groups.audio.length ? renderGrid(groups.audio) : <Text size="sm" c="dimmed">Sin audios.</Text>}
-            </Collapse>
-          </Paper>
-
-          {/* VIDEO */}
-          <Paper p="sm" withBorder>
-            <Group justify="space-between">
-              <Group gap="xs">
-                <ActionIcon
-                  variant="subtle"
-                  onClick={() => setOpenVideo((v) => !v)}
-                >
-                  {openVideo ? <IconChevronDown size={16} /> : <IconChevronRight size={16} />}
-                </ActionIcon>
-                <Badge leftSection={<IconVideo size={12} />}>Videos</Badge>
-                <Text size="sm" c="dimmed">
-                  {groups.video.length}
-                </Text>
-              </Group>
-            </Group>
-            <Collapse in={openVideo}>
-              <Divider my="sm" />
-              {groups.video.length ? renderGrid(groups.video) : <Text size="sm" c="dimmed">Sin videos.</Text>}
-            </Collapse>
-          </Paper>
-
-          {/* IMAGES+GIF */}
-          <Paper p="sm" withBorder>
-            <Group justify="space-between">
-              <Group gap="xs">
-                <ActionIcon
-                  variant="subtle"
-                  onClick={() => setOpenImages((v) => !v)}
-                >
-                  {openImages ? <IconChevronDown size={16} /> : <IconChevronRight size={16} />}
-                </ActionIcon>
-                <Badge leftSection={<IconPhoto size={12} />}>Imágenes & GIF</Badge>
-                <Text size="sm" c="dimmed">
-                  {groups.images.length}
-                </Text>
-              </Group>
-            </Group>
-            <Collapse in={openImages}>
-              <Divider my="sm" />
-              {groups.images.length ? renderGrid(groups.images) : <Text size="sm" c="dimmed">Sin imágenes/GIF.</Text>}
-            </Collapse>
-          </Paper>
-        </Stack>
+        renderGrid(filteredItems)
       )}
 
       {/* Quick controls */}
@@ -736,8 +649,8 @@ export function MediaLibrary({
             </Group>
 
             <Text size="xs" c="dimmed">
-              Tip: ahora puedes simplemente hacer click en cualquier card para activar/desactivar.
-              Y si el item está activo, cualquier cambio de loop/mute/fit/opacidad se aplica sin desmontar.
+              Tip: click en una card para activarla y seleccionarla. Si ya está activa, haz click para
+              editarla — los cambios de loop/mute/fit/opacidad se aplican en vivo sin desmontar.
             </Text>
           </Stack>
         </Paper>
@@ -748,6 +661,15 @@ export function MediaLibrary({
         onClose={() => setUploadOpen(false)}
         eventSlug={eventSlug}
         onSuccess={handleUpload}
+      />
+
+      <EditMediaDialog
+        item={editingItem}
+        onClose={() => setEditingItem(null)}
+        onSuccess={(updated) => {
+          setItems((prev) => prev.map((i) => (i._id === updated._id ? updated : i)));
+          if (selectedItem?._id === updated._id) setSelectedItem(updated);
+        }}
       />
     </Stack>
   );

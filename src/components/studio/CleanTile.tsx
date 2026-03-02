@@ -3,14 +3,16 @@ import { VideoTrack } from "@livekit/components-react";
 import { Track } from "livekit-client";
 import { NameTag } from "./NameTag";
 import { Box } from "@mantine/core";
+import type { NameTagStyle } from "../../api/live-stage-service";
 
 type Props = {
   trackRef: TrackReference;
   nameTagSize?: "sm" | "md";
   accentColor?: string;
+  nameTagStyle?: NameTagStyle;
 };
 
-export function CleanTile({ trackRef, nameTagSize = "md", accentColor }: Props) {
+export function CleanTile({ trackRef, nameTagSize = "md", accentColor, nameTagStyle }: Props) {
   const isScreenShare = trackRef.source === Track.Source.ScreenShare;
 
   return (
@@ -20,7 +22,14 @@ export function CleanTile({ trackRef, nameTagSize = "md", accentColor }: Props) 
       </TrackRefContext.Provider>
 
       {!isScreenShare && (
-        <NameTag trackRef={trackRef} size={nameTagSize} accentColor={accentColor} />
+        <NameTag
+          trackRef={trackRef}
+          size={nameTagSize}
+          accentColor={nameTagStyle?.accentColor ?? accentColor}
+          bgColor={nameTagStyle?.bgColor}
+          textColor={nameTagStyle?.textColor}
+          fontFamily={nameTagStyle?.fontFamily}
+        />
       )}
     </Box>
   );

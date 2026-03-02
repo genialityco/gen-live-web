@@ -58,6 +58,9 @@ export interface EffectiveMediaConfig {
   enabled: boolean;
   showFrame?: boolean;
   frameUrl?: string;
+  backgroundUrl?: string;
+  backgroundType?: "image" | "gif" | "video";
+  backgroundColor?: string;
   // Nueva estructura con visual y audio separados
   visual?: {
     item: {

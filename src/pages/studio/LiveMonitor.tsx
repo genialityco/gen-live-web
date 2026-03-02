@@ -14,6 +14,7 @@ import {
   parseStageKey,
 } from "../../utils/screen-share-utils";
 import { CleanTile } from "../../components/studio/CleanTile";
+import type { NameTagStyle } from "../../api/live-stage-service";
 
 type Props = {
   showFrame: boolean;
@@ -52,6 +53,9 @@ type Props = {
   mediaFit: "cover" | "contain";
   mediaOpacity: number;
 
+  /** Estilos personalizados por participante (identity → NameTagStyle) */
+  nameTags?: Record<string, NameTagStyle>;
+
   /** Oculta controles de UI (ej: botón fullscreen) cuando se renderiza para egress */
   hideControls?: boolean;
 };
@@ -63,6 +67,7 @@ export function LiveMonitor({
   layoutMode,
   mediaEnabled,
   hideControls = false,
+  nameTags = {},
   visualUrl,
   visualType,
   visualMode,
@@ -429,7 +434,10 @@ export function LiveMonitor({
                           background: "#111",
                         }}
                       >
-                        <CleanTile trackRef={t as TrackReference} />
+                        <CleanTile
+                          trackRef={t as TrackReference}
+                          nameTagStyle={nameTags[t.participant?.identity ?? ""]}
+                        />
                       </Box>
                     ))}
                   </Box>
@@ -455,7 +463,10 @@ export function LiveMonitor({
                         position: "relative",
                       }}
                     >
-                      <CleanTile trackRef={focus as TrackReference} />
+                      <CleanTile
+                        trackRef={focus as TrackReference}
+                        nameTagStyle={nameTags[focus.participant?.identity ?? ""]}
+                      />
                     </Box>
                   </Box>
                 ) : (
@@ -508,6 +519,7 @@ export function LiveMonitor({
                               <CleanTile
                                 trackRef={t as TrackReference}
                                 nameTagSize="sm"
+                                nameTagStyle={nameTags[t.participant?.identity ?? ""]}
                               />
                             </Box>
                           </Box>
@@ -534,7 +546,10 @@ export function LiveMonitor({
                           position: "relative",
                         }}
                       >
-                        <CleanTile trackRef={focus as TrackReference} />
+                        <CleanTile
+                          trackRef={focus as TrackReference}
+                          nameTagStyle={nameTags[focus.participant?.identity ?? ""]}
+                        />
                       </Box>
                     </Box>
                   </Box>
@@ -565,7 +580,10 @@ export function LiveMonitor({
                         position: "relative",
                       }}
                     >
-                      <CleanTile trackRef={focus as TrackReference} />
+                      <CleanTile
+                        trackRef={focus as TrackReference}
+                        nameTagStyle={nameTags[focus.participant?.identity ?? ""]}
+                      />
                     </Box>
 
                     <Box
@@ -604,6 +622,7 @@ export function LiveMonitor({
                               <CleanTile
                                 trackRef={t as TrackReference}
                                 nameTagSize="sm"
+                                nameTagStyle={nameTags[t.participant?.identity ?? ""]}
                               />
                             </Box>
                           </Box>
@@ -641,7 +660,10 @@ export function LiveMonitor({
                           position: "relative",
                         }}
                       >
-                        <CleanTile trackRef={first as TrackReference} />
+                        <CleanTile
+                          trackRef={first as TrackReference}
+                          nameTagStyle={nameTags[first.participant?.identity ?? ""]}
+                        />
                       </Box>
                     </Box>
 
@@ -664,7 +686,10 @@ export function LiveMonitor({
                           position: "relative",
                         }}
                       >
-                        <CleanTile trackRef={second as TrackReference} />
+                        <CleanTile
+                          trackRef={second as TrackReference}
+                          nameTagStyle={nameTags[second.participant?.identity ?? ""]}
+                        />
                       </Box>
                     </Box>
                   </Box>
@@ -687,7 +712,10 @@ export function LiveMonitor({
                         position: "relative",
                       }}
                     >
-                      <CleanTile trackRef={first as TrackReference} />
+                      <CleanTile
+                        trackRef={first as TrackReference}
+                        nameTagStyle={nameTags[first.participant?.identity ?? ""]}
+                      />
                     </Box>
                   </Box>
                 ) : (

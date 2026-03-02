@@ -51,8 +51,8 @@ export function UploadMediaDialog({
   const [description, setDescription] = useState("");
   const [tags, setTags] = useState<string[]>([]);
   const [defaultMode, setDefaultMode] = useState<"overlay" | "full">("full");
-  const [defaultLoop, setDefaultLoop] = useState(false);
-  const [defaultMuted, setDefaultMuted] = useState(true);
+  const [defaultLoop, setDefaultLoop] = useState(true);
+  const [defaultMuted, setDefaultMuted] = useState(false);
   const [defaultFit, setDefaultFit] = useState<"cover" | "contain">("cover");
   const [defaultOpacity, setDefaultOpacity] = useState(1);
 
@@ -153,8 +153,8 @@ export function UploadMediaDialog({
     setDescription("");
     setTags([]);
     setDefaultMode("full");
-    setDefaultLoop(false);
-    setDefaultMuted(true);
+    setDefaultLoop(true);
+    setDefaultMuted(false);
     setDefaultFit("cover");
     setDefaultOpacity(1);
     onClose();

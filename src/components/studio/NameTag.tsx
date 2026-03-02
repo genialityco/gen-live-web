@@ -6,6 +6,9 @@ type Props = {
   variant?: "solid" | "glass";
   size?: "sm" | "md";
   accentColor?: string;
+  bgColor?: string;
+  textColor?: string;
+  fontFamily?: string;
 };
 
 export function NameTag({
@@ -13,6 +16,9 @@ export function NameTag({
   variant = "glass",
   size = "md",
   accentColor = "#4dabf7",
+  bgColor,
+  textColor,
+  fontFamily,
 }: Props) {
   const p = trackRef.participant;
   const name = p?.name || p?.identity || "Invitado";
@@ -22,6 +28,17 @@ export function NameTag({
     try { return JSON.parse(p?.metadata ?? "{}").subtitle ?? ""; }
     catch { return ""; }
   })();
+
+  const resolvedBg = bgColor
+    ? bgColor
+    : variant === "glass"
+      ? "rgba(0,0,0,0.55)"
+      : "rgba(0,0,0,0.82)";
+
+  const resolvedText = textColor || "white";
+  const resolvedSubtitleText = textColor
+    ? `${textColor}b3`
+    : "rgba(255,255,255,0.70)";
 
   return (
     <Box
@@ -35,6 +52,7 @@ export function NameTag({
         borderRadius: 6,
         boxShadow: "0 4px 20px rgba(0,0,0,0.5)",
         pointerEvents: "none",
+        fontFamily: fontFamily || undefined,
       }}
     >
       {/* Barra de acento lateral */}
@@ -50,27 +68,27 @@ export function NameTag({
       <Box
         style={{
           padding: isSmall ? "3px 7px" : "5px 11px",
-          backdropFilter: variant === "glass" ? "blur(12px)" : undefined,
-          background:
-            variant === "glass" ? "rgba(0,0,0,0.55)" : "rgba(0,0,0,0.82)",
+          backdropFilter: !bgColor && variant === "glass" ? "blur(12px)" : undefined,
+          background: resolvedBg,
           borderTop:
-            variant === "glass" ? "1px solid rgba(255,255,255,0.10)" : "none",
+            !bgColor && variant === "glass" ? "1px solid rgba(255,255,255,0.10)" : "none",
           borderRight:
-            variant === "glass" ? "1px solid rgba(255,255,255,0.10)" : "none",
+            !bgColor && variant === "glass" ? "1px solid rgba(255,255,255,0.10)" : "none",
           borderBottom:
-            variant === "glass" ? "1px solid rgba(255,255,255,0.10)" : "none",
+            !bgColor && variant === "glass" ? "1px solid rgba(255,255,255,0.10)" : "none",
         }}
       >
         <Text
           size={isSmall ? "xs" : "sm"}
           fw={700}
           style={{
-            color: "white",
+            color: resolvedText,
             lineHeight: 1.2,
             textOverflow: "ellipsis",
             overflow: "hidden",
             whiteSpace: "nowrap",
             letterSpacing: "0.01em",
+            fontFamily: fontFamily || undefined,
           }}
         >
           {name}
@@ -79,7 +97,7 @@ export function NameTag({
           <Text
             size="xs"
             style={{
-              color: "rgba(255,255,255,0.70)",
+              color: resolvedSubtitleText,
               lineHeight: 1.2,
               textOverflow: "ellipsis",
               overflow: "hidden",
@@ -87,6 +105,7 @@ export function NameTag({
               fontWeight: 500,
               letterSpacing: "0.02em",
               marginTop: 1,
+              fontFamily: fontFamily || undefined,
             }}
           >
             {subtitle}
