@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 // src/StudioView.tsx
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import {
   ensureRoom,
   getLivekitToken,
@@ -41,6 +41,8 @@ import {
   Affix,
   ActionIcon,
   Indicator,
+  Divider,
+  SegmentedControl,
 } from "@mantine/core";
 import { useMediaQuery } from "@mantine/hooks";
 import {
@@ -72,6 +74,7 @@ import {
   validateEgressState,
 } from "../../api/emergency-reset-service";
 import { StudioChatPanel } from "./StudioChatPanel";
+import { StudioBottomNav, type MobileTab } from "./StudioBottomNav";
 
 type Role = "host" | "speaker";
 
@@ -171,6 +174,7 @@ function StudioRoomUI(props: {
   setChatOpen: React.Dispatch<React.SetStateAction<boolean>>;
   unread: number;
   setUnread: React.Dispatch<React.SetStateAction<number>>;
+  bottomOffset?: number;
 }) {
   const { localParticipant } = useLocalParticipant();
   const myId = localParticipant?.identity;
@@ -193,7 +197,7 @@ function StudioRoomUI(props: {
         />
       </Drawer>
 
-      <Affix position={{ bottom: 20, right: 20 }}>
+      <Affix position={{ bottom: props.bottomOffset ?? 20, right: 20 }}>
         <Indicator
           disabled={props.unread === 0}
           label={props.unread > 99 ? "99+" : props.unread}
@@ -292,6 +296,25 @@ export const StudioView: React.FC<StudioViewProps> = ({
 
   const [chatOpen, setChatOpen] = useState(false);
   const [unread, setUnread] = useState(0);
+
+  // Mobile tab state
+  const [mobileTab, setMobileTab] = useState<MobileTab>("monitor");
+  const [showFloatingControls, setShowFloatingControls] = useState(false);
+  const floatingTimer = useRef<number | null>(null);
+
+  const handleMonitorTap = () => {
+    setShowFloatingControls(true);
+    if (floatingTimer.current) clearTimeout(floatingTimer.current);
+    floatingTimer.current = window.setTimeout(() => setShowFloatingControls(false), 3000);
+  };
+
+  const handleMobileTabChange = (tab: MobileTab) => {
+    if (tab === "config") {
+      setSideOpen(true);
+      return;
+    }
+    setMobileTab(tab);
+  };
 
   // Guardar layout en RTDB (tiempo real) y backend
   const handleLayoutModeChange = async (mode: LayoutMode) => {
@@ -713,7 +736,7 @@ export const StudioView: React.FC<StudioViewProps> = ({
     <div>
       <LiveKitRoom token={token!} serverUrl={LIVEKIT_WS_URL} connect video audio>
         <AppShell
-          header={{ height: 64 }}
+          header={{ height: isMobile ? 52 : 64 }}
           padding="md"
           styles={{
             main: {
@@ -750,8 +773,8 @@ export const StudioView: React.FC<StudioViewProps> = ({
               </Group>
 
               <Group gap="xs" wrap="nowrap">
-                {/* Responsive: botón de controles (solo host + narrow) */}
-                {role === "host" && isNarrow && (
+                {/* Botón de controles solo en narrow NO mobile */}
+                {role === "host" && isNarrow && !isMobile && (
                   <ActionIcon
                     variant="light"
                     radius="xl"
@@ -775,6 +798,7 @@ export const StudioView: React.FC<StudioViewProps> = ({
                   layoutMode={stage.layoutMode}
                   onLayoutMode={handleLayoutModeChange}
                   onMode={handleSetMode}
+                  compact={!!isMobile}
                 />
               </Group>
             </Paper>
@@ -782,103 +806,109 @@ export const StudioView: React.FC<StudioViewProps> = ({
 
           {/* MAIN */}
           <AppShell.Main style={{ padding: 0 }}>
-            {/* Advertencia de estado */}
-            {stateWarning && role === "host" && (
-              <Alert
-                icon={<IconAlertTriangle />}
-                title="Advertencia de Estado"
-                color="orange"
-                withCloseButton
-                onClose={() => setStateWarning(null)}
-                mb="md"
-              >
-                <Stack gap="xs">
-                  <Text size="sm">{stateWarning}</Text>
-                  <Button
-                    size="xs"
+            {isMobile ? (
+              /* ========== MOBILE LAYOUT ========== */
+              <>
+                {stateWarning && role === "host" && (
+                  <Alert
+                    icon={<IconAlertTriangle />}
+                    title="Advertencia de Estado"
                     color="orange"
-                    variant="light"
-                    loading={resetting}
-                    onClick={handleEmergencyReset}
+                    withCloseButton
+                    onClose={() => setStateWarning(null)}
+                    mb="xs"
                   >
-                    Resetear Estado
-                  </Button>
-                </Stack>
-              </Alert>
-            )}
+                    <Stack gap="xs">
+                      <Text size="sm">{stateWarning}</Text>
+                      <Button size="xs" color="orange" variant="light" loading={resetting} onClick={handleEmergencyReset}>
+                        Resetear Estado
+                      </Button>
+                    </Stack>
+                  </Alert>
+                )}
 
-            <Box
-              style={{
-                display: "grid",
-                gridTemplateColumns:
-                  role === "host" && !isNarrow ? "minmax(0, 1fr) 500px" : "1fr",
-                gap: isMobile ? 12 : 16,
-                alignItems: "start",
-              }}
-            >
-              {/* Columna principal - Monitor y participantes */}
-              <Box
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 12,
-                  minWidth: 0,
-                }}
-              >
-                <LayoutContextProvider>
-                  <LiveMonitor
-                    showFrame={showFrame}
-                    frameUrl={frameUrl}
-                    stage={stage}
-                    layoutMode={stage.layoutMode}
-                    nameTags={stage.nameTags}
-                    mediaEnabled={mediaEnabled}
-                    visualUrl={visualUrl}
-                    visualType={visualType}
-                    visualMode={visualMode}
-                    visualLoop={visualLoop}
-                    visualMuted={visualMuted}
-                    visualFit={visualFit}
-                    visualOpacity={visualOpacity}
-                    audioUrl={audioUrl}
-                    audioLoop={audioLoop}
-                    audioMuted={audioMuted}
-                    backgroundUrl={backgroundUrl}
-                    backgroundType={backgroundType}
-                    backgroundColor={backgroundColor}
-                    mediaType={mediaType}
-                    mediaUrl={mediaUrl}
-                    mediaMode={mediaMode}
-                    mediaLoop={mediaLoop}
-                    mediaMuted={mediaMuted}
-                    mediaFit={mediaFit}
-                    mediaOpacity={mediaOpacity}
-                  />
-                </LayoutContextProvider>
+                {/* Tab: Monitor */}
+                {mobileTab === "monitor" && (
+                  <Box
+                    onClick={handleMonitorTap}
+                    style={{
+                      position: "relative",
+                      cursor: "pointer",
+                      height: "calc(100dvh - 52px - 58px)",
+                      overflow: "hidden",
+                    }}
+                  >
+                    <LayoutContextProvider>
+                      <LiveMonitor
+                        showFrame={showFrame}
+                        frameUrl={frameUrl}
+                        stage={stage}
+                        layoutMode={stage.layoutMode}
+                        nameTags={stage.nameTags}
+                        mediaEnabled={mediaEnabled}
+                        visualUrl={visualUrl}
+                        visualType={visualType}
+                        visualMode={visualMode}
+                        visualLoop={visualLoop}
+                        visualMuted={visualMuted}
+                        visualFit={visualFit}
+                        visualOpacity={visualOpacity}
+                        audioUrl={audioUrl}
+                        audioLoop={audioLoop}
+                        audioMuted={audioMuted}
+                        backgroundUrl={backgroundUrl}
+                        backgroundType={backgroundType}
+                        backgroundColor={backgroundColor}
+                        mediaType={mediaType}
+                        mediaUrl={mediaUrl}
+                        mediaMode={mediaMode}
+                        mediaLoop={mediaLoop}
+                        mediaMuted={mediaMuted}
+                        mediaFit={mediaFit}
+                        mediaOpacity={mediaOpacity}
+                      />
+                    </LayoutContextProvider>
 
-                <Paper
-                  p="sm"
-                  withBorder
-                  radius="md"
-                  style={{ display: "flex", justifyContent: "center" }}
-                >
-                  <ControlBar variation="minimal" />
-                </Paper>
+                    {/* Floating overlay: layout selector + A/V controls */}
+                    {showFloatingControls && (
+                      <Box
+                        style={{
+                          position: "absolute",
+                          bottom: 0,
+                          left: 0,
+                          right: 0,
+                          background: "rgba(0,0,0,0.80)",
+                          padding: "10px 12px",
+                          display: "flex",
+                          flexDirection: "column",
+                          alignItems: "center",
+                          gap: 8,
+                          zIndex: 10,
+                        }}
+                      >
+                        {role === "host" && (
+                          <SegmentedControl
+                            size="xs"
+                            value={stage.layoutMode}
+                            onChange={(v) => handleLayoutModeChange(v as LayoutMode)}
+                            data={[
+                              { label: "Grid", value: "grid" },
+                              { label: "Speaker", value: "speaker" },
+                              { label: "Pres", value: "presentation" },
+                              { label: "PiP", value: "pip" },
+                              { label: "2-Up", value: "side_by_side" },
+                            ]}
+                          />
+                        )}
+                        <ControlBar variation="minimal" />
+                      </Box>
+                    )}
+                  </Box>
+                )}
 
-                <Paper p="sm" withBorder radius="md">
-                  <DeviceSelectorPanel />
-                </Paper>
-
-                <Paper p="sm" withBorder radius="md">
-                  <VirtualBackgroundControl
-                    eventSlug={eventSlug}
-                    disabled={isBusy}
-                  />
-                </Paper>
-
-                <Paper p="sm" radius="md" withBorder style={{ minHeight: 0 }}>
-                  {/* ✅ Scroll real: damos una altura razonable para que no “explote” */}
-                  <ScrollArea h={isNarrow ? 320 : 420} offsetScrollbars>
+                {/* Tab: Participants */}
+                {mobileTab === "participants" && (
+                  <ScrollArea h="calc(100dvh - 52px - 58px)" p="sm">
                     <ParticipantsPanel
                       role={role}
                       eventSlug={eventSlug}
@@ -893,75 +923,250 @@ export const StudioView: React.FC<StudioViewProps> = ({
                       onSetMode={handleSetMode}
                     />
                   </ScrollArea>
-                </Paper>
-              </Box>
+                )}
 
-              {/* Columna lateral - Panel de control (solo host) */}
-              {role === "host" && !isNarrow && (
-                <Paper
-                  p="md"
-                  radius="md"
-                  withBorder
+                {/* Tab: Controls */}
+                {mobileTab === "controls" && (
+                  <ScrollArea h="calc(100dvh - 52px - 58px)" p="sm">
+                    <Stack gap="sm">
+                      <Paper p="sm" withBorder radius="md" style={{ display: "flex", justifyContent: "center" }}>
+                        <ControlBar variation="minimal" />
+                      </Paper>
+                      <Paper p="sm" withBorder radius="md">
+                        <DeviceSelectorPanel />
+                      </Paper>
+                      <Paper p="sm" withBorder radius="md">
+                        <VirtualBackgroundControl eventSlug={eventSlug} disabled={isBusy} />
+                      </Paper>
+                    </Stack>
+                  </ScrollArea>
+                )}
+
+                <FilteredRoomAudio onStageMap={stage.onStage} />
+
+                {/* Bottom Navigation */}
+                <StudioBottomNav
+                  activeTab={mobileTab}
+                  onChange={handleMobileTabChange}
+                  isHost={role === "host"}
+                  pendingRequests={0}
+                />
+
+                {/* Settings Drawer (tab "config") */}
+                {role === "host" && (
+                  <Drawer
+                    opened={sideOpen}
+                    onClose={() => setSideOpen(false)}
+                    position="right"
+                    size="95%"
+                    overlayProps={{ opacity: 0.35, blur: 2 }}
+                    withCloseButton
+                    title="Control del Live"
+                    keepMounted
+                  >
+                    <div style={{ height: "calc(100dvh - 140px)" }}>
+                      <StudioSidePanel
+                        role={role}
+                        eventSlug={eventSlug}
+                        disabled={isBusy}
+                        showFrame={showFrame}
+                        frameUrl={frameUrl}
+                        backgroundUrl={backgroundUrl}
+                        backgroundType={backgroundType}
+                        onRefreshFrameConfig={fetchConfig}
+                        activeVisualId={activeVisualId}
+                        activeAudioId={activeAudioId}
+                      />
+                    </div>
+                  </Drawer>
+                )}
+
+                <StudioRoomUI
+                  chatOpen={chatOpen}
+                  setChatOpen={setChatOpen}
+                  unread={unread}
+                  setUnread={setUnread}
+                  bottomOffset={72}
+                />
+              </>
+            ) : (
+              /* ========== DESKTOP / NARROW LAYOUT ========== */
+              <>
+                {stateWarning && role === "host" && (
+                  <Alert
+                    icon={<IconAlertTriangle />}
+                    title="Advertencia de Estado"
+                    color="orange"
+                    withCloseButton
+                    onClose={() => setStateWarning(null)}
+                    mb="md"
+                  >
+                    <Stack gap="xs">
+                      <Text size="sm">{stateWarning}</Text>
+                      <Button
+                        size="xs"
+                        color="orange"
+                        variant="light"
+                        loading={resetting}
+                        onClick={handleEmergencyReset}
+                      >
+                        Resetear Estado
+                      </Button>
+                    </Stack>
+                  </Alert>
+                )}
+
+                <Box
                   style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    minHeight: 0,
+                    display: "grid",
+                    gridTemplateColumns:
+                      role === "host" && !isNarrow ? "minmax(0, 1fr) 500px" : "1fr",
+                    gap: 16,
+                    alignItems: "start",
                   }}
                 >
-                  <StudioSidePanel
-                    role={role}
-                    eventSlug={eventSlug}
-                    disabled={isBusy}
-                    showFrame={showFrame}
-                    frameUrl={frameUrl}
-                    backgroundUrl={backgroundUrl}
-                    backgroundType={backgroundType}
-                    onRefreshFrameConfig={fetchConfig}
-                    activeVisualId={activeVisualId}
-                    activeAudioId={activeAudioId}
-                  />
-                </Paper>
-              )}
-            </Box>
+                  {/* Columna principal - Monitor y participantes */}
+                  <Box
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: 12,
+                      minWidth: 0,
+                    }}
+                  >
+                    <LayoutContextProvider>
+                      <LiveMonitor
+                        showFrame={showFrame}
+                        frameUrl={frameUrl}
+                        stage={stage}
+                        layoutMode={stage.layoutMode}
+                        nameTags={stage.nameTags}
+                        mediaEnabled={mediaEnabled}
+                        visualUrl={visualUrl}
+                        visualType={visualType}
+                        visualMode={visualMode}
+                        visualLoop={visualLoop}
+                        visualMuted={visualMuted}
+                        visualFit={visualFit}
+                        visualOpacity={visualOpacity}
+                        audioUrl={audioUrl}
+                        audioLoop={audioLoop}
+                        audioMuted={audioMuted}
+                        backgroundUrl={backgroundUrl}
+                        backgroundType={backgroundType}
+                        backgroundColor={backgroundColor}
+                        mediaType={mediaType}
+                        mediaUrl={mediaUrl}
+                        mediaMode={mediaMode}
+                        mediaLoop={mediaLoop}
+                        mediaMuted={mediaMuted}
+                        mediaFit={mediaFit}
+                        mediaOpacity={mediaOpacity}
+                      />
+                    </LayoutContextProvider>
 
-            {/* Responsive: SidePanel en Drawer (host + narrow) */}
-            {role === "host" && isNarrow && (
-              <Drawer
-                opened={sideOpen}
-                onClose={() => setSideOpen(false)}
-                position="right"
-                size={isMobile ? "95%" : 420}
-                overlayProps={{ opacity: 0.35, blur: 2 }}
-                withCloseButton
-                title="Control del Live"
-                keepMounted
-              >
-                <div style={{ height: "calc(100dvh - 140px)" }}>
-                  <StudioSidePanel
-                    role={role}
-                    eventSlug={eventSlug}
-                    disabled={isBusy}
-                    showFrame={showFrame}
-                    frameUrl={frameUrl}
-                    backgroundUrl={backgroundUrl}
-                    backgroundType={backgroundType}
-                    onRefreshFrameConfig={fetchConfig}
-                    activeVisualId={activeVisualId}
-                    activeAudioId={activeAudioId}
-                  />
-                </div>
-              </Drawer>
+                    {/* A/V controls agrupados */}
+                    <Paper p="sm" withBorder radius="md">
+                      <Stack gap="sm">
+                        <Text size="xs" fw={600} c="dimmed" tt="uppercase">
+                          Dispositivos y cámara
+                        </Text>
+                        <Box style={{ display: "flex", justifyContent: "center" }}>
+                          <ControlBar variation="minimal" />
+                        </Box>
+                        <Divider />
+                        <DeviceSelectorPanel />
+                        <Divider />
+                        <VirtualBackgroundControl eventSlug={eventSlug} disabled={isBusy} />
+                      </Stack>
+                    </Paper>
+
+                    <Paper p="sm" radius="md" withBorder style={{ minHeight: 0 }}>
+                      <ScrollArea h={isNarrow ? 320 : 420} offsetScrollbars>
+                        <ParticipantsPanel
+                          role={role}
+                          eventSlug={eventSlug}
+                          stage={stage}
+                          customNames={customNames}
+                          customSubtitles={customSubtitles}
+                          nameTags={stage.nameTags}
+                          onChangeParticipantName={handleChangeParticipantName}
+                          onToggleStage={handleToggleStage}
+                          onPin={handlePin}
+                          onUnpin={handleUnpin}
+                          onSetMode={handleSetMode}
+                        />
+                      </ScrollArea>
+                    </Paper>
+                  </Box>
+
+                  {/* Columna lateral - Panel de control (solo host desktop) */}
+                  {role === "host" && !isNarrow && (
+                    <Paper
+                      p="md"
+                      radius="md"
+                      withBorder
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        minHeight: 0,
+                      }}
+                    >
+                      <StudioSidePanel
+                        role={role}
+                        eventSlug={eventSlug}
+                        disabled={isBusy}
+                        showFrame={showFrame}
+                        frameUrl={frameUrl}
+                        backgroundUrl={backgroundUrl}
+                        backgroundType={backgroundType}
+                        onRefreshFrameConfig={fetchConfig}
+                        activeVisualId={activeVisualId}
+                        activeAudioId={activeAudioId}
+                      />
+                    </Paper>
+                  )}
+                </Box>
+
+                {/* SidePanel en Drawer (host + narrow) */}
+                {role === "host" && isNarrow && (
+                  <Drawer
+                    opened={sideOpen}
+                    onClose={() => setSideOpen(false)}
+                    position="right"
+                    size={420}
+                    overlayProps={{ opacity: 0.35, blur: 2 }}
+                    withCloseButton
+                    title="Control del Live"
+                    keepMounted
+                  >
+                    <div style={{ height: "calc(100dvh - 140px)" }}>
+                      <StudioSidePanel
+                        role={role}
+                        eventSlug={eventSlug}
+                        disabled={isBusy}
+                        showFrame={showFrame}
+                        frameUrl={frameUrl}
+                        backgroundUrl={backgroundUrl}
+                        backgroundType={backgroundType}
+                        onRefreshFrameConfig={fetchConfig}
+                        activeVisualId={activeVisualId}
+                        activeAudioId={activeAudioId}
+                      />
+                    </div>
+                  </Drawer>
+                )}
+
+                <FilteredRoomAudio onStageMap={stage.onStage} />
+
+                <StudioRoomUI
+                  chatOpen={chatOpen}
+                  setChatOpen={setChatOpen}
+                  unread={unread}
+                  setUnread={setUnread}
+                />
+              </>
             )}
-
-            <FilteredRoomAudio onStageMap={stage.onStage} />
-
-            {/* DRAWER CHAT */}
-            <StudioRoomUI
-              chatOpen={chatOpen}
-              setChatOpen={setChatOpen}
-              unread={unread}
-              setUnread={setUnread}
-            />
           </AppShell.Main>
         </AppShell>
       </LiveKitRoom>

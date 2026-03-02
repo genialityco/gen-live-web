@@ -9,6 +9,12 @@ import {
   Tabs,
   Text,
 } from "@mantine/core";
+import {
+  IconSettings,
+  IconPhoto,
+  IconMail,
+  IconUsers,
+} from "@tabler/icons-react";
 
 import { LiveConfigPanel } from "./LiveConfigPanel";
 import { JoinRequestsPanel } from "./JoinRequestsPanel";
@@ -48,10 +54,26 @@ export const StudioSidePanel: React.FC<Props> = ({
   return (
     <Tabs defaultValue={isSpeaker ? "info" : "control"} keepMounted={false} style={{ display: "flex", flexDirection: "column", height: "100%" }}>
       <Tabs.List grow>
-        {!isSpeaker && <Tabs.Tab value="control">Control</Tabs.Tab>}
-        {!isSpeaker && <Tabs.Tab value="media">Biblioteca</Tabs.Tab>}
-        {!isSpeaker && <Tabs.Tab value="invites">Invitaciones</Tabs.Tab>}
-        {!isSpeaker && <Tabs.Tab value="requests">Requests</Tabs.Tab>}
+        {!isSpeaker && (
+          <Tabs.Tab value="control" leftSection={<IconSettings size={15} />}>
+            Control
+          </Tabs.Tab>
+        )}
+        {!isSpeaker && (
+          <Tabs.Tab value="media" leftSection={<IconPhoto size={15} />}>
+            Biblioteca
+          </Tabs.Tab>
+        )}
+        {!isSpeaker && (
+          <Tabs.Tab value="invites" leftSection={<IconMail size={15} />}>
+            Invitaciones
+          </Tabs.Tab>
+        )}
+        {!isSpeaker && (
+          <Tabs.Tab value="requests" leftSection={<IconUsers size={15} />}>
+            Requests
+          </Tabs.Tab>
+        )}
       </Tabs.List>
 
       <ScrollArea mt="md" style={{ flex: 1 }}>

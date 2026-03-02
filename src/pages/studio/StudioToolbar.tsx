@@ -47,6 +47,8 @@ type Props = {
   onMode: (m: ProgramMode) => void;
   layoutMode: LayoutMode;
   onLayoutMode: (m: LayoutMode) => void;
+  /** Modo compacto para mobile: solo muestra badge de estado + botón de transmisión */
+  compact?: boolean;
 };
 
 export function StudioToolbar({
@@ -60,9 +62,31 @@ export function StudioToolbar({
   onStop,
   layoutMode,
   onLayoutMode,
+  compact = false,
 }: Props) {
   const st = statusLabel(egressId, egressStatus);
   const isSpeaker = role === "speaker";
+
+  // Versión compacta para mobile: solo estado + botón de transmisión
+  if (compact) {
+    return (
+      <Group gap="xs" wrap="nowrap">
+        <Badge color={st.color} variant="filled" radius="xl" size="md">
+          {st.text}
+        </Badge>
+        {!isSpeaker &&
+          (!egressId ? (
+            <Button size="xs" onClick={onStart} loading={isBusy} variant="filled">
+              Iniciar
+            </Button>
+          ) : (
+            <Button size="xs" color="red" variant="filled" onClick={onStop} loading={isBusy}>
+              Detener
+            </Button>
+          ))}
+      </Group>
+    );
+  }
 
   return (
     <Group justify="space-between" align="center" style={{ width: "100%" }}>
