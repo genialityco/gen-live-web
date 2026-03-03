@@ -22,6 +22,7 @@ import { InvitationManager } from "../../components/studio/InvitationManager";
 import { FrameControls } from "./FrameControls";
 import { BackgroundControls } from "./BackgroundControls";
 import { MediaLibrary } from "./MediaLibrary";
+import { TileAppearancePanel } from "./TileAppearancePanel";
 
 type Props = {
   role: "host" | "speaker";
@@ -34,8 +35,9 @@ type Props = {
   backgroundType: "image" | "gif" | "video";
   activeVisualId?: string;
   activeAudioId?: string;
+  presentationSlide?: number;
 
-  onRefreshFrameConfig: () => void; // renombrable luego
+  onRefreshFrameConfig: () => void;
 };
 
 export const StudioSidePanel: React.FC<Props> = ({
@@ -49,6 +51,7 @@ export const StudioSidePanel: React.FC<Props> = ({
   onRefreshFrameConfig,
   activeVisualId,
   activeAudioId,
+  presentationSlide,
 }) => {
   const isSpeaker = role === "speaker";
   return (
@@ -85,7 +88,7 @@ export const StudioSidePanel: React.FC<Props> = ({
               <Paper p="sm" radius="md" withBorder>
                 <Stack gap="sm">
                   <Group justify="space-between">
-                    <Text fw={600}>Marco gráfico</Text>
+                    <Text fw={600}>Marco grafico</Text>
                     <Text size="xs" c="dimmed">
                       {showFrame ? "Activo" : "Inactivo"}
                     </Text>
@@ -112,10 +115,18 @@ export const StudioSidePanel: React.FC<Props> = ({
 
               <Paper p="sm" radius="md" withBorder>
                 <Stack gap="sm">
-                  <Divider />
+                  <Group justify="space-between">
+                    <Text fw={600}>Apariencia de participantes</Text>
+                  </Group>
+                  <TileAppearancePanel eventSlug={eventSlug} disabled={disabled} />
+                </Stack>
+              </Paper>
 
+              <Paper p="sm" radius="md" withBorder>
+                <Stack gap="sm">
+                  <Divider />
                   <Text size="xs" c="dimmed">
-                    Tip: el monitor muestra solo los que están “En escena”.
+                    Tip: el monitor muestra solo los que estan en escena.
                   </Text>
                 </Stack>
               </Paper>
@@ -131,6 +142,7 @@ export const StudioSidePanel: React.FC<Props> = ({
               activeAudioId={activeAudioId}
               onConfigChange={onRefreshFrameConfig}
               disabled={disabled}
+              presentationSlide={presentationSlide}
             />
           </Tabs.Panel>
         )}

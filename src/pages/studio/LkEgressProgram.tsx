@@ -21,7 +21,9 @@ function ProgramCanvas({ eventSlug }: { eventSlug: string }) {
   
   // Visual layer
   const [visualUrl, setVisualUrl] = useState("");
-  const [visualType, setVisualType] = useState<"image" | "gif" | "video">("image");
+  const [visualType, setVisualType] = useState<"image" | "gif" | "video" | "presentation">("image");
+  const [presentationSlides, setPresentationSlides] = useState<string[] | undefined>(undefined);
+  const [presentationMimeType, setPresentationMimeType] = useState<string | undefined>(undefined);
   const [visualMode, setVisualMode] = useState<"overlay" | "full">("overlay");
   const [visualLoop, setVisualLoop] = useState(false);
   const [visualMuted, setVisualMuted] = useState(true);
@@ -71,7 +73,7 @@ function ProgramCanvas({ eventSlug }: { eventSlug: string }) {
         // Visual layer
         if (effectiveMedia?.visual) {
           setVisualUrl(effectiveMedia.visual.item.url || "");
-          setVisualType(effectiveMedia.visual.item.type as "image" | "gif" | "video");
+          setVisualType(effectiveMedia.visual.item.type as "image" | "gif" | "video" | "presentation");
           setVisualMode(effectiveMedia.visual.config.mode);
           setVisualLoop(effectiveMedia.visual.config.loop ?? false);
           setVisualMuted(effectiveMedia.visual.config.muted ?? true);
@@ -81,8 +83,12 @@ function ProgramCanvas({ eventSlug }: { eventSlug: string }) {
               ? effectiveMedia.visual.config.opacity
               : 1,
           );
+          setPresentationSlides(effectiveMedia.visual.item.slides);
+          setPresentationMimeType(effectiveMedia.visual.item.presentationMimeType);
         } else {
           setVisualUrl("");
+          setPresentationSlides(undefined);
+          setPresentationMimeType(undefined);
         }
         
         // Audio layer
@@ -211,6 +217,9 @@ function ProgramCanvas({ eventSlug }: { eventSlug: string }) {
         mediaMuted={mediaMuted}
         mediaFit={mediaFit}
         mediaOpacity={mediaOpacity}
+        presentationSlide={stage.presentationSlide}
+        presentationSlides={presentationSlides}
+        presentationMimeType={presentationMimeType}
       />
 
       {/* Signal to LiveKit Egress that page is ready */}

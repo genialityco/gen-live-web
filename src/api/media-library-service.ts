@@ -6,7 +6,7 @@ export interface MediaItem {
   _id: string;
   eventSlug: string;
   name: string;
-  type: "image" | "gif" | "video" | "audio";
+  type: "image" | "gif" | "video" | "audio" | "presentation";
   url: string;
   thumbnailUrl?: string;
   description?: string;
@@ -22,6 +22,10 @@ export interface MediaItem {
   defaultOpacity: number;
   createdAt: string;
   updatedAt: string;
+  // Presentation-specific fields
+  totalPages?: number;
+  slides?: string[];
+  presentationMimeType?: string;
 }
 
 export interface CreateMediaItemDto {
@@ -66,9 +70,12 @@ export interface EffectiveMediaConfig {
     item: {
       id: string;
       name: string;
-      type: "image" | "gif" | "video";
+      type: "image" | "gif" | "video" | "presentation";
       url: string;
       thumbnailUrl?: string;
+      totalPages?: number;
+      slides?: string[];
+      presentationMimeType?: string;
     };
     config: {
       mode: "overlay" | "full";

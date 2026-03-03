@@ -1,6 +1,6 @@
 // src/hooks/useStage.ts
 import { useEffect, useState } from "react";
-import { subscribeStageState, type ProgramMode, type NameTagStyle } from "../api/live-stage-service";
+import { subscribeStageState, type ProgramMode, type NameTagStyle, type TileAppearance } from "../api/live-stage-service";
 import type { LayoutMode } from "../types";
 
 export type StageState = {
@@ -11,6 +11,8 @@ export type StageState = {
   egressId?: string | null;
   egressStatus?: string | null;
   nameTags: Record<string, NameTagStyle>;
+  presentationSlide: number;
+  tileAppearance?: TileAppearance;
 };
 
 const DEFAULT_STAGE: StageState = {
@@ -21,6 +23,8 @@ const DEFAULT_STAGE: StageState = {
   egressId: null,
   egressStatus: null,
   nameTags: {},
+  presentationSlide: 0,
+  tileAppearance: undefined,
 };
 
 export function useStage(eventSlug: string) {
@@ -40,6 +44,8 @@ export function useStage(eventSlug: string) {
         egressId: s?.egressId ?? null,
         egressStatus: s?.egressStatus ?? null,
         nameTags: s?.nameTags ?? {},
+        presentationSlide: s?.presentationSlide ?? 0,
+        tileAppearance: s?.tileAppearance ?? undefined,
       });
     });
 

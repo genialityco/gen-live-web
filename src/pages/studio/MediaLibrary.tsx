@@ -34,6 +34,9 @@ import {
   IconPhoto,
   IconVideo,
   IconMusic,
+  IconPresentation,
+  IconChevronLeft,
+  IconChevronRight,
 } from "@tabler/icons-react";
 import {
   listMediaItems,
@@ -44,6 +47,7 @@ import {
   type MediaItem,
   type CreateMediaItemDto,
 } from "../../api/media-library-service";
+import { setPresentationSlide } from "../../api/live-stage-service";
 import { UploadMediaDialog } from "./UploadMediaDialog";
 import { EditMediaDialog } from "./EditMediaDialog";
 
@@ -53,6 +57,7 @@ interface MediaLibraryProps {
   activeAudioId?: string;
   onConfigChange?: () => void; // Callback para refrescar config en parent
   disabled?: boolean;
+  presentationSlide?: number; // Slide activo actual (de useStage)
 }
 
 type QuickMode = "overlay" | "full";
@@ -64,6 +69,7 @@ export function MediaLibrary({
   activeAudioId,
   onConfigChange,
   disabled,
+  presentationSlide = 0,
 }: MediaLibraryProps) {
   const [items, setItems] = useState<MediaItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -301,7 +307,33 @@ export function MediaLibrary({
                   overflow: "hidden",
                 }}
               >
-                {item.type === "video" ? (
+                {item.type === "presentation" ? (
+                  <>
+                    <Center
+                      style={{
+                        width: "100%",
+                        height: "100%",
+                        flexDirection: "column",
+                        gap: 6,
+                        background: "linear-gradient(135deg, #1a1b2e 0%, #16213e 100%)",
+                      }}
+                    >
+                      <IconPresentation size={40} color="white" opacity={0.5} />
+                      {item.totalPages && (
+                        <Text size="xs" c="dimmed">
+                          {item.totalPages} slides
+                        </Text>
+                      )}
+                    </Center>
+                    <Badge
+                      size="xs"
+                      style={{ position: "absolute", top: 4, left: 4 }}
+                      leftSection={<IconPresentation size={12} />}
+                    >
+                      {item.presentationMimeType === "application/pdf" ? "PDF" : "PPTX"}
+                    </Badge>
+                  </>
+                ) : item.type === "video" ? (
                   <>
                     <video
                       src={item.url}
@@ -524,10 +556,11 @@ export function MediaLibrary({
           onChange={(v) => setFilterType(v || "all")}
           data={[
             { value: "all", label: "Todos" },
-            { value: "image", label: "Imágenes" },
+            { value: "image", label: "Imagenes" },
             { value: "gif", label: "GIFs" },
             { value: "video", label: "Videos" },
             { value: "audio", label: "Audio" },
+            { value: "presentation", label: "Presentaciones" },
           ]}
         />
       </Group>
@@ -560,70 +593,104 @@ export function MediaLibrary({
               {isItemActive(selectedItem) && <Badge color="green">Activo</Badge>}
             </Group>
 
-            <Group grow>
-              <SegmentedControl
-                size="xs"
-                value={quickMode}
-                onChange={(v) => setQuickMode(v as QuickMode)}
-                data={[
-                  { label: "Overlay", value: "overlay" },
-                  { label: "Full", value: "full" },
-                ]}
-              />
-
-              <Select
-                size="xs"
-                value={quickFit}
-                onChange={(v) => setQuickFit((v as QuickFit) || "cover")}
-                data={[
-                  { value: "cover", label: "Cover" },
-                  { value: "contain", label: "Contain" },
-                ]}
-              />
-            </Group>
-
-            <Group grow>
-              <Switch
-                label="Loop"
-                size="xs"
-                checked={quickLoop}
-                onChange={(e) => setQuickLoop(e.currentTarget.checked)}
-              />
-              <Switch
-                label="Muted"
-                size="xs"
-                checked={quickMuted}
-                onChange={(e) => setQuickMuted(e.currentTarget.checked)}
-              />
-            </Group>
-
-            <Box>
-              <Text size="xs" fw={500} mb={4}>
-                Opacidad: {Math.round(quickOpacity * 100)}%
-                {isItemActive(selectedItem) ? (
-                  <Text span c="dimmed">
-                    {" "}
-                    (se aplica en vivo)
+            {/* Controles para presentacion */}
+            {selectedItem.type === "presentation" && isItemActive(selectedItem) && selectedItem.totalPages && selectedItem.totalPages > 1 && (
+              <Box>
+                <Text size="xs" fw={500} mb="xs">
+                  Navegacion de slides
+                </Text>
+                <Group gap="xs" justify="center">
+                  <ActionIcon
+                    size="md"
+                    variant="light"
+                    disabled={disabled || presentationSlide <= 0}
+                    onClick={() => void setPresentationSlide(eventSlug, Math.max(0, presentationSlide - 1))}
+                  >
+                    <IconChevronLeft size={16} />
+                  </ActionIcon>
+                  <Text size="sm" fw={600} style={{ minWidth: 60, textAlign: "center" }}>
+                    {presentationSlide + 1} / {selectedItem.totalPages}
                   </Text>
-                ) : (
-                  <Text span c="dimmed">
-                    {" "}
-                    (se aplicará al activar)
+                  <ActionIcon
+                    size="md"
+                    variant="light"
+                    disabled={disabled || presentationSlide >= (selectedItem.totalPages ?? 1) - 1}
+                    onClick={() => void setPresentationSlide(eventSlug, Math.min((selectedItem.totalPages ?? 1) - 1, presentationSlide + 1))}
+                  >
+                    <IconChevronRight size={16} />
+                  </ActionIcon>
+                </Group>
+              </Box>
+            )}
+
+            {/* Controles normales — solo para no-presentaciones */}
+            {selectedItem.type !== "presentation" && (
+              <>
+                <Group grow>
+                  <SegmentedControl
+                    size="xs"
+                    value={quickMode}
+                    onChange={(v) => setQuickMode(v as QuickMode)}
+                    data={[
+                      { label: "Overlay", value: "overlay" },
+                      { label: "Full", value: "full" },
+                    ]}
+                  />
+
+                  <Select
+                    size="xs"
+                    value={quickFit}
+                    onChange={(v) => setQuickFit((v as QuickFit) || "cover")}
+                    data={[
+                      { value: "cover", label: "Cover" },
+                      { value: "contain", label: "Contain" },
+                    ]}
+                  />
+                </Group>
+
+                <Group grow>
+                  <Switch
+                    label="Loop"
+                    size="xs"
+                    checked={quickLoop}
+                    onChange={(e) => setQuickLoop(e.currentTarget.checked)}
+                  />
+                  <Switch
+                    label="Muted"
+                    size="xs"
+                    checked={quickMuted}
+                    onChange={(e) => setQuickMuted(e.currentTarget.checked)}
+                  />
+                </Group>
+
+                <Box>
+                  <Text size="xs" fw={500} mb={4}>
+                    Opacidad: {Math.round(quickOpacity * 100)}%
+                    {isItemActive(selectedItem) ? (
+                      <Text span c="dimmed">
+                        {" "}
+                        (se aplica en vivo)
+                      </Text>
+                    ) : (
+                      <Text span c="dimmed">
+                        {" "}
+                        (se aplicara al activar)
+                      </Text>
+                    )}
                   </Text>
-                )}
-              </Text>
 
-              <Slider
-                size="xs"
-                min={0}
-                max={1}
-                step={0.05}
-                value={quickOpacity}
-                onChange={setQuickOpacity}
-              />
-            </Box>
+                  <Slider
+                    size="xs"
+                    min={0}
+                    max={1}
+                    step={0.05}
+                    value={quickOpacity}
+                    onChange={setQuickOpacity}
+                  />
+                </Box>
+              </>
+            )}
 
-            {/* Botón opcional (ya no es necesario, pero lo dejo como fallback) */}
             <Group grow mt="xs">
               {isItemActive(selectedItem) ? (
                 <Button
@@ -648,10 +715,12 @@ export function MediaLibrary({
               )}
             </Group>
 
-            <Text size="xs" c="dimmed">
-              Tip: click en una card para activarla y seleccionarla. Si ya está activa, haz click para
-              editarla — los cambios de loop/mute/fit/opacidad se aplican en vivo sin desmontar.
-            </Text>
+            {selectedItem.type !== "presentation" && (
+              <Text size="xs" c="dimmed">
+                Tip: click en una card para activarla y seleccionarla. Si ya esta activa, haz click para
+                editarla — los cambios de loop/mute/fit/opacidad se aplican en vivo sin desmontar.
+              </Text>
+            )}
           </Stack>
         </Paper>
       )}

@@ -243,8 +243,11 @@ export const StudioView: React.FC<StudioViewProps> = ({
 
   // Estados separados para visual y audio
   const [visualUrl, setVisualUrl] = useState("");
-  const [visualType, setVisualType] = useState<"image" | "gif" | "video">("image");
+  const [visualType, setVisualType] = useState<"image" | "gif" | "video" | "presentation">("image");
   const [visualMode, setVisualMode] = useState<"overlay" | "full">("overlay");
+  // Presentation-specific states
+  const [presentationSlides, setPresentationSlides] = useState<string[] | undefined>(undefined);
+  const [presentationMimeType, setPresentationMimeType] = useState<string | undefined>(undefined);
   const [visualLoop, setVisualLoop] = useState(false);
   const [visualMuted, setVisualMuted] = useState(true);
   const [visualFit, setVisualFit] = useState<"cover" | "contain">("cover");
@@ -550,15 +553,20 @@ export const StudioView: React.FC<StudioViewProps> = ({
       if (effectiveConfig.visual) {
         setVisualUrl(effectiveConfig.visual.item.url);
         setVisualType(
-          effectiveConfig.visual.item.type as "image" | "gif" | "video",
+          effectiveConfig.visual.item.type as "image" | "gif" | "video" | "presentation",
         );
         setVisualMode(effectiveConfig.visual.config.mode);
         setVisualLoop(effectiveConfig.visual.config.loop);
         setVisualMuted(effectiveConfig.visual.config.muted);
         setVisualFit(effectiveConfig.visual.config.fit);
         setVisualOpacity(effectiveConfig.visual.config.opacity);
+        // Presentation-specific
+        setPresentationSlides(effectiveConfig.visual.item.slides);
+        setPresentationMimeType(effectiveConfig.visual.item.presentationMimeType);
       } else {
         setVisualUrl("");
+        setPresentationSlides(undefined);
+        setPresentationMimeType(undefined);
       }
 
       if (effectiveConfig.audio) {
@@ -866,6 +874,10 @@ export const StudioView: React.FC<StudioViewProps> = ({
                         mediaMuted={mediaMuted}
                         mediaFit={mediaFit}
                         mediaOpacity={mediaOpacity}
+                        presentationSlide={stage.presentationSlide}
+                        presentationSlides={presentationSlides}
+                        presentationMimeType={presentationMimeType}
+                        tileAppearance={stage.tileAppearance}
                       />
                     </LayoutContextProvider>
 
@@ -976,6 +988,7 @@ export const StudioView: React.FC<StudioViewProps> = ({
                         onRefreshFrameConfig={fetchConfig}
                         activeVisualId={activeVisualId}
                         activeAudioId={activeAudioId}
+                        presentationSlide={stage.presentationSlide}
                       />
                     </div>
                   </Drawer>
@@ -1062,6 +1075,10 @@ export const StudioView: React.FC<StudioViewProps> = ({
                         mediaMuted={mediaMuted}
                         mediaFit={mediaFit}
                         mediaOpacity={mediaOpacity}
+                        presentationSlide={stage.presentationSlide}
+                        presentationSlides={presentationSlides}
+                        presentationMimeType={presentationMimeType}
+                        tileAppearance={stage.tileAppearance}
                       />
                     </LayoutContextProvider>
 
@@ -1123,6 +1140,7 @@ export const StudioView: React.FC<StudioViewProps> = ({
                         onRefreshFrameConfig={fetchConfig}
                         activeVisualId={activeVisualId}
                         activeAudioId={activeAudioId}
+                        presentationSlide={stage.presentationSlide}
                       />
                     </Paper>
                   )}
@@ -1152,6 +1170,7 @@ export const StudioView: React.FC<StudioViewProps> = ({
                         onRefreshFrameConfig={fetchConfig}
                         activeVisualId={activeVisualId}
                         activeAudioId={activeAudioId}
+                        presentationSlide={stage.presentationSlide}
                       />
                     </div>
                   </Drawer>
