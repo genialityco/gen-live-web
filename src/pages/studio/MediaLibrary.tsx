@@ -21,6 +21,7 @@ import {
   Slider,
   SegmentedControl,
   Progress,
+  Tooltip,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import {
@@ -37,6 +38,8 @@ import {
   IconPresentation,
   IconChevronLeft,
   IconChevronRight,
+  IconRepeat,
+  IconVolumeOff,
 } from "@tabler/icons-react";
 import {
   listMediaItems,
@@ -413,9 +416,46 @@ export function MediaLibrary({
             </Card.Section>
 
             <Group justify="space-between" mt="xs">
-              <Text size="sm" fw={500} lineClamp={1}>
+              <Text size="sm" fw={500} lineClamp={1} style={{ flex: 1, minWidth: 0 }}>
                 {item.name}
               </Text>
+
+              <Group gap={4} wrap="nowrap">
+                <Tooltip
+                  label={item.defaultLoop ? "Loop activado" : "Sin loop"}
+                  position="top"
+                  withArrow
+                >
+                  <Box style={{ display: "flex", alignItems: "center" }}>
+                    <IconRepeat
+                      size={14}
+                      color={
+                        item.defaultLoop
+                          ? "var(--mantine-color-blue-5)"
+                          : "var(--mantine-color-dimmed)"
+                      }
+                      opacity={item.defaultLoop ? 1 : 0.35}
+                    />
+                  </Box>
+                </Tooltip>
+                <Tooltip
+                  label={item.defaultMuted ? "Silenciado" : "Con audio"}
+                  position="top"
+                  withArrow
+                >
+                  <Box style={{ display: "flex", alignItems: "center" }}>
+                    <IconVolumeOff
+                      size={14}
+                      color={
+                        item.defaultMuted
+                          ? "var(--mantine-color-orange-5)"
+                          : "var(--mantine-color-dimmed)"
+                      }
+                      opacity={item.defaultMuted ? 1 : 0.35}
+                    />
+                  </Box>
+                </Tooltip>
+              </Group>
 
               <Menu position="bottom-end">
                 <Menu.Target>
@@ -585,12 +625,59 @@ export function MediaLibrary({
       {selectedItem && (
         <Paper p="md" withBorder>
           <Stack gap="sm">
-            <Group justify="space-between">
-              <Text fw={600} size="sm">
-                {selectedItem.name}
-              </Text>
+            <Group justify="space-between" wrap="nowrap">
+              <Group gap="xs" wrap="nowrap" style={{ minWidth: 0 }}>
+                {/* Mini-thumbnail del item seleccionado */}
+                <Box
+                  style={{
+                    width: 56,
+                    height: 32,
+                    borderRadius: 4,
+                    overflow: "hidden",
+                    flexShrink: 0,
+                    background: "#000",
+                    position: "relative",
+                  }}
+                >
+                  {selectedItem.type === "image" || selectedItem.type === "gif" ? (
+                    <img
+                      src={selectedItem.url}
+                      alt={selectedItem.name}
+                      style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                    />
+                  ) : selectedItem.type === "video" ? (
+                    <video
+                      src={selectedItem.url}
+                      style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                    />
+                  ) : selectedItem.type === "audio" ? (
+                    <Center
+                      style={{
+                        width: "100%",
+                        height: "100%",
+                        background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+                      }}
+                    >
+                      <IconMusic size={16} color="white" opacity={0.7} />
+                    </Center>
+                  ) : (
+                    <Center
+                      style={{
+                        width: "100%",
+                        height: "100%",
+                        background: "linear-gradient(135deg, #1a1b2e 0%, #16213e 100%)",
+                      }}
+                    >
+                      <IconPresentation size={16} color="white" opacity={0.7} />
+                    </Center>
+                  )}
+                </Box>
+                <Text fw={600} size="sm" lineClamp={1} style={{ minWidth: 0 }}>
+                  {selectedItem.name}
+                </Text>
+              </Group>
 
-              {isItemActive(selectedItem) && <Badge color="green">Activo</Badge>}
+              {isItemActive(selectedItem) && <Badge color="green" style={{ flexShrink: 0 }}>Activo</Badge>}
             </Group>
 
             {/* Controles para presentacion */}

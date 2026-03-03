@@ -89,6 +89,7 @@ export async function getLivekitToken(params: {
   role: LiveRole;
   identity?: string;
   name?: string;
+  subtitle?: string;
 }) {
   const qs = new URLSearchParams({
     eventSlug: params.eventSlug,
@@ -96,6 +97,7 @@ export async function getLivekitToken(params: {
   });
   if (params.name) qs.append("name", params.name);
   if (params.identity) qs.append("identity", params.identity);
+  if (params.subtitle) qs.append("subtitle", params.subtitle);
 
   const { data } = await api.get<TokenResponse>(
     `/livekit/token?${qs.toString()}`,
