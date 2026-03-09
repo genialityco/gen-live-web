@@ -335,7 +335,6 @@ export default function EventAttendGcore() {
   const { slug, eventSlug } = useParams<{ slug: string; eventSlug: string }>();
   const navigate = useNavigate();
   const isMobile = useMediaQuery("(max-width: 768px)");
-  const chatHeight = isMobile ? 360 : 520;
   const { user, sessionName } = useAuth();
 
   const [org, setOrg] = useState<Org | null>(null);
@@ -357,6 +356,9 @@ export default function EventAttendGcore() {
   } = useEventRealtime(eventSlugToUse);
 
   const [timeLeft, setTimeLeft] = useState<string>("");
+
+  const mobileLive = isMobile && status === "live";
+  const chatHeight = mobileLive ? "clamp(260px, calc(100svh - 370px), 420px)" : isMobile ? 360 : 520;
 
   const isOwner = !!(user && org && org.ownerUid === user.uid);
 
@@ -778,101 +780,92 @@ export default function EventAttendGcore() {
         {!contentLoading && !error && org && finalEvent && (
           <Container
             size="xl"
-            py={isMobile ? "lg" : "xl"}
-            pb={isMobile ? 84 : undefined}
+            py={mobileLive ? "xs" : isMobile ? "lg" : "xl"}
+            pb={mobileLive ? "xs" : isMobile ? "md" : undefined}
           >
-            <Stack gap="lg">
-              {/* Hero del evento */}
-              <Card radius="lg" withBorder p={isMobile ? "md" : "lg"}>
-                <Stack gap="sm">
-                  <Group justify="space-between" align="flex-start" wrap="wrap">
-                    <Box style={{ minWidth: 0, flex: 1 }}>
-                      <Title
-                        order={2}
-                        style={{
-                          lineHeight: 1.15,
-                          fontSize: isMobile ? rem(22) : rem(28),
-                        }}
-                        lineClamp={isMobile ? 3 : 1}
-                      >
-                        {finalEvent.title}
-                      </Title>
-
-                      <Group gap="xs" mt={6} wrap="wrap">
-                        <Badge
-                          color={getStatusColor(status)}
-                          size="md"
-                          variant={status === "live" ? "filled" : "light"}
-                          leftSection={
-                            status === "live" ? (
-                              <IconCircleDot size={14} />
-                            ) : undefined
-                          }
+            <Stack gap={mobileLive ? "xs" : "lg"}>
+              {/* Hero del evento — se colapsa en móvil+live a una barra compacta */}
+              {mobileLive ? (
+                <Group justify="space-between" align="center" gap="xs" px={4}>
+                  <Text fw={700} size="sm" truncate style={{ flex: 1, minWidth: 0 }}>
+                    {finalEvent.title}
+                  </Text>
+                  <Badge
+                    color="red"
+                    variant="filled"
+                    size="sm"
+                    leftSection={<IconCircleDot size={10} />}
+                    style={{ flexShrink: 0 }}
+                  >
+                    En vivo
+                  </Badge>
+                  {isOwner && slug && eventSlug && (
+                    <Button
+                      component={Link}
+                      to={`/org/${slug}/event/${eventSlug}/admin`}
+                      size="xs"
+                      variant="light"
+                      leftSection={<IconSettings size={12} />}
+                      px="xs"
+                      style={{ flexShrink: 0 }}
+                    >
+                      Control
+                    </Button>
+                  )}
+                </Group>
+              ) : (
+                <Card radius="lg" withBorder p={isMobile ? "md" : "lg"}>
+                  <Stack gap="sm">
+                    <Group justify="space-between" align="flex-start" wrap="wrap">
+                      <Box style={{ minWidth: 0, flex: 1 }}>
+                        <Title
+                          order={2}
+                          style={{
+                            lineHeight: 1.15,
+                            fontSize: isMobile ? rem(22) : rem(28),
+                          }}
+                          lineClamp={isMobile ? 3 : 1}
                         >
-                          {getStatusText(status)}
-                        </Badge>
-                      </Group>
+                          {finalEvent.title}
+                        </Title>
 
-                      {status === "live" && joinMessage && (
-                        <Text size="sm" c="dimmed" mt="xs">
-                          {joinMessage}
-                        </Text>
-                      )}
-                    </Box>
-
-                    {/* Acciones owner */}
-                    {isOwner && slug && eventSlug && (
-                      <Button
-                        component={Link}
-                        to={`/org/${slug}/event/${eventSlug}/admin`}
-                        size="xs"
-                        variant="light"
-                        leftSection={<IconSettings size={14} />}
-                      >
-                        Control
-                      </Button>
-                    )}
-                  </Group>
-
-                  {/* CTA Desktop */}
-                  {/* {status === "live" && !isMobile && (
-                    <>
-                      <Divider my="xs" />
-                      <Group justify="space-between" align="center" wrap="wrap">
-                        <Group gap="xs" wrap="wrap">
-                          <ThemeIcon
-                            variant="light"
-                            color="brand"
-                            radius="xl"
-                            size={34}
+                        <Group gap="xs" mt={6} wrap="wrap">
+                          <Badge
+                            color={getStatusColor(status)}
+                            size="md"
+                            variant={status === "live" ? "filled" : "light"}
+                            leftSection={
+                              status === "live" ? (
+                                <IconCircleDot size={14} />
+                              ) : undefined
+                            }
                           >
-                            <IconMicrophone2 size={18} />
-                          </ThemeIcon>
-                          <Box>
-                            <Text fw={700}>
-                              ¿Quieres participar en el estudio?
-                            </Text>
-                            <Text size="xs" c="dimmed">
-                              Envía una solicitud al anfitrión para habilitar tu
-                              micrófono/cámara.
-                            </Text>
-                          </Box>
+                            {getStatusText(status)}
+                          </Badge>
                         </Group>
 
+                        {status === "live" && joinMessage && (
+                          <Text size="sm" c="dimmed" mt="xs">
+                            {joinMessage}
+                          </Text>
+                        )}
+                      </Box>
+
+                      {isOwner && slug && eventSlug && (
                         <Button
-                          onClick={handleJoinRequest}
-                          disabled={!canRequestJoin}
-                          size="sm"
-                          radius="xl"
-                          leftSection={<IconMicrophone2 size={16} />}
+                          component={Link}
+                          to={`/org/${slug}/event/${eventSlug}/admin`}
+                          size="xs"
+                          variant="light"
+                          leftSection={<IconSettings size={14} />}
                         >
-                          Solicitar unirme
+                          Control
                         </Button>
-                      </Group>
-                    </>
-                  )} */}
-                </Stack>
-              </Card>
+                      )}
+                    </Group>
+                  </Stack>
+                </Card>
+              )}
 
               {/* Layout principal: video + chat */}
               <Grid gutter="lg" align="start">
@@ -889,7 +882,7 @@ export default function EventAttendGcore() {
                           position: "relative",
                           width: "100%",
                           paddingTop: "56.25%", // 16:9
-                          maxHeight: isMobile ? 260 : 520,
+                          maxHeight: mobileLive ? undefined : isMobile ? 260 : 520,
                         }}
                       >
                         {status === "live" ? (
@@ -1061,10 +1054,6 @@ export default function EventAttendGcore() {
                     </Box>
                   </Card>
 
-                  {/* Espacio extra en móvil para que la barra fija no tape contenido */}
-                  {status === "live" && isMobile && mode !== "studio" && (
-                    <Box h={72} />
-                  )}
                 </Grid.Col>
 
                 <Grid.Col span={{ base: 12, md: 4 }}>
