@@ -28,7 +28,7 @@ import {
   IconArrowLeft,
   IconSettings,
   IconPlayerPlay,
-  // IconMicrophone2,
+  IconMicrophone2,
   IconCircleDot,
   IconInfoCircle,
 } from "@tabler/icons-react";
@@ -53,7 +53,7 @@ import {
   getLiveConfig,
 } from "../../api/livekit-service";
 import {
-  // requestToJoin,
+  requestToJoin,
   subscribeJoinDecision,
 } from "../../api/live-join-service";
 import { LIVEKIT_WS_URL } from "../../core/livekitConfig";
@@ -638,23 +638,23 @@ export default function EventAttendGcore() {
     return () => unsub?.();
   }, [eventSlugToUse, status]);
 
-  // const handleJoinRequest = async () => {
-  //   if (!eventSlugToUse) return;
-  //   if (!isRegistered && !isOwner) return;
+  const handleJoinRequest = async () => {
+    if (!eventSlugToUse) return;
+    if (!isRegistered && !isOwner) return;
 
-  //   setJoinState("pending");
-  //   try {
-  //     const displayName =
-  //       sessionName ||
-  //       user?.displayName ||
-  //       (user?.email ? user.email.split("@")[0] : "Invitado");
+    setJoinState("pending");
+    try {
+      const displayName =
+        sessionName ||
+        user?.displayName ||
+        (user?.email ? user.email.split("@")[0] : "Invitado");
 
-  //     await requestToJoin(eventSlugToUse, displayName);
-  //   } catch (e: any) {
-  //     setJoinState("idle");
-  //     console.warn(e?.message || e);
-  //   }
-  // };
+      await requestToJoin(eventSlugToUse, displayName);
+    } catch (e: any) {
+      setJoinState("idle");
+      console.warn(e?.message || e);
+    }
+  };
 
   // Poll frame config every 2s
   useEffect(() => {
@@ -701,11 +701,11 @@ export default function EventAttendGcore() {
   const scale = 0.8;
 
   const joinMessage = status === "live" ? getJoinMessage(joinState) : "";
-  // const canRequestJoin =
-  //   status === "live" &&
-  //   (isRegistered || isOwner) &&
-  //   mode !== "studio" &&
-  //   joinState !== "pending";
+  const canRequestJoin =
+    status === "live" &&
+    (isRegistered || isOwner) &&
+    mode !== "studio" &&
+    joinState !== "pending";
 
   return (
     <MantineProvider theme={theme} withCssVariables>
@@ -1054,6 +1054,28 @@ export default function EventAttendGcore() {
                     </Box>
                   </Card>
 
+                  {/* Botón sutil para solicitar unirse al estudio */}
+                  {status === "live" && mode !== "studio" && (
+                    <Group justify="center" mt="xs">
+                      <Button
+                        variant="subtle"
+                        size="xs"
+                        color="gray"
+                        leftSection={<IconMicrophone2 size={13} />}
+                        onClick={handleJoinRequest}
+                        disabled={!canRequestJoin}
+                        styles={{ root: { opacity: canRequestJoin ? 0.7 : 0.4 } }}
+                      >
+                        {joinState === "pending"
+                          ? "Solicitud enviada…"
+                          : joinState === "approved"
+                          ? "Conectado al estudio"
+                          : joinState === "rejected"
+                          ? "Solicitud rechazada"
+                          : "Solicitar unirme al estudio"}
+                      </Button>
+                    </Group>
+                  )}
                 </Grid.Col>
 
                 <Grid.Col span={{ base: 12, md: 4 }}>
