@@ -386,9 +386,10 @@ export function TileAppearancePanel({ eventSlug, disabled }: Props) {
         <Switch
           label="Mostrar barra de acento"
           checked={appearance.showAccentBar !== false}
-          onChange={(e) =>
-            setAppearance((a) => ({ ...a, showAccentBar: e.currentTarget.checked }))
-          }
+          onChange={(e) => {
+            const checked = e.currentTarget.checked;
+            setAppearance((a) => ({ ...a, showAccentBar: checked }));
+          }}
           size="sm"
           disabled={disabled}
           style={{ flex: 1 }}

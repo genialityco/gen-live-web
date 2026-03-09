@@ -1,15 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Badge,
+  Box,
   Button,
   Group,
-  Paper,
   Stack,
-  Text,
-  Divider,
-  Box,
   Tabs,
-  ScrollArea,
+  Text,
   ActionIcon,
   Tooltip,
 } from "@mantine/core";
@@ -171,41 +168,37 @@ export function JoinRequestsPanel({ eventSlug }: { eventSlug: string }) {
   };
 
   return (
-    <Paper p="sm" radius="md" withBorder>
-      <Stack gap="sm">
-        <Box>
-          <Text fw={700}>Requests</Text>
-          <Text size="xs" c="dimmed">
-            Ordenadas por llegada
-          </Text>
+    <Stack gap="sm">
+      <Group justify="space-between" align="baseline">
+        <Text fw={700} size="sm">Solicitudes de ingreso</Text>
+        <Text size="xs" c="dimmed">Ordenadas por llegada</Text>
+      </Group>
+
+      <Tabs
+        value={tab}
+        onChange={(v) => setTab((v as StatusTab) || "pending")}
+        keepMounted={false}
+      >
+        <Tabs.List grow>
+          <Tabs.Tab value="pending">
+            Pendientes{pending.length > 0 ? ` (${pending.length})` : ""}
+          </Tabs.Tab>
+          <Tabs.Tab value="approved">Aceptadas</Tabs.Tab>
+          <Tabs.Tab value="rejected">Rechazadas</Tabs.Tab>
+        </Tabs.List>
+
+        <Box mt="sm">
+          <Tabs.Panel value="pending">
+            {renderList(pending, "pending")}
+          </Tabs.Panel>
+          <Tabs.Panel value="approved">
+            {renderList(approved, "approved")}
+          </Tabs.Panel>
+          <Tabs.Panel value="rejected">
+            {renderList(rejected, "rejected")}
+          </Tabs.Panel>
         </Box>
-
-        <Divider />
-
-        <Tabs
-          value={tab}
-          onChange={(v) => setTab((v as StatusTab) || "pending")}
-          keepMounted={false}
-        >
-          <Tabs.List grow>
-            <Tabs.Tab value="pending">Pendientes</Tabs.Tab>
-            <Tabs.Tab value="approved">Aceptadas</Tabs.Tab>
-            <Tabs.Tab value="rejected">Rechazadas</Tabs.Tab>
-          </Tabs.List>
-
-          <ScrollArea h={420} mt="md" offsetScrollbars>
-            <Tabs.Panel value="pending">
-              {renderList(pending, "pending")}
-            </Tabs.Panel>
-            <Tabs.Panel value="approved">
-              {renderList(approved, "approved")}
-            </Tabs.Panel>
-            <Tabs.Panel value="rejected">
-              {renderList(rejected, "rejected")}
-            </Tabs.Panel>
-          </ScrollArea>
-        </Tabs>
-      </Stack>
-    </Paper>
+      </Tabs>
+    </Stack>
   );
 }

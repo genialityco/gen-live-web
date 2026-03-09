@@ -1,19 +1,18 @@
 // src/components/live/StudioSidePanel.tsx
 import React from "react";
 import {
+  Accordion,
+  Box,
   Divider,
-  Group,
-  Paper,
   ScrollArea,
   Stack,
   Tabs,
   Text,
 } from "@mantine/core";
 import {
-  IconSettings,
-  IconPhoto,
-  IconMail,
-  IconUsers,
+  IconBroadcast,
+  IconLayout,
+  IconUsersGroup,
 } from "@tabler/icons-react";
 
 import { LiveConfigPanel } from "./LiveConfigPanel";
@@ -53,89 +52,36 @@ export const StudioSidePanel: React.FC<Props> = ({
   activeAudioId,
   presentationSlide,
 }) => {
-  const isSpeaker = role === "speaker";
+  if (role === "speaker") return null;
+
   return (
-    <Tabs defaultValue={isSpeaker ? "info" : "control"} keepMounted={false} style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+    <Tabs
+      defaultValue="stream"
+      keepMounted={false}
+      style={{ display: "flex", flexDirection: "column", height: "100%" }}
+    >
       <Tabs.List grow>
-        {!isSpeaker && (
-          <Tabs.Tab value="control" leftSection={<IconSettings size={15} />}>
-            Control
-          </Tabs.Tab>
-        )}
-        {!isSpeaker && (
-          <Tabs.Tab value="media" leftSection={<IconPhoto size={15} />}>
-            Biblioteca
-          </Tabs.Tab>
-        )}
-        {!isSpeaker && (
-          <Tabs.Tab value="invites" leftSection={<IconMail size={15} />}>
-            Invitaciones
-          </Tabs.Tab>
-        )}
-        {!isSpeaker && (
-          <Tabs.Tab value="requests" leftSection={<IconUsers size={15} />}>
-            Requests
-          </Tabs.Tab>
-        )}
+        <Tabs.Tab value="stream" leftSection={<IconBroadcast size={15} />}>
+          Transmisión
+        </Tabs.Tab>
+        <Tabs.Tab value="scene" leftSection={<IconLayout size={15} />}>
+          Escena
+        </Tabs.Tab>
+        <Tabs.Tab value="people" leftSection={<IconUsersGroup size={15} />}>
+          Personas
+        </Tabs.Tab>
       </Tabs.List>
 
-      <ScrollArea mt="md" style={{ flex: 1 }}>
-        {!isSpeaker && (
-          <Tabs.Panel value="control">
-            <Stack gap="md">
-              <LiveConfigPanel eventSlug={eventSlug} disabled={disabled} />
+      <ScrollArea mt="xs" style={{ flex: 1 }}>
 
-              <Paper p="sm" radius="md" withBorder>
-                <Stack gap="sm">
-                  <Group justify="space-between">
-                    <Text fw={600}>Marco grafico</Text>
-                    <Text size="xs" c="dimmed">
-                      {showFrame ? "Activo" : "Inactivo"}
-                    </Text>
-                  </Group>
+        {/* ── TRANSMISIÓN ─────────────────────────────────────────── */}
+        <Tabs.Panel value="stream">
+          <LiveConfigPanel eventSlug={eventSlug} disabled={disabled} defaultOpened />
+        </Tabs.Panel>
 
-                  <FrameControls
-                    eventSlug={eventSlug}
-                    showFrame={showFrame}
-                    frameUrl={frameUrl}
-                    onUpdate={onRefreshFrameConfig}
-                  />
-                </Stack>
-              </Paper>
-
-              <Paper p="sm" radius="md" withBorder>
-                <BackgroundControls
-                  eventSlug={eventSlug}
-                  backgroundUrl={backgroundUrl}
-                  backgroundType={backgroundType}
-                  onUpdate={onRefreshFrameConfig}
-                  disabled={disabled}
-                />
-              </Paper>
-
-              <Paper p="sm" radius="md" withBorder>
-                <Stack gap="sm">
-                  <Group justify="space-between">
-                    <Text fw={600}>Apariencia de participantes</Text>
-                  </Group>
-                  <TileAppearancePanel eventSlug={eventSlug} disabled={disabled} />
-                </Stack>
-              </Paper>
-
-              <Paper p="sm" radius="md" withBorder>
-                <Stack gap="sm">
-                  <Divider />
-                  <Text size="xs" c="dimmed">
-                    Tip: el monitor muestra solo los que estan en escena.
-                  </Text>
-                </Stack>
-              </Paper>
-            </Stack>
-          </Tabs.Panel>
-        )}
-
-        {!isSpeaker && (
-          <Tabs.Panel value="media">
+        {/* ── ESCENA ──────────────────────────────────────────────── */}
+        <Tabs.Panel value="scene">
+          <Stack gap="sm">
             <MediaLibrary
               eventSlug={eventSlug}
               activeVisualId={activeVisualId}
@@ -144,20 +90,83 @@ export const StudioSidePanel: React.FC<Props> = ({
               disabled={disabled}
               presentationSlide={presentationSlide}
             />
-          </Tabs.Panel>
-        )}
 
-        {!isSpeaker && (
-          <Tabs.Panel value="invites">
+            <Divider label="Overlays" labelPosition="center" />
+
+            <Accordion variant="contained" radius="md" chevronPosition="right">
+
+              <Accordion.Item value="frame">
+                <Accordion.Control>
+                  <Box>
+                    <Text size="sm" fw={600}>Marco gráfico</Text>
+                    <Text size="xs" c="dimmed">
+                      {frameUrl
+                        ? showFrame ? "Activo" : "Cargado · inactivo"
+                        : "Sin imagen"}
+                    </Text>
+                  </Box>
+                </Accordion.Control>
+                <Accordion.Panel>
+                  <FrameControls
+                    eventSlug={eventSlug}
+                    showFrame={showFrame}
+                    frameUrl={frameUrl}
+                    onUpdate={onRefreshFrameConfig}
+                  />
+                </Accordion.Panel>
+              </Accordion.Item>
+
+              <Accordion.Item value="background">
+                <Accordion.Control>
+                  <Box>
+                    <Text size="sm" fw={600}>Fondo del live</Text>
+                    <Text size="xs" c="dimmed">
+                      {backgroundUrl ? "Cargado" : "Sin fondo"}
+                    </Text>
+                  </Box>
+                </Accordion.Control>
+                <Accordion.Panel>
+                  <BackgroundControls
+                    eventSlug={eventSlug}
+                    backgroundUrl={backgroundUrl}
+                    backgroundType={backgroundType}
+                    onUpdate={onRefreshFrameConfig}
+                    disabled={disabled}
+                  />
+                </Accordion.Panel>
+              </Accordion.Item>
+
+            </Accordion>
+          </Stack>
+        </Tabs.Panel>
+
+        {/* ── PERSONAS ────────────────────────────────────────────── */}
+        <Tabs.Panel value="people">
+          <Stack gap="sm">
+
             <InvitationManager eventSlug={eventSlug} disabled={disabled} />
-          </Tabs.Panel>
-        )}
 
-        {!isSpeaker && (
-          <Tabs.Panel value="requests">
+            <Divider />
+
             <JoinRequestsPanel eventSlug={eventSlug} />
-          </Tabs.Panel>
-        )}
+
+            <Accordion variant="contained" radius="md">
+              <Accordion.Item value="appearance">
+                <Accordion.Control>
+                  <Box>
+                    <Text size="sm" fw={600}>Apariencia de participantes</Text>
+                    <Text size="xs" c="dimmed">Nombre y subtítulo en tiles</Text>
+                  </Box>
+                </Accordion.Control>
+                <Accordion.Panel>
+                  <TileAppearancePanel eventSlug={eventSlug} disabled={disabled} />
+                </Accordion.Panel>
+              </Accordion.Item>
+            </Accordion>
+
+          </Stack>
+        </Tabs.Panel>
+
       </ScrollArea>
     </Tabs>
   );

@@ -26,6 +26,7 @@ import { type Org } from "../../api/orgs";
 import { type EventItem } from "../../api/events";
 import { api } from "../../core/api";
 import type { RegistrationForm } from "../../types";
+import { getCountryByCode } from "../../data/form-catalogs";
 
 interface EventAdminAttendeesProps {
   org: Org;
@@ -192,9 +193,16 @@ export default function EventAdminAttendees({
     if (typeof value === "boolean") return value ? "✓ Sí" : "✗ No";
 
     const field = registrationForm?.fields.find((f) => f.id === fieldId);
-    if (field?.type === "select" && field.options) {
-      const option = field.options.find((opt) => opt.value === value);
-      if (option) return option.label;
+    if (field?.type === "select") {
+      if (field.options && field.options.length > 0) {
+        const option = field.options.find((opt) => opt.value === value);
+        if (option) return option.label;
+      } else {
+        // Campo sin opciones estáticas (país, estado, ciudad dinámicos).
+        // Intentar resolver como código ISO de país.
+        const country = getCountryByCode(String(value));
+        if (country) return country.name;
+      }
     }
 
     return String(value);

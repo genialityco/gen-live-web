@@ -42,9 +42,10 @@ import {
   ActionIcon,
   Indicator,
   Divider,
-  SegmentedControl,
+  Switch,
+  Collapse,
 } from "@mantine/core";
-import { useMediaQuery } from "@mantine/hooks";
+import { useMediaQuery, useDisclosure } from "@mantine/hooks";
 import {
   IconAlertTriangle,
   IconMessageCircle,
@@ -64,7 +65,7 @@ import {
   setEgressState,
   type ProgramMode,
 } from "../../api/live-stage-service";
-import { StudioToolbar } from "./StudioToolbar";
+import { StudioToolbar, LayoutPicker } from "./StudioToolbar";
 import { StudioSidePanel } from "./StudioSidePanel";
 import { VirtualBackgroundControl } from "./VirtualBackgroundControl";
 import { DeviceSelectorPanel } from "./DeviceSelectorPanel";
@@ -299,6 +300,9 @@ export const StudioView: React.FC<StudioViewProps> = ({
 
   const [chatOpen, setChatOpen] = useState(false);
   const [unread, setUnread] = useState(0);
+
+  // Virtual background collapse
+  const [vbgOpen, { toggle: toggleVbg }] = useDisclosure(false);
 
   // Mobile tab state
   const [mobileTab, setMobileTab] = useState<MobileTab>("monitor");
@@ -799,12 +803,8 @@ export const StudioView: React.FC<StudioViewProps> = ({
                   isBusy={isBusy}
                   egressStatus={egressStatus}
                   stage={stage}
-                  showFrame={showFrame}
-                  onToggleFrame={setShowFrame}
                   onStart={handleStartTransmission}
                   onStop={handleStopTransmission}
-                  layoutMode={stage.layoutMode}
-                  onLayoutMode={handleLayoutModeChange}
                   onMode={handleSetMode}
                   compact={!!isMobile}
                 />
@@ -899,17 +899,9 @@ export const StudioView: React.FC<StudioViewProps> = ({
                         }}
                       >
                         {role === "host" && (
-                          <SegmentedControl
-                            size="xs"
+                          <LayoutPicker
                             value={stage.layoutMode}
-                            onChange={(v) => handleLayoutModeChange(v as LayoutMode)}
-                            data={[
-                              { label: "Grid", value: "grid" },
-                              { label: "Speaker", value: "speaker" },
-                              { label: "Pres", value: "presentation" },
-                              { label: "PiP", value: "pip" },
-                              { label: "2-Up", value: "side_by_side" },
-                            ]}
+                            onChange={handleLayoutModeChange}
                           />
                         )}
                         <ControlBar variation="minimal" />
@@ -1033,7 +1025,7 @@ export const StudioView: React.FC<StudioViewProps> = ({
                   style={{
                     display: "grid",
                     gridTemplateColumns:
-                      role === "host" && !isNarrow ? "minmax(0, 1fr) 500px" : "1fr",
+                      role === "host" && !isNarrow ? "minmax(0, 3fr) minmax(380px, 2fr)" : "1fr",
                     gap: 16,
                     alignItems: "start",
                   }}
@@ -1082,19 +1074,50 @@ export const StudioView: React.FC<StudioViewProps> = ({
                       />
                     </LayoutContextProvider>
 
+                    {/* Layout picker + Marco — debajo del monitor, siempre visible */}
+                    {role === "host" && (
+                      <Paper p="xs" withBorder radius="md">
+                        <Group justify="space-between" align="center" wrap="nowrap">
+                          <LayoutPicker
+                            value={stage.layoutMode}
+                            onChange={handleLayoutModeChange}
+                          />
+                          <Switch
+                            checked={showFrame}
+                            onChange={(e) => setShowFrame(e.currentTarget.checked)}
+                            label="Marco"
+                            size="sm"
+                          />
+                        </Group>
+                      </Paper>
+                    )}
+
                     {/* A/V controls agrupados */}
                     <Paper p="sm" withBorder radius="md">
                       <Stack gap="sm">
-                        <Text size="xs" fw={600} c="dimmed" tt="uppercase">
-                          Dispositivos y cámara
-                        </Text>
+                        <Group justify="space-between" align="center">
+                          <Text size="xs" fw={600} c="dimmed" tt="uppercase">
+                            Dispositivos y cámara
+                          </Text>
+                          <Button
+                            size="xs"
+                            variant="subtle"
+                            color="gray"
+                            onClick={toggleVbg}
+                            rightSection={<Text size="xs">{vbgOpen ? "▲" : "▼"}</Text>}
+                          >
+                            Fondo virtual
+                          </Button>
+                        </Group>
                         <Box style={{ display: "flex", justifyContent: "center" }}>
                           <ControlBar variation="minimal" />
                         </Box>
                         <Divider />
                         <DeviceSelectorPanel />
-                        <Divider />
-                        <VirtualBackgroundControl eventSlug={eventSlug} disabled={isBusy} />
+                        <Collapse in={vbgOpen}>
+                          <Divider mb="sm" />
+                          <VirtualBackgroundControl eventSlug={eventSlug} disabled={isBusy} />
+                        </Collapse>
                       </Stack>
                     </Paper>
 

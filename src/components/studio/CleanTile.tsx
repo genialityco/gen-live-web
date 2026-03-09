@@ -23,15 +23,17 @@ export function CleanTile({ trackRef, nameTagSize = "md", accentColor, nameTagSt
       </TrackRefContext.Provider>
 
       {!isScreenShare && (
-        <NameTag
-          trackRef={trackRef}
-          size={nameTagSize}
-          accentColor={nameTagStyle?.accentColor ?? accentColor}
-          bgColor={nameTagStyle?.bgColor}
-          textColor={nameTagStyle?.textColor}
-          fontFamily={nameTagStyle?.fontFamily}
-          tileAppearance={tileAppearance}
-        />
+        <Box style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 2 }}>
+          <NameTag
+            trackRef={trackRef}
+            size={nameTagSize}
+            accentColor={nameTagStyle?.accentColor ?? accentColor}
+            bgColor={nameTagStyle?.bgColor}
+            textColor={nameTagStyle?.textColor}
+            fontFamily={nameTagStyle?.fontFamily}
+            tileAppearance={tileAppearance}
+          />
+        </Box>
       )}
     </Box>
   );

@@ -551,17 +551,36 @@ export function LiveMonitor({
         <Box style={{ position: "absolute", inset: 0, zIndex: 1 }}>
           {(() => {
             switch (effectiveMode) {
-              case "grid":
+              case "grid": {
+                const totalGridTiles =
+                  stageTracks.length + (showPdfAsTile ? 1 : 0);
+                const gridCols =
+                  totalGridTiles <= 1
+                    ? 1
+                    : totalGridTiles <= 2
+                    ? 2
+                    : totalGridTiles <= 4
+                    ? 2
+                    : totalGridTiles <= 9
+                    ? 3
+                    : totalGridTiles <= 12
+                    ? 4
+                    : totalGridTiles <= 16
+                    ? 4
+                    : 5;
+                const gridRows = Math.ceil(totalGridTiles / gridCols);
+                const gridGap = totalGridTiles > 9 ? 4 : 6;
+                const gridPad = totalGridTiles > 9 ? 4 : 6;
                 return (
                   <Box
                     style={{
                       width: "100%",
                       height: "100%",
                       display: "grid",
-                      gridTemplateColumns:
-                        "repeat(auto-fit, minmax(260px, 1fr))",
-                      gap: 10,
-                      padding: 10,
+                      gridTemplateColumns: `repeat(${gridCols}, 1fr)`,
+                      gridTemplateRows: `repeat(${gridRows}, 1fr)`,
+                      gap: gridGap,
+                      padding: gridPad,
                     }}
                   >
                     {/* PDF como primera tile en el grid */}
@@ -570,9 +589,10 @@ export function LiveMonitor({
                         style={{
                           position: "relative",
                           width: "100%",
-                          aspectRatio: "16 / 9",
+                          height: "100%",
+                          minWidth: 0,
                           overflow: "hidden",
-                          borderRadius: 12,
+                          borderRadius: 8,
                           background: "#fff",
                         }}
                       >
@@ -590,9 +610,10 @@ export function LiveMonitor({
                         style={{
                           position: "relative",
                           width: "100%",
-                          aspectRatio: "16 / 9",
+                          height: "100%",
+                          minWidth: 0,
                           overflow: "hidden",
-                          borderRadius: 12,
+                          borderRadius: 8,
                           background: "#111",
                         }}
                       >
@@ -600,11 +621,13 @@ export function LiveMonitor({
                           trackRef={t as TrackReference}
                           nameTagStyle={nameTags[t.participant?.identity ?? ""]}
                           tileAppearance={tileAppearance}
+                          nameTagSize={totalGridTiles > 6 ? "sm" : "md"}
                         />
                       </Box>
                     ))}
                   </Box>
                 );
+              }
 
               case "speaker":
                 // PDF como foco principal; participantes en strip inferior
@@ -634,33 +657,35 @@ export function LiveMonitor({
                     </Box>
                   );
                 }
-                return focus ? (
-                  <Box
-                    style={{
-                      width: "100%",
-                      height: "100%",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                    }}
-                  >
-                    <Box
-                      style={{
-                        width: "100%",
-                        maxWidth: "100%",
-                        aspectRatio: "16/9",
-                        maxHeight: "100%",
-                        position: "relative",
-                      }}
-                    >
-                      <CleanTile
-                        trackRef={focus as TrackReference}
-                        nameTagStyle={nameTags[focus.participant?.identity ?? ""]}
-                        tileAppearance={tileAppearance}
-                      />
+                if (focus) {
+                  const otherSpeakers = stageTracks.filter((t) => t !== focus);
+                  return (
+                    <Box style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column" }}>
+                      <Box style={{ flex: 1, minHeight: 0, position: "relative", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                        <Box style={{ width: "100%", maxWidth: "100%", aspectRatio: "16/9", maxHeight: "100%", position: "relative" }}>
+                          <CleanTile
+                            trackRef={focus as TrackReference}
+                            nameTagStyle={nameTags[focus.participant?.identity ?? ""]}
+                            tileAppearance={tileAppearance}
+                          />
+                        </Box>
+                      </Box>
+                      {otherSpeakers.length > 0 && (
+                        <Box style={{ height: 110, flexShrink: 0, display: "flex", gap: 6, padding: "4px 8px", background: "#111", overflowX: "auto" }}>
+                          {otherSpeakers.map((t) => (
+                            <Box
+                              key={`${t.participant?.identity}-${t.source}`}
+                              style={{ height: "100%", aspectRatio: "16/9", flexShrink: 0, position: "relative", borderRadius: 8, overflow: "hidden", background: "#222" }}
+                            >
+                              <CleanTile trackRef={t as TrackReference} nameTagSize="sm" nameTagStyle={nameTags[t.participant?.identity ?? ""]} tileAppearance={tileAppearance} />
+                            </Box>
+                          ))}
+                        </Box>
+                      )}
                     </Box>
-                  </Box>
-                ) : (
+                  );
+                }
+                return (
                   <Center h="100%">
                     <Text c="dimmed">Nadie en escena</Text>
                   </Center>
@@ -834,10 +859,14 @@ export function LiveMonitor({
                     <Box
                       style={{
                         position: "absolute",
-                        bottom: 36,
-                        left: 36,
+                        bottom: 16,
+                        left: 12,
+                        right: 12,
                         display: "flex",
-                        gap: 8,
+                        gap: 6,
+                        overflowX: "auto",
+                        overflowY: "hidden",
+                        maxHeight: 100,
                       }}
                     >
                       {stageTracks
@@ -846,31 +875,21 @@ export function LiveMonitor({
                           <Box
                             key={t.participant?.identity}
                             style={{
-                              width: 150,
-                              height: 92,
+                              width: 140,
+                              height: 86,
+                              flexShrink: 0,
                               background: "#222",
                               borderRadius: 8,
                               overflow: "hidden",
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "center",
+                              position: "relative",
                             }}
                           >
-                            <Box
-                              style={{
-                                width: "100%",
-                                height: "100%",
-                                aspectRatio: "16/9",
-                                position: "relative",
-                              }}
-                            >
-                              <CleanTile
-                                trackRef={t as TrackReference}
-                                nameTagSize="sm"
-                                nameTagStyle={nameTags[t.participant?.identity ?? ""]}
-                                tileAppearance={tileAppearance}
-                              />
-                            </Box>
+                            <CleanTile
+                              trackRef={t as TrackReference}
+                              nameTagSize="sm"
+                              nameTagStyle={nameTags[t.participant?.identity ?? ""]}
+                              tileAppearance={tileAppearance}
+                            />
                           </Box>
                         ))}
                     </Box>
@@ -996,6 +1015,32 @@ export function LiveMonitor({
                   </Center>
                 );
               }
+
+              case "solo":
+                // Speaker pineado (o PDF) a pantalla completa, sin miniaturas
+                if (showPdfAsTile) {
+                  return (
+                    <PdfTile
+                      url={visualUrl}
+                      slide={presentationSlide}
+                      mimeType={presentationMimeType}
+                      slides={presentationSlides}
+                    />
+                  );
+                }
+                return focus ? (
+                  <Box style={{ width: "100%", height: "100%", position: "relative" }}>
+                    <CleanTile
+                      trackRef={focus as TrackReference}
+                      nameTagStyle={nameTags[focus.participant?.identity ?? ""]}
+                      tileAppearance={tileAppearance}
+                    />
+                  </Box>
+                ) : (
+                  <Center h="100%">
+                    <Text c="dimmed">Nadie en escena</Text>
+                  </Center>
+                );
 
               default:
                 return showPdfAsTile ? (
