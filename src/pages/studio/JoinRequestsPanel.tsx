@@ -9,6 +9,7 @@ import {
   Text,
   ActionIcon,
   Tooltip,
+  Paper,
 } from "@mantine/core";
 import { IconX } from "@tabler/icons-react";
 import {
