@@ -9,6 +9,7 @@ import {
   Title,
   Text,
   Button,
+  ActionIcon,
   Card,
   Group,
   Loader,
@@ -358,6 +359,7 @@ export default function EventAttendGcore() {
   const [timeLeft, setTimeLeft] = useState<string>("");
 
   const mobileLive = isMobile && status === "live";
+  const mobileStream = isMobile && (status === "live" || status === "replay");
   const chatHeight = mobileLive ? "clamp(260px, calc(100svh - 370px), 420px)" : isMobile ? 360 : 520;
 
   const isOwner = !!(user && org && org.ownerUid === user.uid);
@@ -713,7 +715,9 @@ export default function EventAttendGcore() {
         style={{
           ...cssVars(brand),
           ...pageBackground(brand),
-          minHeight: "100vh",
+          ...(mobileStream
+            ? { height: "100svh", display: "flex", flexDirection: "column", overflow: "hidden" }
+            : { minHeight: "100vh" }),
         }}
         c="var(--text-color)"
       >
@@ -778,6 +782,205 @@ export default function EventAttendGcore() {
 
         {/* CONTENIDO PRINCIPAL */}
         {!contentLoading && !error && org && finalEvent && (
+          mobileStream ? (
+            /* ── Twitch / Kick-style mobile layout ── */
+            <Box style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+              {/* Video — ancho completo, sin padding */}
+              <Box style={{ flexShrink: 0, background: "#000", width: "100%" }}>
+                <Box style={{ position: "relative", width: "100%", paddingTop: "56.25%" }}>
+                  {status === "live" ? (
+                    <Box style={{ position: "absolute", inset: 0 }}>
+                      {mode === "studio" && speakerToken ? (
+                        <LiveKitRoom
+                          token={speakerToken}
+                          serverUrl={LIVEKIT_WS_URL}
+                          connect
+                          video
+                          audio
+                          style={{ height: "100%" }}
+                          data-lk-theme="default"
+                        >
+                          <Stack p="md" style={{ height: "100%" }}>
+                            <SpeakerPreview />
+                            <ControlBar />
+                            <RoomAudioRenderer />
+                          </Stack>
+                        </LiveKitRoom>
+                      ) : playbackUrl ? (
+                        playbackUrl.includes(".m3u8") ? (
+                          <ViewerHlsPlayer src={playbackUrl} />
+                        ) : (
+                          <iframe
+                            src={playbackUrl}
+                            style={{ width: "100%", height: "100%", border: 0 }}
+                            allow="autoplay; fullscreen; picture-in-picture"
+                            allowFullScreen
+                          />
+                        )
+                      ) : (
+                        <Center h="100%">
+                          <Stack align="center" gap="xs">
+                            <Loader />
+                            <Text c="dimmed" size="sm">Cargando transmisión…</Text>
+                          </Stack>
+                        </Center>
+                      )}
+                    </Box>
+                  ) : status === "replay" &&
+                    finalEvent.stream &&
+                    "url" in finalEvent.stream &&
+                    finalEvent.stream.url ? (
+                    <Box style={{ position: "absolute", inset: 0 }}>
+                      {finalEvent.stream.url.includes(".m3u8") ? (
+                        <VodHlsPlayer src={finalEvent.stream.url} />
+                      ) : (
+                        <iframe
+                          src={finalEvent.stream.url}
+                          style={{ width: "100%", height: "100%", border: "none" }}
+                          title="Repetición del evento"
+                          frameBorder={0}
+                          allow="autoplay; fullscreen; picture-in-picture"
+                          allowFullScreen
+                        />
+                      )}
+                    </Box>
+                  ) : (
+                    <Box style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "#111" }}>
+                      <Text c="dimmed" size="sm">No hay transmisión disponible</Text>
+                    </Box>
+                  )}
+                </Box>
+              </Box>
+
+              {/* Barra compacta: título + estado */}
+              <Box
+                px="sm"
+                py={6}
+                style={{
+                  flexShrink: 0,
+                  background: "rgba(255,255,255,0.97)",
+                  borderBottom: "1px solid var(--mantine-color-gray-2)",
+                }}
+              >
+                <Group justify="space-between" align="center" gap="xs" wrap="nowrap">
+                  <Text fw={700} size="sm" truncate style={{ flex: 1, minWidth: 0 }}>
+                    {finalEvent.title}
+                  </Text>
+                  <Badge
+                    color={getStatusColor(status)}
+                    variant={status === "live" ? "filled" : "light"}
+                    size="sm"
+                    leftSection={status === "live" ? <IconCircleDot size={10} /> : undefined}
+                    style={{ flexShrink: 0 }}
+                  >
+                    {getStatusText(status)}
+                  </Badge>
+                  {status === "live" && mode !== "studio" && (
+                    <ActionIcon
+                      size="sm"
+                      variant={joinState === "pending" ? "filled" : "light"}
+                      color={joinState === "rejected" ? "gray" : "brand"}
+                      onClick={handleJoinRequest}
+                      disabled={!canRequestJoin}
+                      title={
+                        joinState === "pending"
+                          ? "Solicitud enviada…"
+                          : joinState === "rejected"
+                          ? "No aprobado"
+                          : "Solicitar intervención"
+                      }
+                      style={{ flexShrink: 0 }}
+                    >
+                      <IconMicrophone2 size={13} />
+                    </ActionIcon>
+                  )}
+                  {isOwner && slug && eventSlug && (
+                    <Button
+                      component={Link}
+                      to={`/org/${slug}/event/${eventSlug}/admin`}
+                      size="xs"
+                      variant="subtle"
+                      leftSection={<IconSettings size={12} />}
+                      px={6}
+                      style={{ flexShrink: 0 }}
+                    >
+                      Control
+                    </Button>
+                  )}
+                </Group>
+                {status === "live" && joinMessage && (
+                  <Text size="xs" c="dimmed" mt={2}>{joinMessage}</Text>
+                )}
+              </Box>
+
+              {/* Chat — ocupa el espacio restante */}
+              {event?._id ? (
+                <Box
+                  style={{
+                    flex: 1,
+                    minHeight: 0,
+                    display: "flex",
+                    flexDirection: "column",
+                    background: "white",
+                    overflow: "hidden",
+                  }}
+                >
+                  <Tabs
+                    defaultValue="chat"
+                    keepMounted={false}
+                    style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}
+                    styles={{ panel: { flex: 1, minHeight: 0, overflow: "hidden" } }}
+                  >
+                    <Tabs.List grow px="sm" pt={4}>
+                      <Tabs.Tab value="chat">Chat</Tabs.Tab>
+                      <Tabs.Tab value="questions">Preguntas</Tabs.Tab>
+                    </Tabs.List>
+                    <Tabs.Panel value="chat" style={{ flex: 1, minHeight: 0, overflow: "hidden" }}>
+                      <iframe
+                        key="chat-mobile"
+                        src={`https://chat-geniality.netlify.app?${new URLSearchParams({
+                          nombre: effectiveChatName,
+                          chatid: event._id,
+                          iduser: "",
+                          eventid: event._id,
+                          view: "chat",
+                          message_highlighted: "",
+                        }).toString()}`}
+                        width="100%"
+                        height="100%"
+                        style={{ border: "none", display: "block" }}
+                        title="Chat en directo"
+                        sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+                      />
+                    </Tabs.Panel>
+                    <Tabs.Panel value="questions" style={{ flex: 1, minHeight: 0, overflow: "hidden" }}>
+                      <iframe
+                        key="questions-mobile"
+                        src={`https://chat-geniality.netlify.app?${new URLSearchParams({
+                          nombre: effectiveChatName,
+                          chatid: event._id,
+                          iduser: "",
+                          eventid: event._id,
+                          view: "questions",
+                          message_highlighted: "",
+                        }).toString()}`}
+                        width="100%"
+                        height="100%"
+                        style={{ border: "none", display: "block" }}
+                        title="Preguntas"
+                        sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+                      />
+                    </Tabs.Panel>
+                  </Tabs>
+                </Box>
+              ) : (
+                <Box style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <Text size="sm" c="dimmed">Cargando chat…</Text>
+                </Box>
+              )}
+
+            </Box>
+          ) : (
           <Container
             size="xl"
             py={mobileLive ? "xs" : isMobile ? "lg" : "xl"}
@@ -1203,6 +1406,7 @@ export default function EventAttendGcore() {
               </Grid>
             </Stack>
           </Container>
+          )
         )}
 
         {/* CTA fijo en móvil */}
