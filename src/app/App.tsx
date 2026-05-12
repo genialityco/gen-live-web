@@ -18,6 +18,21 @@ import { ref as r, onValue } from "firebase/database";
 const EMERGENCY_URL =
   "https://gen-live-web.netlify.app/org/reddeexpertosdmace.com/event/respondiendo-desafio-diabete-2025";
 
+const DOMAIN_REDIRECTS: Record<string, string> = {
+  "reddeexpertosdmace.com": "/org/reddeexpertosdmacecom",
+  "www.reddeexpertosdmace.com": "/org/reddeexpertosdmacecom",
+  "endocrinocampusace.com": "/org/endocrinocampusace/event/metas-teoria-paciente",
+  "www.endocrinocampusace.com": "/org/endocrinocampusace/event/metas-teoria-paciente",
+  "eventosolara.com": "/org/evento-solara/event/enfermedades-raras-latam",
+  "www.eventosolara.com": "/org/evento-solara/event/enfermedades-raras-latam",
+  "endocrinocampus.com": "/org/endocrinocampus/event/novonordiskmarzo2026",
+  "www.endocrinocampus.com": "/org/endocrinocampus/event/novonordiskmarzo2026",
+  "ace-lipidxperience.com": "/org/procaps",
+  "www.ace-lipidxperience.com": "/org/procaps",
+  "campusaceendocrino.com": "/org/campusaceendocrino-com",
+  "www.campusaceendocrino.com": "/org/campusaceendocrino-com",
+};
+
 // Define estilos globales para notificaciones usando el tema de Mantine
 const theme = createTheme({
   components: {
@@ -67,6 +82,15 @@ const theme = createTheme({
 });
 
 export default function App() {
+  // Redirección por dominio personalizado
+  useEffect(() => {
+    const hostname = window.location.hostname;
+    const targetPath = DOMAIN_REDIRECTS[hostname];
+    if (targetPath && window.location.pathname === "/") {
+      window.location.replace(targetPath);
+    }
+  }, []);
+
   // 🔴 Kill switch global
   useEffect(() => {
     // Si quieres que SOLO aplique en producción:
