@@ -58,7 +58,11 @@ export const getColombianStates = (): IState[] => {
 // Helper: Obtener código telefónico por país
 export function getDialCodeByCountry(countryCode: string): string {
   const country = Country.getCountryByCode(countryCode);
-  return country?.phonecode || "";
+  const raw = country?.phonecode || "";
+  // Algunos países tienen múltiples códigos (ej: "1-809 and 1-829" para DO)
+  // Tomamos solo el primero y eliminamos el "+" inicial si ya viene incluido
+  const first = raw.split(/\s+and\s+/i)[0].trim().replace(/^\+/, "");
+  return first;
 }
 
 // Helper: Obtener estado/departamento de una ciudad

@@ -23,6 +23,7 @@ import { IconEye, IconUpload, IconDownload } from "@tabler/icons-react";
 import { api } from "../../core/api";
 import type { RegistrationForm } from "../../types";
 import ImportAttendeesModal from "./ImportAttendeesModal";
+import { getAllCountries } from "../../data/form-catalogs";
 
 export type OrgAttendee = {
   _id: string;
@@ -118,8 +119,23 @@ export default function OrgAttendeesManager({
     if (value === null || value === undefined) return "-";
     if (typeof value === "boolean") return value ? "✓ Sí" : "✗ No";
 
-    // Si es un campo select, intentar obtener el label de la opción
     const field = registrationForm?.fields.find((f) => f.id === fieldId);
+    const idLower = fieldId.toLowerCase();
+
+    // Campos de país dinámicos (options vacías, valor = ISO2 como "CO")
+    const isCountryField =
+      (idLower.includes("pais") || idLower.includes("country")) &&
+      !idLower.includes("codigo") &&
+      !idLower.includes("code");
+
+    if (isCountryField && typeof value === "string" && /^[A-Z]{2}$/i.test(value)) {
+      const country = getAllCountries().find(
+        (c) => c.isoCode.toUpperCase() === value.toUpperCase(),
+      );
+      if (country) return country.name;
+    }
+
+    // Campos select con opciones estáticas
     if (field?.type === "select" && field.options) {
       const option = field.options.find((opt) => opt.value === value);
       if (option) return option.label;
