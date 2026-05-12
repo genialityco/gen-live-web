@@ -832,19 +832,13 @@ export default function OrganizationLanding() {
         )}
 
         {/* PRÓXIMOS EVENTOS */}
-        <Container size="xl" my={40}>
-          <div ref={upcomingSectionRef}>
-            <Title order={2} size="h2" mb="md">
-              Próximos Eventos
-            </Title>
+        {upcomingEvents.length > 0 && (
+          <Container size="xl" my={40}>
+            <div ref={upcomingSectionRef}>
+              <Title order={2} size="h2" mb="md">
+                Próximos Eventos
+              </Title>
 
-            {upcomingEvents.length === 0 ? (
-              <Card withBorder p="xl">
-                <Text c="dimmed" ta="center">
-                  No hay eventos programados próximamente
-                </Text>
-              </Card>
-            ) : (
               <ScrollArea
                 type="auto"
                 scrollbarSize={8}
@@ -867,9 +861,9 @@ export default function OrganizationLanding() {
                   ))}
                 </Group>
               </ScrollArea>
-            )}
-          </div>
-        </Container>
+            </div>
+          </Container>
+        )}
 
         {pastEvents.length > 0 && (
           <Container size="xl" my={40}>
