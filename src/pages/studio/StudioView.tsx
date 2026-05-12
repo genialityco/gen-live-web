@@ -11,7 +11,7 @@ import {
   updateLiveConfig,
   renameParticipant,
 } from "../../api/livekit-service";
-import { getEffectiveMediaConfig } from "../../api/media-library-service";
+import { getEffectiveMediaConfig, deactivateMedia } from "../../api/media-library-service";
 import {
   LiveKitRoom,
   ControlBar,
@@ -869,6 +869,8 @@ export const StudioView: React.FC<StudioViewProps> = ({
                         backgroundColor={backgroundColor}
                         mediaType={mediaType}
                         mediaUrl={mediaUrl}
+                        onVisualEnded={() => void deactivateMedia(eventSlug, "visual")}
+                        onAudioEnded={() => void deactivateMedia(eventSlug, "audio")}
                         mediaMode={mediaMode}
                         mediaLoop={mediaLoop}
                         mediaMuted={mediaMuted}
@@ -1062,6 +1064,8 @@ export const StudioView: React.FC<StudioViewProps> = ({
                         backgroundColor={backgroundColor}
                         mediaType={mediaType}
                         mediaUrl={mediaUrl}
+                        onVisualEnded={() => void deactivateMedia(eventSlug, "visual")}
+                        onAudioEnded={() => void deactivateMedia(eventSlug, "audio")}
                         mediaMode={mediaMode}
                         mediaLoop={mediaLoop}
                         mediaMuted={mediaMuted}

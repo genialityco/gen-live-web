@@ -184,6 +184,9 @@ type Props = {
 
   /** Oculta controles de UI (ej: botón fullscreen) cuando se renderiza para egress */
   hideControls?: boolean;
+
+  onVisualEnded?: () => void;
+  onAudioEnded?: () => void;
 };
 
 export function LiveMonitor({
@@ -218,6 +221,8 @@ export function LiveMonitor({
   presentationSlide = 0,
   presentationSlides,
   presentationMimeType,
+  onVisualEnded,
+  onAudioEnded,
 }: Props) {
   const tracks = useTracks(
     [
@@ -408,6 +413,7 @@ export function LiveMonitor({
               muted={visualMuted ?? true}
               loop={visualLoop ?? false}
               controls={false}
+              onEnded={!visualLoop ? onVisualEnded : undefined}
               style={{
                 width: "100%",
                 height: "100%",
@@ -437,6 +443,7 @@ export function LiveMonitor({
           autoPlay
           muted={audioMuted ?? true}
           loop={audioLoop ?? false}
+          onEnded={!audioLoop ? onAudioEnded : undefined}
           style={{ display: "none" }}
         />
       )}

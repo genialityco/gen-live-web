@@ -253,14 +253,15 @@ export function MediaLibrary({
 
   // Click card => seleccionar para ver/editar config; si no está activo, activarlo
   const handleCardClick = async (item: MediaItem) => {
-    setSelectedItem(item);
-
     if (disabled) return;
 
-    if (!isItemActive(item)) {
+    if (isItemActive(item)) {
+      await handleDeactivateByItem(item);
+      setSelectedItem(null);
+    } else {
+      setSelectedItem(item);
       await handleActivate(item);
     }
-    // Si ya está activo, solo lo seleccionamos para editar su config en el panel inferior
   };
 
   const filteredItems = useMemo(() => {
@@ -506,7 +507,7 @@ export function MediaLibrary({
     </SimpleGrid>
   );
 
-  if (loading) {
+  if (loading && items.length === 0) {
     return (
       <Center h={200}>
         <Loader />

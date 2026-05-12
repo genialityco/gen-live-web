@@ -225,6 +225,16 @@ export async function deleteMedia(eventSlug: string) {
  * Cambia el nombre y/o subtítulo de un participante en la sala LiveKit en tiempo real.
  * El subtítulo queda en el metadata del participante y se propaga a todos los clientes.
  */
+export async function muteParticipantTrack(params: {
+  eventSlug: string;
+  identity: string;
+  trackSid: string;
+  muted: boolean;
+}): Promise<{ ok: boolean }> {
+  const { data } = await api.patch<{ ok: boolean }>('/livekit/participant/mute', params);
+  return data;
+}
+
 export async function renameParticipant(
   eventSlug: string,
   identity: string,

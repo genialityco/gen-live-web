@@ -16,6 +16,7 @@ import {
 import { useMemo, useState, useEffect, useRef } from "react";
 import { auth } from "../../core/firebase";
 import { kickSpeaker } from "../../api/live-join-service";
+import { muteParticipantTrack } from "../../api/livekit-service";
 import type { StageState } from "../../hooks/useStage";
 import type { ProgramMode, NameTagStyle } from "../../api/live-stage-service";
 import {
@@ -130,6 +131,17 @@ export function ParticipantsPanel({
     });
     return arr;
   }, [stageItems, stage.onStage]);
+
+  const handleMuteTrack = async (p: any, kind: "microphone" | "camera", muted: boolean) => {
+    const pub = p.getTrackPublication?.(kind);
+    const trackSid = pub?.trackSid;
+    if (!trackSid) return;
+    try {
+      await muteParticipantTrack({ eventSlug, identity: p.identity, trackSid, muted });
+    } catch (err) {
+      console.error("Error muteando track:", err);
+    }
+  };
 
   const handleKick = async (uid: string) => {
     setKicking(uid);
@@ -316,19 +328,29 @@ export function ParticipantsPanel({
                       }}
                     />
                     {micOn !== undefined && (
-                      <Tooltip label={micOn ? "Micrófono activo" : "Micrófono apagado"} fz="xs" withArrow>
-                        {micOn
-                          ? <IconMicrophone size={12} color="var(--mantine-color-green-4)" />
-                          : <IconMicrophoneOff size={12} color="var(--mantine-color-red-5)" />
-                        }
+                      <Tooltip label={micOn ? "Click: silenciar mic" : "Micrófono apagado"} fz="xs" withArrow>
+                        <Box
+                          style={{ display: "flex", alignItems: "center", cursor: !isSpeaker && !isMe && micOn ? "pointer" : "default" }}
+                          onClick={!isSpeaker && !isMe && micOn ? () => void handleMuteTrack(p, "microphone", true) : undefined}
+                        >
+                          {micOn
+                            ? <IconMicrophone size={12} color="var(--mantine-color-green-4)" />
+                            : <IconMicrophoneOff size={12} color="var(--mantine-color-red-5)" />
+                          }
+                        </Box>
                       </Tooltip>
                     )}
                     {camOn !== undefined && (
-                      <Tooltip label={camOn ? "Cámara activa" : "Cámara apagada"} fz="xs" withArrow>
-                        {camOn
-                          ? <IconVideo size={12} color="var(--mantine-color-green-4)" />
-                          : <IconVideoOff size={12} color="var(--mantine-color-red-5)" />
-                        }
+                      <Tooltip label={camOn ? "Click: apagar cámara" : "Cámara apagada"} fz="xs" withArrow>
+                        <Box
+                          style={{ display: "flex", alignItems: "center", cursor: !isSpeaker && !isMe && camOn ? "pointer" : "default" }}
+                          onClick={!isSpeaker && !isMe && camOn ? () => void handleMuteTrack(p, "camera", true) : undefined}
+                        >
+                          {camOn
+                            ? <IconVideo size={12} color="var(--mantine-color-green-4)" />
+                            : <IconVideoOff size={12} color="var(--mantine-color-red-5)" />
+                          }
+                        </Box>
                       </Tooltip>
                     )}
                   </Box>
