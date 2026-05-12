@@ -2,6 +2,89 @@
   command = "pnpm build"
   publish = "dist"
 
+[[redirects]]
+  from = "https://reddeexpertosdmace.com/"
+  to = "/org/reddeexpertosdmace.com"
+  status = 302
+  force = true
+
+[[redirects]]
+  from = "https://www.reddeexpertosdmace.com/"
+  to = "/org/reddeexpertosdmace.com"
+  status = 302
+  force = true
+
+[[redirects]]
+  from = "https://endocrinocampusace.com/"
+  to = "/org/endocrinocampusace/event/metas-teoria-paciente"
+  status = 302
+  force = true
+
+[[redirects]]
+  from = "https://www.endocrinocampusace.com/"
+  to = "/org/endocrinocampusace/event/metas-teoria-paciente"
+  status = 302
+  force = true
+
+[[redirects]]
+  from = "https://eventosolara.com/"
+  to = "/org/evento-solara/event/enfermedades-raras-latam"
+  status = 302
+  force = true
+
+[[redirects]]
+  from = "https://www.eventosolara.com/"
+  to = "/org/evento-solara/event/enfermedades-raras-latam"
+  status = 302
+  force = true
+
+[[redirects]]
+  from = "https://webinar.geniality.com.co/landing/66cf7fe12d2f192be304a946"
+  to = "https://gen-live-web.netlify.app/org/lab/event/impactacademy"
+  status = 302
+  force = true
+
+[[redirects]]
+  from = "https://endocrinocampus.com/"
+  to = "/org/endocrinocampus/event/novonordiskmarzo2026"
+  status = 302
+  force = true
+
+[[redirects]]
+  from = "https://www.endocrinocampus.com/"
+  to = "/org/endocrinocampus/event/novonordiskmarzo2026"
+  status = 302
+  force = true
+
+[[redirects]]
+  from = "https://ace-lipidxperience.com/"
+  to = "/org/procaps"
+  status = 302
+  force = true
+
+[[redirects]]
+  from = "https://www.ace-lipidxperience.com/"
+  to = "/org/procaps"
+  status = 302
+  force = true
+
+[[redirects]]
+  from = "https://campusaceendocrino.com/"
+  to = "/org/campusaceendocrino-com"
+  status = 302
+  force = true
+
+[[redirects]]
+  from = "https://www.campusaceendocrino.com/"
+  to = "/org/campusaceendocrino-com"
+  status = 302
+  force = true
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
 [[headers]]
   for = "/index.html"
   [headers.values]
