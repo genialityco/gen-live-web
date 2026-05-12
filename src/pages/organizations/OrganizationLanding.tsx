@@ -380,7 +380,8 @@ function NextEventSection({
       const minutes = Math.floor((diff % 3600000) / 60000);
       const seconds = Math.floor((diff % 60000) / 1000);
 
-      setTimeLeft(`${days}d ${hours}h ${minutes}m ${seconds}s`);
+      const pad = (n: number) => String(n).padStart(2, "0");
+      setTimeLeft(`${days}d ${pad(hours)}h ${pad(minutes)}m ${pad(seconds)}s`);
     };
 
     tick();
@@ -451,6 +452,7 @@ function NextEventSection({
                       border: "2px solid var(--mantine-color-brand-2)",
                       borderRadius: "var(--mantine-radius-md)",
                       textAlign: "center",
+                      whiteSpace: "nowrap",
                     }}
                   >
                     <Text size="xs" tt="uppercase" fw={700} mb={4} c="white">
@@ -461,6 +463,7 @@ function NextEventSection({
                       style={{
                         fontSize: "1.3rem",
                         fontVariantNumeric: "tabular-nums",
+                        whiteSpace: "nowrap",
                       }}
                       c="white"
                     >

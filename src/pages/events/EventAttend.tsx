@@ -426,9 +426,10 @@ export default function EventAttend() {
       const minutes = Math.floor((diff % 3600000) / 60000);
       const seconds = Math.floor((diff % 60000) / 1000);
 
+      const pad = (n: number) => String(n).padStart(2, "0");
       const parts: string[] = [];
       if (days > 0) parts.push(`${days}d`);
-      parts.push(`${hours}h`, `${minutes}m`, `${seconds}s`);
+      parts.push(`${pad(hours)}h`, `${pad(minutes)}m`, `${pad(seconds)}s`);
 
       setTimeLeft(parts.join(" "));
     };
@@ -676,9 +677,10 @@ export default function EventAttend() {
                                   backgroundColor:
                                     "var(--mantine-color-gray-0)",
                                   fontVariantNumeric: "tabular-nums",
+                                  whiteSpace: "nowrap",
                                 }}
                               >
-                                <Text size="lg" fw={700}>
+                                <Text size="lg" fw={700} style={{ whiteSpace: "nowrap" }}>
                                   Comienza en {timeLeft}
                                 </Text>
                               </Box>
