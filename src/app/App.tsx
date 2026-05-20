@@ -18,6 +18,8 @@ import { ref as r, onValue } from "firebase/database";
 const EMERGENCY_URL =
   "https://gen-live-web.netlify.app/org/reddeexpertosdmace.com/event/respondiendo-desafio-diabete-2025";
 
+const CACHE_VERSION = "may2025";
+
 const DOMAIN_REDIRECTS: Record<string, string> = {
   "reddeexpertosdmace.com": "/org/reddeexpertosdmacecom",
   "www.reddeexpertosdmace.com": "/org/reddeexpertosdmacecom",
@@ -82,12 +84,36 @@ const theme = createTheme({
 });
 
 export default function App() {
+  // Limpieza de caché cuando llega ?v=may2025
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const v = params.get("v");
+    if (v && v !== localStorage.getItem("_app_version")) {
+      localStorage.removeItem("last-registered-email");
+      localStorage.removeItem("user-email");
+      // Limpiar cookies de sesión (no las de auth de Firebase)
+      document.cookie.split(";").forEach((c) => {
+        const key = c.split("=")[0].trim();
+        if (!key.startsWith("firebase") && !key.startsWith("__session")) {
+          document.cookie = `${key}=;expires=${new Date(0).toUTCString()};path=/`;
+        }
+      });
+      localStorage.setItem("_app_version", v);
+      // Quitar el param de la URL sin recargar
+      params.delete("v");
+      const clean = params.toString()
+        ? `${window.location.pathname}?${params.toString()}`
+        : window.location.pathname;
+      window.history.replaceState({}, "", clean);
+    }
+  }, []);
+
   // Redirección por dominio personalizado
   useEffect(() => {
     const hostname = window.location.hostname;
     const targetPath = DOMAIN_REDIRECTS[hostname];
     if (targetPath && window.location.pathname === "/") {
-      window.location.replace(targetPath);
+      window.location.replace(`${targetPath}?v=${CACHE_VERSION}`);
     }
   }, []);
 

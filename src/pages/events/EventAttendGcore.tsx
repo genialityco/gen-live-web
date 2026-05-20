@@ -96,14 +96,15 @@ const DEFAULTS = {
   text: "#0F172A",
 };
 
-function resolveBrandingColors(org?: Org | null) {
-  const c = org?.branding?.colors || ({} as any);
+function resolveBrandingColors(org?: Org | null, event?: EventItem | null) {
+  const o = org?.branding?.colors || ({} as any);
+  const e = (event as any)?.branding?.colors || ({} as any);
   return {
-    primary: c.primary || DEFAULTS.primary,
-    secondary: c.secondary || DEFAULTS.secondary,
-    accent: c.accent || DEFAULTS.accent,
-    background: c.background || DEFAULTS.background,
-    text: c.text || DEFAULTS.text,
+    primary:    e.primary    || o.primary    || DEFAULTS.primary,
+    secondary:  e.secondary  || o.secondary  || DEFAULTS.secondary,
+    accent:     e.accent     || o.accent     || DEFAULTS.accent,
+    background: e.background || o.background || DEFAULTS.background,
+    text:       e.text       || o.text       || DEFAULTS.text,
   };
 }
 
@@ -138,6 +139,7 @@ function makeTheme(brand: ReturnType<typeof resolveBrandingColors>) {
           root: {
             border: "1px solid var(--mantine-color-gray-3)",
             boxShadow: "0 10px 24px rgba(2,6,23,0.06)",
+            color: "#1a1a1a",
           },
         },
       },
@@ -252,6 +254,7 @@ function EventAttendHeader({
         top: 0,
         zIndex: 120,
         backdropFilter: "blur(10px)",
+        color: "#1a1a1a",
       }}
     >
       <Container size="xl" py="sm">
@@ -364,8 +367,8 @@ export default function EventAttendGcore() {
 
   const isOwner = !!(user && org && org.ownerUid === user.uid);
 
-  // Branding: aunque org sea null, usamos defaults
-  const brand = resolveBrandingColors(org);
+  // Branding: evento tiene prioridad sobre org; se recalcula cuando event carga
+  const brand = resolveBrandingColors(org, event);
   const theme = useMemo(() => makeTheme(brand), [brand]);
 
   const [playbackUrl, setPlaybackUrl] = useState<string | null>(null);
@@ -710,7 +713,7 @@ export default function EventAttendGcore() {
     joinState !== "pending";
 
   return (
-    <MantineProvider theme={theme} withCssVariables>
+    <MantineProvider theme={theme} defaultColorScheme="light" withCssVariables>
       <Box
         style={{
           ...cssVars(brand),
@@ -860,6 +863,7 @@ export default function EventAttendGcore() {
                   flexShrink: 0,
                   background: "rgba(255,255,255,0.97)",
                   borderBottom: "1px solid var(--mantine-color-gray-2)",
+                  color: "#1a1a1a",
                 }}
               >
                 <Group justify="space-between" align="center" gap="xs" wrap="nowrap">
@@ -1164,6 +1168,7 @@ export default function EventAttendGcore() {
                               justifyContent: "center",
                               padding: 24,
                               background: "rgba(255,255,255,0.96)",
+                              color: "#1a1a1a",
                             }}
                           >
                             <Stack
@@ -1207,6 +1212,7 @@ export default function EventAttendGcore() {
                               justifyContent: "center",
                               padding: 24,
                               background: "rgba(255,255,255,0.96)",
+                              color: "#1a1a1a",
                             }}
                           >
                             <Stack

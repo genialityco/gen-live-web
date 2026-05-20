@@ -11,7 +11,6 @@ import {
   Table,
   Group,
   FileInput,
-  Loader,
   SimpleGrid,
   Paper,
   Badge,
@@ -19,6 +18,7 @@ import {
   ScrollArea,
   Box,
   Code,
+  Progress,
 } from "@mantine/core";
 import * as XLSX from "xlsx";
 import { api } from "../../core/api";
@@ -46,8 +46,12 @@ export default function ImportAttendeesModal({
   const [rows, setRows] = useState<ExcelRow[]>([]);
   const [mapping, setMapping] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [progressLabel, setProgressLabel] = useState("");
   const [serverSummary, setServerSummary] = useState<any | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const CHUNK_SIZE = 500;
 
   const normalizeBoolean = (raw: any): boolean | undefined => {
     if (raw === null || raw === undefined) return undefined;
@@ -153,43 +157,68 @@ export default function ImportAttendeesModal({
     setLoading(true);
     setError(null);
     setServerSummary(null);
+    setProgress(0);
+    setProgressLabel("");
+
+    const bulkRows = rows.map((row) => {
+      const registrationData: Record<string, any> = {};
+      const identifierValues: Record<string, any> = {};
+
+      for (const field of registrationForm.fields) {
+        const headerName = mapping[field.id];
+        if (headerName) {
+          const rawValue = row[headerName];
+          const value = coerceValue(field, rawValue);
+          registrationData[field.id] = value;
+          if (field.isIdentifier) identifierValues[field.id] = value;
+        }
+      }
+
+      const emailHeader = mapping["__email"];
+      const nameHeader = mapping["__name"];
+      const phoneHeader = mapping["__phone"];
+
+      const email = emailHeader ? row[emailHeader] : undefined;
+      const name = nameHeader ? row[nameHeader] : undefined;
+      const phone = phoneHeader ? row[phoneHeader] : undefined;
+
+      return { identifierValues, registrationData, email, name, phone };
+    });
+
+    const chunks: typeof bulkRows[] = [];
+    for (let i = 0; i < bulkRows.length; i += CHUNK_SIZE) {
+      chunks.push(bulkRows.slice(i, i + CHUNK_SIZE));
+    }
+
+    const accumulated = { created: 0, updated: 0, errors: [] as any[] };
 
     try {
-      const bulkRows = rows.map((row) => {
-        const registrationData: Record<string, any> = {};
-        const identifierValues: Record<string, any> = {};
+      for (let i = 0; i < chunks.length; i++) {
+        setProgressLabel(
+          `Procesando lote ${i + 1} de ${chunks.length} (filas ${i * CHUNK_SIZE + 1}–${Math.min((i + 1) * CHUNK_SIZE, bulkRows.length)} de ${bulkRows.length})`,
+        );
 
-        for (const field of registrationForm.fields) {
-          const headerName = mapping[field.id];
-          if (headerName) {
-            const rawValue = row[headerName];
-            const value = coerceValue(field, rawValue);
-            registrationData[field.id] = value;
-            if (field.isIdentifier) identifierValues[field.id] = value;
+        const response = await api.post("/org-attendees/bulk-import", {
+          organizationId: orgId,
+          rows: chunks[i],
+        });
 
-            registrationData[field.id] = value;
-            if (field.isIdentifier) identifierValues[field.id] = value;
-          }
+        accumulated.created += response.data.created ?? 0;
+        accumulated.updated += response.data.updated ?? 0;
+        if (response.data.errors?.length) {
+          accumulated.errors.push(
+            ...response.data.errors.map((e: any) => ({
+              ...e,
+              rowIndex: e.rowIndex + i * CHUNK_SIZE,
+            })),
+          );
         }
 
-        const emailHeader = mapping["__email"];
-        const nameHeader = mapping["__name"];
-        const phoneHeader = mapping["__phone"];
+        setProgress(Math.round(((i + 1) / chunks.length) * 100));
+      }
 
-        const email = emailHeader ? row[emailHeader] : undefined;
-        const name = nameHeader ? row[nameHeader] : undefined;
-        const phone = phoneHeader ? row[phoneHeader] : undefined;
-
-        return { identifierValues, registrationData, email, name, phone };
-      });
-
-      const response = await api.post("/org-attendees/bulk-import", {
-        organizationId: orgId,
-        rows: bulkRows,
-      });
-
-      setServerSummary(response.data);
-      onImported(); // refrescar tabla afuera
+      setServerSummary(accumulated);
+      onImported();
     } catch (e: any) {
       console.error(e);
       setError(
@@ -197,6 +226,7 @@ export default function ImportAttendeesModal({
       );
     } finally {
       setLoading(false);
+      setProgressLabel("");
     }
   };
 
@@ -488,6 +518,15 @@ export default function ImportAttendeesModal({
           </>
         )}
 
+        {loading && (
+          <Stack gap={6}>
+            <Progress value={progress} animated size="lg" radius="sm" />
+            <Text size="xs" c="dimmed" ta="center">
+              {progressLabel || "Iniciando importación..."}
+            </Text>
+          </Stack>
+        )}
+
         {error && (
           <Alert color="red" variant="light">
             {error}
@@ -516,7 +555,7 @@ export default function ImportAttendeesModal({
             onClick={handleImport}
             disabled={rows.length === 0 || loading}
           >
-            {loading ? <Loader size="xs" /> : "Importar"}
+            {loading ? `Importando... ${progress}%` : "Importar"}
           </Button>
         </Group>
       </Stack>
