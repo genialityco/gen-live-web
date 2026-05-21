@@ -9,11 +9,15 @@ import {
   Group,
   Collapse,
   Alert,
+  Modal,
+  Divider,
 } from "@mantine/core";
 import { DateTimePicker } from "@mantine/dates";
 import { useState } from "react";
-import { IconChevronDown, IconChevronRight, IconCheck, IconAlertCircle } from "@tabler/icons-react";
-import { type EventItem, type EventBrandingConfig, updateEvent } from "../../api/events";
+import { useParams, useNavigate } from "react-router-dom";
+import { notifications } from "@mantine/notifications";
+import { IconChevronDown, IconChevronRight, IconCheck, IconAlertCircle, IconTrash } from "@tabler/icons-react";
+import { type EventItem, type EventBrandingConfig, updateEvent, deleteEvent } from "../../api/events";
 import EventBrandingConfigurator from "./EventBrandingConfigurator";
 import "dayjs/locale/es";
 
@@ -22,10 +26,17 @@ interface EventAdminSettingsProps {
 }
 
 export default function EventAdminSettings({ event }: EventAdminSettingsProps) {
+  const { slug } = useParams<{ slug: string }>();
+  const navigate = useNavigate();
+
   const [editing, setEditing] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
+  const [deleting, setDeleting] = useState(false);
   
   const [title, setTitle] = useState(event.title);
   const [description, setDescription] = useState(event.description || "");
@@ -79,8 +90,29 @@ export default function EventAdminSettings({ event }: EventAdminSettingsProps) {
   };
 
   const handleBrandingUpdate = (branding: EventBrandingConfig) => {
-    // TODO: Actualizar el evento con el nuevo branding
     console.log("Branding actualizado:", branding);
+  };
+
+  const handleDeleteEvent = async () => {
+    setDeleting(true);
+    try {
+      await deleteEvent(event._id);
+      notifications.show({
+        title: "Evento eliminado",
+        message: `"${event.title}" fue eliminado correctamente`,
+        color: "green",
+      });
+      navigate(`/org/${slug}/admin/events`);
+    } catch {
+      notifications.show({
+        title: "Error",
+        message: "No se pudo eliminar el evento",
+        color: "red",
+      });
+    } finally {
+      setDeleting(false);
+      setDeleteModalOpen(false);
+    }
   };
 
   return (
@@ -234,8 +266,8 @@ export default function EventAdminSettings({ event }: EventAdminSettingsProps) {
         <Stack gap="md">
           <Group justify="space-between" align="center">
             <Title order={3}>Branding del evento</Title>
-            <Button 
-              size="sm" 
+            <Button
+              size="sm"
               variant="light"
               leftSection={showBrandingConfig ? <IconChevronDown size={16} /> : <IconChevronRight size={16} />}
               onClick={() => setShowBrandingConfig(!showBrandingConfig)}
@@ -249,13 +281,101 @@ export default function EventAdminSettings({ event }: EventAdminSettingsProps) {
           </Text>
 
           <Collapse in={showBrandingConfig}>
-            <EventBrandingConfigurator 
+            <EventBrandingConfigurator
               event={event}
               onUpdate={handleBrandingUpdate}
             />
           </Collapse>
         </Stack>
       </Card>
+
+      {/* Zona de peligro */}
+      <Card withBorder radius="lg" p="lg" style={{ borderColor: "var(--mantine-color-red-4)" }}>
+        <Stack gap="md">
+          <div>
+            <Title order={3} c="red">Zona de peligro</Title>
+            <Text c="dimmed" size="sm" mt={4}>
+              Las acciones de esta sección son permanentes e irreversibles.
+            </Text>
+          </div>
+
+          <Divider color="red.2" />
+
+          <Group justify="space-between" align="center">
+            <div>
+              <Text fw={500}>Eliminar evento</Text>
+              <Text size="sm" c="dimmed">
+                Borra el evento, todos sus asistentes registrados, métricas, encuestas, plantillas de email y campañas. Esta acción no se puede deshacer.
+              </Text>
+            </div>
+            <Button
+              color="red"
+              variant="outline"
+              leftSection={<IconTrash size={16} />}
+              onClick={() => {
+                setDeleteConfirmText("");
+                setDeleteModalOpen(true);
+              }}
+            >
+              Eliminar evento
+            </Button>
+          </Group>
+        </Stack>
+      </Card>
+
+      {/* Modal de confirmación */}
+      <Modal
+        opened={deleteModalOpen}
+        onClose={() => setDeleteModalOpen(false)}
+        title={<Text fw={700} c="red" size="lg">Eliminar evento</Text>}
+        centered
+        size="md"
+      >
+        <Stack gap="md">
+          <Alert color="red" icon={<IconAlertCircle size={16} />}>
+            Esta acción eliminará permanentemente:
+            <ul style={{ margin: "8px 0 0 0", paddingLeft: 20 }}>
+              <li>El evento y su configuración</li>
+              <li>Todos los registros de asistentes</li>
+              <li>Métricas y sesiones de visualización</li>
+              <li>Encuestas y campañas de email</li>
+              <li>Plantillas de email del evento</li>
+              <li>Configuración de streaming</li>
+            </ul>
+          </Alert>
+
+          <Text size="sm">
+            Escribe el título del evento para confirmar:{" "}
+            <Text component="span" fw={700}>{event.title}</Text>
+          </Text>
+
+          <TextInput
+            placeholder={event.title}
+            value={deleteConfirmText}
+            onChange={(e) => setDeleteConfirmText(e.currentTarget.value)}
+            disabled={deleting}
+          />
+
+          <Group justify="flex-end">
+            <Button
+              variant="default"
+              onClick={() => setDeleteModalOpen(false)}
+              disabled={deleting}
+            >
+              Cancelar
+            </Button>
+            <Button
+              color="red"
+              leftSection={<IconTrash size={16} />}
+              disabled={deleteConfirmText !== event.title}
+              loading={deleting}
+              onClick={handleDeleteEvent}
+            >
+              Confirmar eliminación
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
     </Stack>
   );
 }

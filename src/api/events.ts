@@ -316,6 +316,10 @@ export async function createEventUserForSession(
   }
 }
 
+export async function deleteEvent(eventId: string): Promise<void> {
+  await api.delete(`/events/${eventId}`);
+}
+
 // Actualizar branding del evento
 export async function updateEventBranding(
   eventId: string,
