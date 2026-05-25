@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Stack,
   Title,
@@ -18,14 +19,17 @@ import {
   Divider,
   TextInput,
   Textarea,
+  Modal,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
+import { IconTrash, IconAlertCircle } from "@tabler/icons-react";
 import {
   type Org,
   type BrandingConfig,
   updateOrgBranding,
   uploadBrandingImage,
   updateOrganization,
+  deleteOrg,
 } from "../../api/orgs";
 
 interface BrandingSettingsProps {
@@ -37,10 +41,15 @@ export default function BrandingSettings({
   org,
   onUpdate,
 }: BrandingSettingsProps) {
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [uploadingImage, setUploadingImage] = useState<string | null>(null);
   const [branding, setBranding] = useState<BrandingConfig>(org.branding || {});
   const [description, setDescription] = useState(org.description || "");
+
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
+  const [deleting, setDeleting] = useState(false);
 
   const updateField = <K extends keyof BrandingConfig>(
     field: K,
@@ -612,6 +621,113 @@ export default function BrandingSettings({
           💾 Guardar todos los cambios
         </Button>
       </Group>
+
+      {/* Zona de peligro */}
+      <Card withBorder radius="lg" p="lg" style={{ borderColor: "var(--mantine-color-red-4)" }}>
+        <Stack gap="md">
+          <div>
+            <Title order={3} c="red">Zona de peligro</Title>
+            <Text c="dimmed" size="sm" mt={4}>
+              Las acciones de esta sección son permanentes e irreversibles.
+            </Text>
+          </div>
+
+          <Divider color="red.2" />
+
+          <Group justify="space-between" align="center">
+            <div>
+              <Text fw={500}>Eliminar organización</Text>
+              <Text size="sm" c="dimmed">
+                Elimina la organización y todos sus eventos, asistentes, métricas, encuestas, plantillas de email y configuraciones de streaming.
+              </Text>
+            </div>
+            <Button
+              color="red"
+              variant="outline"
+              leftSection={<IconTrash size={16} />}
+              onClick={() => {
+                setDeleteConfirmText("");
+                setDeleteModalOpen(true);
+              }}
+            >
+              Eliminar organización
+            </Button>
+          </Group>
+        </Stack>
+      </Card>
+
+      {/* Modal de confirmación de eliminación */}
+      <Modal
+        opened={deleteModalOpen}
+        onClose={() => setDeleteModalOpen(false)}
+        title={<Text fw={700} c="red" size="lg">Eliminar organización</Text>}
+        centered
+        size="md"
+      >
+        <Stack gap="md">
+          <Alert color="red" icon={<IconAlertCircle size={16} />}>
+            Esta acción eliminará permanentemente:
+            <ul style={{ margin: "8px 0 0 0", paddingLeft: 20 }}>
+              <li>La organización y su configuración</li>
+              <li>Todos los eventos y sus datos</li>
+              <li>Todos los asistentes registrados</li>
+              <li>Métricas, encuestas y campañas de email</li>
+              <li>Configuraciones de streaming</li>
+            </ul>
+          </Alert>
+
+          <Text size="sm">
+            Escribe el nombre de la organización para confirmar:{" "}
+            <Text component="span" fw={700}>{org.name}</Text>
+          </Text>
+
+          <TextInput
+            placeholder={org.name}
+            value={deleteConfirmText}
+            onChange={(e) => setDeleteConfirmText(e.currentTarget.value)}
+            disabled={deleting}
+          />
+
+          <Group justify="flex-end">
+            <Button
+              variant="default"
+              onClick={() => setDeleteModalOpen(false)}
+              disabled={deleting}
+            >
+              Cancelar
+            </Button>
+            <Button
+              color="red"
+              leftSection={<IconTrash size={16} />}
+              disabled={deleteConfirmText !== org.name}
+              loading={deleting}
+              onClick={async () => {
+                setDeleting(true);
+                try {
+                  const result = await deleteOrg(org.domainSlug);
+                  notifications.show({
+                    title: "Organización eliminada",
+                    message: `"${org.name}" y ${result.deletedEvents} evento(s) fueron eliminados`,
+                    color: "green",
+                  });
+                  navigate("/organizations");
+                } catch {
+                  notifications.show({
+                    title: "Error",
+                    message: "No se pudo eliminar la organización",
+                    color: "red",
+                  });
+                } finally {
+                  setDeleting(false);
+                  setDeleteModalOpen(false);
+                }
+              }}
+            >
+              Confirmar eliminación
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
     </Stack>
   );
 }

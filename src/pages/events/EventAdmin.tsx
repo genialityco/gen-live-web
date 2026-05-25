@@ -102,7 +102,7 @@ export default function EventAdmin() {
     }
 
     if (path.endsWith("/settings")) {
-      return <EventAdminSettings event={event} />;
+      return <EventAdminSettings event={event} onEventUpdate={setEvent} />;
     }
 
     if (path.endsWith("/studio")) {

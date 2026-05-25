@@ -11,21 +11,24 @@ import {
   Alert,
   Modal,
   Divider,
+  Switch,
 } from "@mantine/core";
 import { DateTimePicker } from "@mantine/dates";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { notifications } from "@mantine/notifications";
-import { IconChevronDown, IconChevronRight, IconCheck, IconAlertCircle, IconTrash } from "@tabler/icons-react";
-import { type EventItem, type EventBrandingConfig, updateEvent, deleteEvent } from "../../api/events";
+import { IconChevronDown, IconChevronRight, IconCheck, IconAlertCircle, IconTrash, IconArrowRight } from "@tabler/icons-react";
+import { type EventItem, type EventBrandingConfig, updateEvent, deleteEvent, transferEvent } from "../../api/events";
+import { fetchOrgBySlug } from "../../api/orgs";
 import EventBrandingConfigurator from "./EventBrandingConfigurator";
 import "dayjs/locale/es";
 
 interface EventAdminSettingsProps {
   event: EventItem;
+  onEventUpdate?: (event: EventItem) => void;
 }
 
-export default function EventAdminSettings({ event }: EventAdminSettingsProps) {
+export default function EventAdminSettings({ event, onEventUpdate }: EventAdminSettingsProps) {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
 
@@ -37,7 +40,20 @@ export default function EventAdminSettings({ event }: EventAdminSettingsProps) {
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
   const [deleting, setDeleting] = useState(false);
+
+  const [transferModalOpen, setTransferModalOpen] = useState(false);
+  const [transferTargetSlug, setTransferTargetSlug] = useState("");
+  const [transferNewSlug, setTransferNewSlug] = useState("");
+  const [transferring, setTransferring] = useState(false);
+  const [transferError, setTransferError] = useState<string | null>(null);
   
+  const [hidden, setHidden] = useState(event.hidden ?? false);
+  const [hiddenLoading, setHiddenLoading] = useState(false);
+
+  useEffect(() => {
+    setHidden(event.hidden ?? false);
+  }, [event.hidden]);
+
   const [title, setTitle] = useState(event.title);
   const [description, setDescription] = useState(event.description || "");
   const [startsAt, setStartsAt] = useState<string | null>(
@@ -89,8 +105,51 @@ export default function EventAdminSettings({ event }: EventAdminSettingsProps) {
     setSuccess(false);
   };
 
+  const handleToggleHidden = async (value: boolean) => {
+    setHiddenLoading(true);
+    try {
+      const updated = await updateEvent(event._id, { hidden: value });
+      setHidden(value);
+      onEventUpdate?.({ ...event, ...updated, hidden: value });
+      notifications.show({
+        title: value ? "Evento ocultado" : "Evento visible",
+        message: value
+          ? "El evento ya no aparece en la landing pública"
+          : "El evento vuelve a ser visible en la landing",
+        color: value ? "orange" : "green",
+      });
+    } catch {
+      notifications.show({ title: "Error", message: "No se pudo actualizar la visibilidad", color: "red" });
+    } finally {
+      setHiddenLoading(false);
+    }
+  };
+
   const handleBrandingUpdate = (branding: EventBrandingConfig) => {
     console.log("Branding actualizado:", branding);
+  };
+
+  const handleTransfer = async () => {
+    if (!transferTargetSlug.trim()) return;
+    setTransferring(true);
+    setTransferError(null);
+    try {
+      const targetOrg = await fetchOrgBySlug(transferTargetSlug.trim());
+      const newSlug = transferNewSlug.trim() || undefined;
+      const updated = await transferEvent(event._id, targetOrg._id, newSlug);
+      notifications.show({
+        title: "Evento transferido",
+        message: `El evento fue movido al org "${targetOrg.name}"`,
+        color: "green",
+      });
+      setTransferModalOpen(false);
+      navigate(`/org/${targetOrg.domainSlug}/event/${updated.slug}/admin/settings`);
+    } catch (err: any) {
+      const msg = err?.response?.data?.message ?? err?.message ?? "Error al transferir";
+      setTransferError(Array.isArray(msg) ? msg.join(", ") : msg);
+    } finally {
+      setTransferring(false);
+    }
   };
 
   const handleDeleteEvent = async () => {
@@ -135,6 +194,24 @@ export default function EventAdminSettings({ event }: EventAdminSettingsProps) {
           Los cambios se guardaron correctamente
         </Alert>
       )}
+
+      {/* Visibilidad */}
+      <Card withBorder radius="lg" p="lg">
+        <Group justify="space-between" align="center">
+          <div>
+            <Text fw={500}>Visible en la landing pública</Text>
+            <Text size="sm" c="dimmed">
+              Cuando está desactivado, el evento no aparece en la página de la organización
+            </Text>
+          </div>
+          <Switch
+            checked={!hidden}
+            onChange={(e) => handleToggleHidden(!e.currentTarget.checked)}
+            disabled={hiddenLoading}
+            size="md"
+          />
+        </Group>
+      </Card>
 
       {/* Información básica */}
       <Card withBorder radius="lg" p="lg">
@@ -289,6 +366,32 @@ export default function EventAdminSettings({ event }: EventAdminSettingsProps) {
         </Stack>
       </Card>
 
+      {/* Transferir evento */}
+      <Card withBorder radius="lg" p="lg">
+        <Stack gap="md">
+          <div>
+            <Title order={3}>Transferir evento</Title>
+            <Text c="dimmed" size="sm" mt={4}>
+              Mueve este evento a otra organización que también seas dueño. Los asistentes registrados permanecen en el org origen.
+            </Text>
+          </div>
+          <Group justify="flex-end">
+            <Button
+              variant="light"
+              leftSection={<IconArrowRight size={16} />}
+              onClick={() => {
+                setTransferTargetSlug("");
+                setTransferNewSlug("");
+                setTransferError(null);
+                setTransferModalOpen(true);
+              }}
+            >
+              Transferir a otro org
+            </Button>
+          </Group>
+        </Stack>
+      </Card>
+
       {/* Zona de peligro */}
       <Card withBorder radius="lg" p="lg" style={{ borderColor: "var(--mantine-color-red-4)" }}>
         <Stack gap="md">
@@ -322,6 +425,62 @@ export default function EventAdminSettings({ event }: EventAdminSettingsProps) {
           </Group>
         </Stack>
       </Card>
+
+      {/* Modal de transferencia */}
+      <Modal
+        opened={transferModalOpen}
+        onClose={() => setTransferModalOpen(false)}
+        title={<Text fw={700} size="lg">Transferir evento</Text>}
+        centered
+        size="md"
+      >
+        <Stack gap="md">
+          <Text size="sm" c="dimmed">
+            Ingresa el slug del org destino. Debes ser dueño de ese org.
+          </Text>
+
+          <TextInput
+            label="Slug del org destino"
+            placeholder="mi-organizacion"
+            value={transferTargetSlug}
+            onChange={(e) => setTransferTargetSlug(e.currentTarget.value)}
+            disabled={transferring}
+          />
+
+          <TextInput
+            label="Nuevo slug para el evento (opcional)"
+            placeholder={event.slug}
+            description="Si el slug actual ya existe en el org destino, ingresa uno nuevo"
+            value={transferNewSlug}
+            onChange={(e) => setTransferNewSlug(e.currentTarget.value)}
+            disabled={transferring}
+          />
+
+          {transferError && (
+            <Alert color="red" icon={<IconAlertCircle size={16} />}>
+              {transferError}
+            </Alert>
+          )}
+
+          <Group justify="flex-end">
+            <Button
+              variant="default"
+              onClick={() => setTransferModalOpen(false)}
+              disabled={transferring}
+            >
+              Cancelar
+            </Button>
+            <Button
+              leftSection={<IconArrowRight size={16} />}
+              disabled={!transferTargetSlug.trim()}
+              loading={transferring}
+              onClick={handleTransfer}
+            >
+              Transferir evento
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
 
       {/* Modal de confirmación */}
       <Modal

@@ -153,3 +153,10 @@ export async function registerOrgAttendeeAdvanced(
   // data = OrgAttendee actualizado/creado
   return data as any;
 }
+
+export async function deleteOrg(
+  slug: string
+): Promise<{ ok: boolean; deletedEvents: number }> {
+  const { data } = await api.delete(`/orgs/slug/${slug}`);
+  return data;
+}

@@ -47,6 +47,7 @@ export type EventItem = {
   schedule?: { startsAt?: string; endsAt?: string };
   stream?: { url?: string; provider?: string };
   branding?: EventBrandingConfig; // Campo de branding del evento
+  hidden?: boolean;
   createdAt?: string;
   startDate?: string; // Para compatibilidad
 };
@@ -80,6 +81,7 @@ export async function updateEvent(
     title?: string;
     description?: string;
     schedule?: { startsAt?: string; endsAt?: string };
+    hidden?: boolean;
   }
 ) {
   const { data } = await api.patch(`/events/${eventId}`, payload);
@@ -349,4 +351,16 @@ export async function uploadEventImage(
   );
 
   return data;
+}
+
+export async function transferEvent(
+  eventId: string,
+  targetOrgId: string,
+  newSlug?: string
+): Promise<EventItem> {
+  const { data } = await api.patch(`/events/${eventId}/transfer`, {
+    targetOrgId,
+    ...(newSlug ? { newSlug } : {}),
+  });
+  return data as EventItem;
 }
