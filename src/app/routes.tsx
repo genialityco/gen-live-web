@@ -136,6 +136,14 @@ export const routes = [
         ),
       },
       {
+        path: "/org/:slug/admin/suppressed-emails",
+        element: (
+          <Layout>
+            <OrganizationAdmin />
+          </Layout>
+        ),
+      },
+      {
         path: "/org/:slug/event/:eventSlug/admin",
         element: (
           <Layout>

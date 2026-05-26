@@ -65,6 +65,8 @@ const DELIVERY_STATUS_LABELS: Record<DeliveryStatus, string> = {
   sent: "Enviado",
   rejected: "Rechazado",
   failed: "Fallido",
+  bounced: "Rebotado",
+  complained: "Spam/Queja",
 };
 
 const DELIVERY_STATUS_COLORS: Record<DeliveryStatus, string> = {
@@ -72,6 +74,8 @@ const DELIVERY_STATUS_COLORS: Record<DeliveryStatus, string> = {
   sent: "green",
   rejected: "orange",
   failed: "red",
+  bounced: "red",
+  complained: "orange",
 };
 
 const DELIVERY_TABS: Array<{ value: string; label: string; status?: DeliveryStatus }> = [

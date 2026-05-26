@@ -10,7 +10,25 @@ export type CampaignStatus =
   | "cancelled";
 
 export type TargetAudience = "event_users" | "org_attendees" | "both";
-export type DeliveryStatus = "pending" | "sent" | "rejected" | "failed";
+export type DeliveryStatus =
+  | "pending"
+  | "sent"
+  | "rejected"
+  | "failed"
+  | "bounced"
+  | "complained";
+
+export type EmailStatus = "valid" | "bounced" | "complained";
+
+export interface SuppressedAttendee {
+  _id: string;
+  email: string;
+  name: string;
+  emailStatus: EmailStatus;
+  emailBounceType: "Permanent" | "Transient" | null;
+  emailSuppressedAt: string | null;
+  emailSuppressReason: string | null;
+}
 
 export interface CampaignStats {
   total: number;
@@ -111,4 +129,15 @@ export async function listDeliveries(
 export function exportDeliveriesUrl(campaignId: string): string {
   const baseUrl = import.meta.env.VITE_API_URL as string;
   return `${baseUrl}/email-campaign/${campaignId}/deliveries/export`;
+}
+
+export async function fetchSuppressedAttendees(
+  orgId: string
+): Promise<SuppressedAttendee[]> {
+  const { data } = await api.get(`/email-campaign/org/${orgId}/suppressed`);
+  return data;
+}
+
+export async function restoreAttendeeEmail(attendeeId: string): Promise<void> {
+  await api.post(`/email-campaign/attendee/${attendeeId}/restore-email`);
 }

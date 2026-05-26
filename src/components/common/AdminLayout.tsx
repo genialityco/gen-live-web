@@ -65,6 +65,12 @@ export default function AdminLayout({ children, org }: AdminLayoutProps) {
       href: `/org/${slug}/admin/settings`,
       description: "Branding y personalización",
     },
+    {
+      label: "Emails suprimidos",
+      icon: "🚫",
+      href: `/org/${slug}/admin/suppressed-emails`,
+      description: "Bounces y quejas de spam",
+    },
   ];
 
   return (
