@@ -36,6 +36,8 @@ export interface CampaignStats {
   sent: number;
   rejected: number;
   failed: number;
+  bounced: number;
+  complained: number;
 }
 
 export interface EmailCampaign {
@@ -61,6 +63,7 @@ export interface EmailDelivery {
   sesMessageId?: string;
   errorMessage?: string;
   sentAt?: string;
+  deliveredAt?: string;
   createdAt: string;
 }
 

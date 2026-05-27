@@ -17,6 +17,7 @@ import {
   Anchor,
   ActionIcon,
   Tooltip,
+  Alert,
 } from "@mantine/core";
 import {
   IconArrowLeft,
@@ -24,6 +25,7 @@ import {
   IconX,
   IconRefresh,
   IconDownload,
+  IconAlertTriangle,
 } from "@tabler/icons-react";
 import { notifications } from "@mantine/notifications";
 import {
@@ -83,6 +85,8 @@ const DELIVERY_TABS: Array<{ value: string; label: string; status?: DeliveryStat
   { value: "sent", label: "Enviados", status: "sent" },
   { value: "failed", label: "Fallidos", status: "failed" },
   { value: "rejected", label: "Rechazados", status: "rejected" },
+  { value: "bounced", label: "Rebotados", status: "bounced" },
+  { value: "complained", label: "Spam/Queja", status: "complained" },
   { value: "pending", label: "Pendientes", status: "pending" },
 ];
 
@@ -238,8 +242,11 @@ export default function CampaignDetail({
   const sentPercent =
     stats.total > 0 ? Math.round((stats.sent / stats.total) * 100) : 0;
   const errorCount = stats.failed + stats.rejected;
-  const hasPending =
-    campaign.status !== "sending" && stats.pending > 0;
+  const hasPending = campaign.status !== "sending" && stats.pending > 0;
+  const bounced = stats.bounced ?? 0;
+  const complained = stats.complained ?? 0;
+  const bounceRate =
+    stats.total > 0 ? ((bounced + complained) / stats.total) * 100 : 0;
 
   return (
     <Stack gap="md">
@@ -322,7 +329,7 @@ export default function CampaignDetail({
       )}
 
       {/* Stats cards */}
-      <SimpleGrid cols={{ base: 2, sm: 4 }}>
+      <SimpleGrid cols={{ base: 2, sm: 3 }}>
         <Card withBorder p="sm" radius="md">
           <Text size="xs" c="dimmed">Total</Text>
           <Text size="xl" fw={700}>{stats.total.toLocaleString()}</Text>
@@ -345,12 +352,43 @@ export default function CampaignDetail({
             {stats.rejected.toLocaleString()}
           </Text>
         </Card>
+        <Card withBorder p="sm" radius="md">
+          <Text size="xs" c="dimmed">Rebotados</Text>
+          <Text size="xl" fw={700} c={bounced > 0 ? "red" : "dimmed"}>
+            {bounced.toLocaleString()}
+          </Text>
+        </Card>
+        <Card withBorder p="sm" radius="md">
+          <Text size="xs" c="dimmed">Spam/Queja</Text>
+          <Text size="xl" fw={700} c={complained > 0 ? "orange" : "dimmed"}>
+            {complained.toLocaleString()}
+          </Text>
+        </Card>
       </SimpleGrid>
 
       {errorCount > 0 && (
         <Text size="xs" c="dimmed">
           {errorCount.toLocaleString()} emails con error (fallidos + rechazados)
         </Text>
+      )}
+
+      {/* Alerta de tasa de bounce */}
+      {bounceRate >= 2 && (
+        <Alert
+          color={bounceRate >= 5 ? "red" : "yellow"}
+          title={
+            bounceRate >= 5
+              ? "Tasa de rebotes crítica"
+              : "Tasa de rebotes elevada"
+          }
+          icon={<IconAlertTriangle size={16} />}
+        >
+          {bounceRate.toFixed(1)}% de los emails rebotaron o fueron marcados como spam (
+          {(bounced + complained).toLocaleString()} de {stats.total.toLocaleString()}).{" "}
+          {bounceRate >= 5
+            ? "Una tasa superior al 5% puede suspender tu cuenta de SES. Revisa la calidad de tu lista."
+            : "Considera limpiar tu lista de contactos para evitar daños a la reputación del dominio."}
+        </Alert>
       )}
 
       {/* Deliveries table */}
@@ -364,71 +402,100 @@ export default function CampaignDetail({
         </Tabs.List>
 
         <Tabs.Panel value={activeTab} pt="sm">
-          <Table highlightOnHover>
-            <Table.Thead>
-              <Table.Tr>
-                <Table.Th>Email</Table.Th>
-                <Table.Th>Nombre</Table.Th>
-                <Table.Th>Estado</Table.Th>
-                <Table.Th>Enviado</Table.Th>
-                <Table.Th>Error</Table.Th>
-              </Table.Tr>
-            </Table.Thead>
-            <Table.Tbody>
-              {deliveries.length === 0 ? (
+          <Stack gap="sm">
+            {/* Alert de pendientes colgados */}
+            {activeTab === "pending" &&
+              campaign.status !== "sending" &&
+              stats.pending > 0 && (
+                <Alert
+                  color="yellow"
+                  title="Emails pendientes sin procesar"
+                  icon={<IconAlertTriangle size={16} />}
+                >
+                  {stats.pending.toLocaleString()} emails no se enviaron porque el proceso fue interrumpido.
+                  Usa <strong>Reanudar envío</strong> para procesarlos.
+                </Alert>
+              )}
+
+            <Table highlightOnHover>
+              <Table.Thead>
                 <Table.Tr>
-                  <Table.Td colSpan={5}>
-                    <Text size="sm" c="dimmed" ta="center" py="md">
-                      Sin registros
-                    </Text>
-                  </Table.Td>
+                  <Table.Th>Email</Table.Th>
+                  <Table.Th>Nombre</Table.Th>
+                  <Table.Th>Estado</Table.Th>
+                  <Table.Th>Enviado / Entregado</Table.Th>
+                  <Table.Th>Error</Table.Th>
                 </Table.Tr>
-              ) : (
-                deliveries.map((d) => (
-                  <Table.Tr key={d._id}>
-                    <Table.Td>
-                      <Text size="sm">{d.email}</Text>
-                    </Table.Td>
-                    <Table.Td>
-                      <Text size="sm" c="dimmed">
-                        {d.name}
+              </Table.Thead>
+              <Table.Tbody>
+                {deliveries.length === 0 ? (
+                  <Table.Tr>
+                    <Table.Td colSpan={5}>
+                      <Text size="sm" c="dimmed" ta="center" py="md">
+                        Sin registros
                       </Text>
-                    </Table.Td>
-                    <Table.Td>
-                      <Badge
-                        size="sm"
-                        color={DELIVERY_STATUS_COLORS[d.status]}
-                        variant="light"
-                      >
-                        {DELIVERY_STATUS_LABELS[d.status]}
-                      </Badge>
-                    </Table.Td>
-                    <Table.Td>
-                      <Text size="xs" c="dimmed">
-                        {d.sentAt
-                          ? new Date(d.sentAt).toLocaleString("es", {
-                              day: "2-digit",
-                              month: "short",
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            })
-                          : "—"}
-                      </Text>
-                    </Table.Td>
-                    <Table.Td>
-                      {d.errorMessage ? (
-                        <Text size="xs" c="red" lineClamp={2} maw={300}>
-                          {d.errorMessage}
-                        </Text>
-                      ) : (
-                        <Text size="xs" c="dimmed">—</Text>
-                      )}
                     </Table.Td>
                   </Table.Tr>
-                ))
-              )}
-            </Table.Tbody>
-          </Table>
+                ) : (
+                  deliveries.map((d) => (
+                    <Table.Tr key={d._id}>
+                      <Table.Td>
+                        <Text size="sm">{d.email}</Text>
+                      </Table.Td>
+                      <Table.Td>
+                        <Text size="sm" c="dimmed">
+                          {d.name}
+                        </Text>
+                      </Table.Td>
+                      <Table.Td>
+                        <Badge
+                          size="sm"
+                          color={DELIVERY_STATUS_COLORS[d.status]}
+                          variant="light"
+                        >
+                          {DELIVERY_STATUS_LABELS[d.status]}
+                        </Badge>
+                      </Table.Td>
+                      <Table.Td>
+                        <Stack gap={2}>
+                          <Text size="xs" c="dimmed">
+                            {d.sentAt
+                              ? new Date(d.sentAt).toLocaleString("es", {
+                                  day: "2-digit",
+                                  month: "short",
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                })
+                              : "—"}
+                          </Text>
+                          {d.deliveredAt && (
+                            <Text size="xs" c="teal">
+                              ✓ SES:{" "}
+                              {new Date(d.deliveredAt).toLocaleString("es", {
+                                day: "2-digit",
+                                month: "short",
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })}
+                            </Text>
+                          )}
+                        </Stack>
+                      </Table.Td>
+                      <Table.Td>
+                        {d.errorMessage ? (
+                          <Text size="xs" c="red" lineClamp={2} maw={300}>
+                            {d.errorMessage}
+                          </Text>
+                        ) : (
+                          <Text size="xs" c="dimmed">—</Text>
+                        )}
+                      </Table.Td>
+                    </Table.Tr>
+                  ))
+                )}
+              </Table.Tbody>
+            </Table>
+          </Stack>
 
           {total > LIMIT && (
             <Group justify="center" mt="md">
