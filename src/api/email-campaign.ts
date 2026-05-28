@@ -54,6 +54,7 @@ export interface EmailCampaign {
   targetAudience: TargetAudience;
   audienceFilters?: { eventUserStatus?: string[] };
   utmParams?: UtmParam[] | null;
+  excludeEventUsers?: boolean;
   status: CampaignStatus;
   startedAt?: string;
   completedAt?: string;
@@ -88,6 +89,7 @@ export async function createCampaign(payload: {
   targetAudience: TargetAudience;
   audienceFilters?: { eventUserStatus?: string[] };
   utmParams?: UtmParam[];
+  excludeEventUsers?: boolean;
 }): Promise<EmailCampaign> {
   const { data } = await api.post("/email-campaign", payload);
   return data;

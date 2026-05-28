@@ -13,6 +13,7 @@ import {
   Divider,
   ActionIcon,
   Autocomplete,
+  Checkbox,
 } from "@mantine/core";
 import { IconChevronDown, IconChevronRight, IconPlus, IconTrash } from "@tabler/icons-react";
 import { notifications } from "@mantine/notifications";
@@ -198,6 +199,7 @@ export default function CreateCampaignModal({
   const [templateId, setTemplateId] = useState<string | null>(null);
   const [targetAudience, setTargetAudience] = useState<string | null>(null);
   const [eventUserStatus, setEventUserStatus] = useState<string[]>([]);
+  const [excludeEventUsers, setExcludeEventUsers] = useState(false);
   const [utmOpen, setUtmOpen] = useState(false);
   const [utmRows, setUtmRows] = useState<UtmRow[]>([]);
   const [saving, setSaving] = useState(false);
@@ -225,6 +227,9 @@ export default function CreateCampaignModal({
   const includesEventUsers =
     targetAudience === "event_users" || targetAudience === "both";
 
+  const includesOrgAttendees =
+    targetAudience === "org_attendees" || targetAudience === "both";
+
   const isValid = name.trim() && templateId && targetAudience;
 
   const handleSubmit = async (sendNow: boolean) => {
@@ -242,6 +247,7 @@ export default function CreateCampaignModal({
             ? { eventUserStatus }
             : undefined,
         utmParams,
+        excludeEventUsers: includesOrgAttendees ? excludeEventUsers : undefined,
       });
 
       if (sendNow) {
@@ -275,6 +281,7 @@ export default function CreateCampaignModal({
     setTemplateId(null);
     setTargetAudience(null);
     setEventUserStatus([]);
+    setExcludeEventUsers(false);
     setUtmRows([]);
     setUtmOpen(false);
   };
@@ -331,6 +338,15 @@ export default function CreateCampaignModal({
             value={eventUserStatus}
             onChange={setEventUserStatus}
             clearable
+          />
+        )}
+
+        {includesOrgAttendees && (
+          <Checkbox
+            label="Excluir personas ya registradas al evento"
+            description="Si está activo, quienes ya tienen un registro en el evento no recibirán este email."
+            checked={excludeEventUsers}
+            onChange={(e) => setExcludeEventUsers(e.currentTarget.checked)}
           />
         )}
 
