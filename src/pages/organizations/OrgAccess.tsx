@@ -50,6 +50,7 @@ import {
 } from "../../api/org-attendees";
 
 import { normalizeIdentifierValue } from "../../utils/normalizeByType";
+import { needsProfileUpdate } from "../../utils/registration-completeness";
 import { IconBrandWhatsapp } from "@tabler/icons-react";
 
 type FlowStep =
@@ -95,6 +96,10 @@ export default function OrgAccess() {
   // estado propio para el flujo de actualización ORG-ONLY
   const [orgAttendeeForUpdate, setOrgAttendeeForUpdate] =
     useState<OrgAttendee | null>(null);
+
+  // scope para el form de actualización de perfil:
+  // "org-only" cuando el EventUser ya existe, "org+event" cuando aún hay que crearlo
+  const [updateScope, setUpdateScope] = useState<"org-only" | "org+event">("org+event");
 
   const orgIdentifierForm = useForm<FormValues>({
     initialValues: {},
@@ -238,16 +243,62 @@ export default function OrgAccess() {
 
             if (result.isRegistered) {
               console.log(
-                "✅ OrgAccess(EventMode): Already registered, redirecting to /attend"
+                "✅ OrgAccess(EventMode): Already registered, checking profile completeness"
               );
+              if (
+                result.orgAttendee &&
+                config.fields?.length > 0 &&
+                needsProfileUpdate(config.fields, result.orgAttendee.registrationData ?? {})
+              ) {
+                setFoundRegistration({
+                  found: true,
+                  attendee: {
+                    _id: result.orgAttendee._id,
+                    email: result.orgAttendee.email,
+                    name: result.orgAttendee.name,
+                    registrationData: result.orgAttendee.registrationData ?? {},
+                    orgId: result.orgAttendee.organizationId,
+                    isActive: true,
+                    registeredAt: new Date().toISOString(),
+                  },
+                  isRegistered: true,
+                });
+                setUpdateScope("org-only");
+                setEvent(foundEvent);
+                setFlowStep("update-registration");
+                return;
+              }
               navigate(`/org/${slug}/event/${foundEvent.slug}/attend`);
               return;
             }
 
             if (result.orgAttendee) {
               console.log(
-                "🎯 OrgAccess(EventMode): Found OrgAttendee, auto-registering"
+                "🎯 OrgAccess(EventMode): Found OrgAttendee, checking profile before auto-registering"
               );
+
+              if (
+                config.fields?.length > 0 &&
+                needsProfileUpdate(config.fields, result.orgAttendee.registrationData ?? {})
+              ) {
+                setFoundRegistration({
+                  found: true,
+                  attendee: {
+                    _id: result.orgAttendee._id,
+                    email: result.orgAttendee.email,
+                    name: result.orgAttendee.name,
+                    registrationData: result.orgAttendee.registrationData ?? {},
+                    orgId: result.orgAttendee.organizationId,
+                    isActive: true,
+                    registeredAt: new Date().toISOString(),
+                  },
+                });
+                setUpdateScope("org+event");
+                setEvent(foundEvent);
+                setFlowStep("update-registration");
+                return;
+              }
+
               setAutoRegistering(true);
 
               await registerToEventWithFirebase(foundEvent._id, {
@@ -572,42 +623,44 @@ export default function OrgAccess() {
       let firebaseUID = user?.uid;
 
       if (!firebaseUID) {
-        console.log(
-          "🔐 handleContinueFromSummary: creating anonymous session for",
-          email
-        );
         firebaseUID = await createAnonymousSession(email);
         localStorage.setItem("user-email", email);
         localStorage.setItem(`uid-${firebaseUID}-email`, email);
       }
 
-      // fallback para EventAttend
       localStorage.setItem("last-registered-email", email);
 
-      // 3) (opcional pero recomendado) comprobar si YA está registrado
+      // 3) Verificar si YA está registrado al evento para determinar el scope del form
+      let alreadyRegistered = false;
       try {
         const { checkIfRegistered } = await import("../../api/events");
         const status = await checkIfRegistered(event._id, email);
-
-        if (status.isRegistered) {
-          console.log(
-            "✅ handleContinueFromSummary: EventUser ya existe, redirigiendo a /attend"
-          );
-          handleSuccessEventMode();
-          return;
-        }
+        alreadyRegistered = status.isRegistered;
       } catch (checkError) {
         console.warn(
-          "⚠️ handleContinueFromSummary: error al verificar si ya estaba registrado",
+          "⚠️ handleContinueFromSummary: error al verificar registro, se asume no registrado",
           checkError
         );
-        // Si falla el check, seguimos igual y tratamos de registrarlo
       }
-      console.log("attendee data:", attendee);
-      // 4) Crear/actualizar el EventUser usando la MISMA ruta que el auto-registro
+
+      // 4) Validar completitud del perfil
+      const fields = formConfig?.fields ?? [];
+      if (fields.length > 0 && needsProfileUpdate(fields, attendee.registrationData)) {
+        setUpdateScope(alreadyRegistered ? "org-only" : "org+event");
+        setCreatingEventUser(false);
+        setFlowStep("update-registration");
+        return;
+      }
+
+      // 5) Perfil completo: si ya está registrado, ir directo; si no, registrar
+      if (alreadyRegistered) {
+        handleSuccessEventMode();
+        return;
+      }
+
       await registerToEventWithFirebase(event._id, {
         email,
-        name: attendee.name, // o intenta sacar el nombre de registrationData si ahí lo guardas
+        name: attendee.name,
         formData: attendee.registrationData,
         firebaseUID,
       });
@@ -619,7 +672,6 @@ export default function OrgAccess() {
           "Tu registro a este evento está listo. Te estamos llevando al evento.",
       });
 
-      // 5) Ir al attend
       handleSuccessEventMode();
     } catch (err: any) {
       console.error("❌ Error creando EventUser desde summary:", err);
@@ -627,7 +679,6 @@ export default function OrgAccess() {
       const status = err?.response?.status;
       const message: string | undefined = err?.response?.data?.message;
 
-      // Por si tu backend responde algo tipo "ya está registrado" con 400/409
       if (
         status === 409 ||
         (typeof message === "string" &&
@@ -1038,9 +1089,31 @@ export default function OrgAccess() {
 
                     // 3) Ya registrado al evento
                     if (result.isRegistered && result.eventUser) {
-                      console.log(
-                        "✅ User already registered, redirecting to /attend"
-                      );
+                      const fields = formConfig?.fields ?? [];
+                      if (
+                        result.orgAttendee &&
+                        fields.length > 0 &&
+                        needsProfileUpdate(fields, result.orgAttendee.registrationData ?? {})
+                      ) {
+                        setFoundRegistration({
+                          found: true,
+                          attendee: {
+                            _id: result.orgAttendee._id,
+                            email: result.orgAttendee.email ?? "",
+                            name: result.orgAttendee.name,
+                            registrationData: result.orgAttendee.registrationData ?? {},
+                            orgId: result.orgAttendee.orgId ?? result.orgAttendee.organizationId ?? "",
+                            isActive: result.orgAttendee.isActive ?? true,
+                            registeredAt: result.orgAttendee.registeredAt ?? new Date().toISOString(),
+                          },
+                          isRegistered: true,
+                          eventUser: result.eventUser,
+                        });
+                        setUpdateScope("org-only");
+                        setFlowStep("update-registration");
+                        return;
+                      }
+                      console.log("✅ User already registered, redirecting to /attend");
                       handleSuccessEventMode();
                       return;
                     }
@@ -1149,7 +1222,7 @@ export default function OrgAccess() {
                 orgSlug={slug!}
                 orgId={org._id}
                 eventId={event._id}
-                registrationScope="org+event"
+                registrationScope={updateScope}
                 onSuccess={handleSuccessEventMode}
                 onCancel={() => setFlowStep("summary")}
                 existingData={{

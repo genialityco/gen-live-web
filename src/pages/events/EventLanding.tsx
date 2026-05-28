@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import {
   Stack,
@@ -17,6 +17,8 @@ import {
 } from "@mantine/core";
 import { fetchOrgBySlug, type Org } from "../../api/orgs";
 import { fetchEventsByOrg, type EventItem } from "../../api/events";
+import { AdvancedRegistrationForm } from "../../components/auth/AdvancedRegistrationForm";
+import { needsProfileUpdate } from "../../utils/registration-completeness";
 import { useAuth } from "../../auth/AuthProvider";
 import { useEventRealtimeData } from "../../hooks/useEventRealtimeData";
 import { BrandedHeader, BrandedFooter } from "../../components/branding";
@@ -30,6 +32,12 @@ import {
   resolveBrandingColorsFromBranding,
 } from "../../utils/branding";
 
+interface UpdateFormState {
+  attendeeId: string;
+  registrationData: Record<string, any>;
+  isAlreadyRegistered: boolean;
+}
+
 export default function EventLanding() {
   const { slug, eventSlug } = useParams<{ slug: string; eventSlug: string }>();
   const { user } = useAuth();
@@ -39,6 +47,7 @@ export default function EventLanding() {
   const [eventData, setEventData] = useState<EventItem | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [updateFormState, setUpdateFormState] = useState<UpdateFormState | null>(null);
 
   // Branding del evento con fallback al de la organización
   const eventBranding = eventData?.branding || org?.branding;
@@ -144,11 +153,28 @@ export default function EventLanding() {
       return;
     }
 
-    // 🟢 2) Si ya sabemos que está registrado → ir directo al attend
+    // 🟢 2) Si ya sabemos que está registrado → validar perfil completo primero
     if (isRegisteredForEvent && slug && eventSlug) {
-      console.log(
-        "✅ User already registered (prefetched), redirecting to /attend",
-      );
+      const formFields = org?.registrationForm?.fields ?? [];
+      if (formFields.length > 0) {
+        const { checkIfRegistered } = await import("../../api/events");
+        let userEmail: string | null = user?.email || null;
+        if (!userEmail && user?.uid)
+          userEmail = localStorage.getItem(`uid-${user.uid}-email`) || localStorage.getItem("user-email");
+
+        if (userEmail && eventData?._id) {
+          const result = await checkIfRegistered(eventData._id, userEmail);
+          if (result.orgAttendee && needsProfileUpdate(formFields, result.orgAttendee.registrationData)) {
+            setUpdateFormState({
+              attendeeId: result.orgAttendee._id,
+              registrationData: result.orgAttendee.registrationData ?? {},
+              isAlreadyRegistered: true,
+            });
+            return;
+          }
+        }
+      }
+      console.log("✅ User already registered (prefetched), redirecting to /attend");
       navigate(`/org/${slug}/event/${eventSlug}/attend`);
       return;
     }
@@ -179,29 +205,42 @@ export default function EventLanding() {
           await import("../../api/events");
         const result = await checkIfRegistered(eventData._id, userEmail);
 
+        const formFields = org?.registrationForm?.fields ?? [];
+
         if (result.isRegistered) {
-          console.log(
-            "✅ EventLanding: User already registered, redirecting to /attend",
-          );
+          // Ya registrado: validar perfil antes de entrar
+          if (result.orgAttendee && needsProfileUpdate(formFields, result.orgAttendee.registrationData)) {
+            setUpdateFormState({
+              attendeeId: result.orgAttendee._id,
+              registrationData: result.orgAttendee.registrationData ?? {},
+              isAlreadyRegistered: true,
+            });
+            return;
+          }
+          console.log("✅ EventLanding: User already registered, redirecting to /attend");
           navigate(`/org/${slug}/event/${eventSlug}/attend`);
           return;
         }
 
         if (result.orgAttendee) {
-          console.log(
-            "🎯 EventLanding: User has OrgAttendee, auto-registering to event",
-          );
+          // Tiene OrgAttendee pero no EventUser: validar perfil antes de auto-registrar
+          if (needsProfileUpdate(formFields, result.orgAttendee.registrationData)) {
+            setUpdateFormState({
+              attendeeId: result.orgAttendee._id,
+              registrationData: result.orgAttendee.registrationData ?? {},
+              isAlreadyRegistered: false,
+            });
+            return;
+          }
 
+          console.log("🎯 EventLanding: User has OrgAttendee, auto-registering to event");
           await registerToEventWithFirebase(eventData._id, {
             email: userEmail,
             name: result.orgAttendee.name,
             formData: result.orgAttendee.registrationData,
             firebaseUID: user.uid,
           });
-
-          console.log(
-            "✅ EventLanding: Auto-registration successful, redirecting to /attend",
-          );
+          console.log("✅ EventLanding: Auto-registration successful, redirecting to /attend");
           navigate(`/org/${slug}/event/${eventSlug}/attend`);
           return;
         }
@@ -246,6 +285,40 @@ export default function EventLanding() {
     }
   };
 
+  const handleProfileUpdateSuccess = useCallback(async () => {
+    if (!updateFormState || !slug || !eventSlug) {
+      setUpdateFormState(null);
+      return;
+    }
+
+    if (!updateFormState.isAlreadyRegistered && eventData?._id && user?.uid) {
+      // Aún no tiene EventUser: registrar al evento con datos frescos del servidor
+      try {
+        let userEmail: string | null = user.email || null;
+        if (!userEmail)
+          userEmail = localStorage.getItem(`uid-${user.uid}-email`) || localStorage.getItem("user-email");
+
+        if (userEmail) {
+          const { checkIfRegistered, registerToEventWithFirebase } = await import("../../api/events");
+          const fresh = await checkIfRegistered(eventData._id, userEmail);
+          if (fresh.orgAttendee && !fresh.isRegistered) {
+            await registerToEventWithFirebase(eventData._id, {
+              email: userEmail,
+              name: fresh.orgAttendee.name,
+              formData: fresh.orgAttendee.registrationData,
+              firebaseUID: user.uid,
+            });
+          }
+        }
+      } catch (e) {
+        console.error("Error registering to event after profile update:", e);
+      }
+    }
+
+    setUpdateFormState(null);
+    navigate(`/org/${slug}/event/${eventSlug}/attend`);
+  }, [updateFormState, eventData, user, slug, eventSlug, navigate]);
+
   useEffect(() => {
     loadData();
   }, [slug, eventSlug]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -253,6 +326,45 @@ export default function EventLanding() {
   const finalLoading = loading || eventLoading;
   const finalError =
     error || (!event && !eventLoading ? "Evento no encontrado" : null);
+
+  // Paso intermedio: completar perfil antes de entrar al evento
+  if (updateFormState && org && eventData) {
+    const eventBrandingForUpdate = eventData?.branding || org?.branding;
+    const brandForUpdate = resolveBrandingColorsFromBranding(eventBrandingForUpdate?.colors);
+    const themeForUpdate = makeTheme(brandForUpdate);
+
+    return (
+      <MantineProvider theme={themeForUpdate} withCssVariables>
+        <Box
+          style={{ ...cssVars(brandForUpdate), ...pageBackground(brandForUpdate), minHeight: "100vh" }}
+          c="var(--text-color)"
+        >
+          <BrandedHeader config={eventBrandingForUpdate?.header} />
+          <Container size="sm" py="xl">
+            <Stack gap="md">
+              <Alert color="yellow" title="Completa tu perfil para continuar">
+                Antes de ingresar al evento necesitamos que actualices algunos datos de tu registro.
+              </Alert>
+              <AdvancedRegistrationForm
+                orgSlug={org.domainSlug}
+                orgId={org._id}
+                eventId={eventData._id}
+                registrationScope="org-only"
+                existingData={{
+                  attendeeId: updateFormState.attendeeId,
+                  registrationData: updateFormState.registrationData as Record<string, string | number | boolean>,
+                }}
+                mode="page"
+                onSuccess={handleProfileUpdateSuccess}
+                onCancel={() => setUpdateFormState(null)}
+              />
+            </Stack>
+          </Container>
+          <BrandedFooter config={eventBrandingForUpdate?.footer} />
+        </Box>
+      </MantineProvider>
+    );
+  }
 
   if (finalLoading) {
     return (
