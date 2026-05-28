@@ -9,15 +9,159 @@ import {
   Group,
   Text,
   MultiSelect,
+  Collapse,
+  Divider,
+  ActionIcon,
+  Autocomplete,
 } from "@mantine/core";
+import { IconChevronDown, IconChevronRight, IconPlus, IconTrash } from "@tabler/icons-react";
 import { notifications } from "@mantine/notifications";
 import {
   createCampaign,
   sendCampaign,
   type EmailCampaign,
   type TargetAudience,
+  type UtmParam,
 } from "../../../api/email-campaign";
-import type { EmailTemplate } from "../../../api/event-email";
+import type { AvailableVariable, EmailTemplate } from "../../../api/event-email";
+
+// ─── Types ───────────────────────────────────────────────────────────────────
+
+type UtmRowValue =
+  | { mode: "field"; fieldKey: string }
+  | { mode: "text"; text: string };
+
+interface UtmRow {
+  id: number;
+  name: string;
+  val: UtmRowValue;
+}
+
+// ─── Constants ───────────────────────────────────────────────────────────────
+
+const UTM_NAME_SUGGESTIONS = [
+  "utm_source",
+  "utm_medium",
+  "utm_campaign",
+  "utm_content",
+  "utm_term",
+  "utm_perfil",
+  "utm_especialidad",
+  "utm_subespecialidad",
+];
+
+const UTM_STATIC_PLACEHOLDERS: Record<string, string> = {
+  utm_source: "email",
+  utm_medium: "email_campaign",
+  utm_campaign: "webinar-jun-2026",
+  utm_content: "banner_superior",
+  utm_term: "cardiologia",
+};
+
+let nextId = 1;
+const makeRow = (): UtmRow => ({
+  id: nextId++,
+  name: "",
+  val: { mode: "text", text: "" },
+});
+
+// ─── Sub-component: one UTM row ──────────────────────────────────────────────
+
+interface UtmRowProps {
+  row: UtmRow;
+  formFields: AvailableVariable[];
+  onChange: (row: UtmRow) => void;
+  onRemove: () => void;
+}
+
+function UtmRowEditor({ row, formFields, onChange, onRemove }: UtmRowProps) {
+  const fieldOptions = formFields.map((f) => ({ value: f.key, label: f.label }));
+
+  const handleModeChange = (v: string | null) => {
+    if (v === "field") onChange({ ...row, val: { mode: "field", fieldKey: fieldOptions[0]?.value ?? "" } });
+    else onChange({ ...row, val: { mode: "text", text: "" } });
+  };
+
+  return (
+    <Group gap="xs" align="flex-end" wrap="nowrap">
+      {/* Param name */}
+      <Autocomplete
+        label="Parámetro"
+        placeholder="utm_perfil"
+        data={UTM_NAME_SUGGESTIONS}
+        value={row.name}
+        onChange={(v) => onChange({ ...row, name: v })}
+        size="xs"
+        style={{ width: 160, flexShrink: 0 }}
+      />
+
+      {/* Value type */}
+      <Select
+        label="Tipo"
+        data={[
+          { value: "text", label: "Texto fijo" },
+          ...(formFields.length > 0 ? [{ value: "field", label: "Campo del form" }] : []),
+        ]}
+        value={row.val.mode}
+        onChange={handleModeChange}
+        size="xs"
+        style={{ width: 150, flexShrink: 0 }}
+      />
+
+      {/* Value */}
+      {row.val.mode === "field" ? (
+        <Select
+          label="Campo"
+          placeholder="Selecciona"
+          data={fieldOptions}
+          value={row.val.fieldKey}
+          onChange={(v) => v && onChange({ ...row, val: { mode: "field", fieldKey: v } })}
+          searchable
+          size="xs"
+          style={{ flex: 1 }}
+        />
+      ) : (
+        <TextInput
+          label="Valor"
+          placeholder={UTM_STATIC_PLACEHOLDERS[row.name] ?? "valor_fijo"}
+          value={row.val.text}
+          onChange={(e) => onChange({ ...row, val: { mode: "text", text: e.currentTarget.value } })}
+          size="xs"
+          style={{ flex: 1 }}
+        />
+      )}
+
+      <ActionIcon
+        color="red"
+        variant="subtle"
+        size="sm"
+        onClick={onRemove}
+        mt={18}
+        style={{ flexShrink: 0 }}
+      >
+        <IconTrash size={14} />
+      </ActionIcon>
+    </Group>
+  );
+}
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+function buildUtmParams(rows: UtmRow[]): UtmParam[] | undefined {
+  const result: UtmParam[] = rows
+    .filter((r) => {
+      if (!r.name.trim()) return false;
+      if (r.val.mode === "text") return r.val.text.trim().length > 0;
+      return r.val.fieldKey.length > 0;
+    })
+    .map((r) => ({
+      name: r.name.trim(),
+      value: r.val.mode === "field" ? r.val.fieldKey : r.val.text.trim(),
+    }));
+  return result.length > 0 ? result : undefined;
+}
+
+// ─── Main component ───────────────────────────────────────────────────────────
 
 interface CreateCampaignModalProps {
   opened: boolean;
@@ -25,6 +169,7 @@ interface CreateCampaignModalProps {
   orgId: string;
   eventId: string;
   templates: EmailTemplate[];
+  formFields: AvailableVariable[];
   onCreated: (campaign: EmailCampaign, sendNow: boolean) => void;
 }
 
@@ -46,15 +191,28 @@ export default function CreateCampaignModal({
   orgId,
   eventId,
   templates,
+  formFields,
   onCreated,
 }: CreateCampaignModalProps) {
   const [name, setName] = useState("");
   const [templateId, setTemplateId] = useState<string | null>(null);
   const [targetAudience, setTargetAudience] = useState<string | null>(null);
   const [eventUserStatus, setEventUserStatus] = useState<string[]>([]);
+  const [utmOpen, setUtmOpen] = useState(false);
+  const [utmRows, setUtmRows] = useState<UtmRow[]>([]);
   const [saving, setSaving] = useState(false);
 
-  // Solo mostrar INVITATION y REMINDER habilitados
+  const utmParams = buildUtmParams(utmRows);
+  const hasUtm = !!utmParams;
+
+  const updateRow = (updated: UtmRow) =>
+    setUtmRows((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
+
+  const removeRow = (id: number) =>
+    setUtmRows((prev) => prev.filter((r) => r.id !== id));
+
+  const addRow = () => setUtmRows((prev) => [...prev, makeRow()]);
+
   const availableTemplates = templates.filter(
     (t) => (t.type === "INVITATION" || t.type === "REMINDER") && t.enabled
   );
@@ -83,6 +241,7 @@ export default function CreateCampaignModal({
           includesEventUsers && eventUserStatus.length > 0
             ? { eventUserStatus }
             : undefined,
+        utmParams,
       });
 
       if (sendNow) {
@@ -116,17 +275,16 @@ export default function CreateCampaignModal({
     setTemplateId(null);
     setTargetAudience(null);
     setEventUserStatus([]);
+    setUtmRows([]);
+    setUtmOpen(false);
   };
 
   return (
     <Modal
       opened={opened}
-      onClose={() => {
-        resetForm();
-        onClose();
-      }}
+      onClose={() => { resetForm(); onClose(); }}
       title="Nueva campaña de email"
-      size="md"
+      size="lg"
       centered
     >
       <Stack gap="md">
@@ -187,13 +345,55 @@ export default function CreateCampaignModal({
           </Text>
         )}
 
+        <Divider />
+
+        <Button
+          variant="subtle"
+          size="xs"
+          leftSection={utmOpen ? <IconChevronDown size={14} /> : <IconChevronRight size={14} />}
+          onClick={() => setUtmOpen((o) => !o)}
+          justify="start"
+          px={0}
+        >
+          Parámetros UTM{" "}
+          {hasUtm && <Text span c="blue" ml={4}>({utmParams!.length} configurados)</Text>}
+        </Button>
+
+        <Collapse in={utmOpen}>
+          <Stack gap="sm">
+            <Text size="xs" c="dimmed">
+              Usa <strong>texto fijo</strong> para valores iguales en todos los emails (p.ej.{" "}
+              <Text span ff="monospace">utm_source=email</Text>) o <strong>campo del form</strong> para
+              valores individuales por asistente. Usa{" "}
+              <Text span ff="monospace">{"{{event.joinUrlWithUtm}}"}</Text> en la plantilla.
+            </Text>
+
+            {utmRows.map((row) => (
+              <UtmRowEditor
+                key={row.id}
+                row={row}
+                formFields={formFields}
+                onChange={updateRow}
+                onRemove={() => removeRow(row.id)}
+              />
+            ))}
+
+            <Button
+              variant="light"
+              size="xs"
+              leftSection={<IconPlus size={13} />}
+              onClick={addRow}
+              style={{ alignSelf: "flex-start" }}
+            >
+              Agregar parámetro
+            </Button>
+          </Stack>
+        </Collapse>
+
         <Group justify="flex-end" mt="xs">
           <Button
             variant="default"
-            onClick={() => {
-              resetForm();
-              onClose();
-            }}
+            onClick={() => { resetForm(); onClose(); }}
             disabled={saving}
           >
             Cancelar

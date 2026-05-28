@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
   Stack,
   Group,
@@ -19,7 +19,7 @@ import {
   type CampaignStatus,
 } from "../../../api/email-campaign";
 import CreateCampaignModal from "./CreateCampaignModal";
-import type { EmailTemplate } from "../../../api/event-email";
+import { fetchEmailVariables, type AvailableVariable, type EmailTemplate } from "../../../api/event-email";
 
 interface CampaignListProps {
   orgId: string;
@@ -59,11 +59,20 @@ export default function CampaignList({
   const [campaigns, setCampaigns] = useState<EmailCampaign[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
+  const [formFields, setFormFields] = useState<AvailableVariable[]>([]);
+  const fetchedRef = useRef(false);
 
   const load = useCallback(async () => {
     try {
-      const data = await listCampaigns(orgId, eventId);
+      const [data, vars] = await Promise.all([
+        listCampaigns(orgId, eventId),
+        fetchedRef.current ? Promise.resolve(null) : fetchEmailVariables(orgId, eventId),
+      ]);
       setCampaigns(data);
+      if (vars) {
+        setFormFields(vars.filter((v) => v.section === "Formulario"));
+        fetchedRef.current = true;
+      }
     } catch {
       notifications.show({
         title: "Error",
@@ -182,6 +191,7 @@ export default function CampaignList({
         orgId={orgId}
         eventId={eventId}
         templates={templates}
+        formFields={formFields}
         onCreated={(campaign, sendNow) => {
           setModalOpen(false);
           if (sendNow) {

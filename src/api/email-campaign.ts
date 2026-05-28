@@ -9,6 +9,11 @@ export type CampaignStatus =
   | "failed"
   | "cancelled";
 
+export interface UtmParam {
+  name: string;
+  value: string;
+}
+
 export type TargetAudience = "event_users" | "org_attendees" | "both";
 export type DeliveryStatus =
   | "pending"
@@ -48,6 +53,7 @@ export interface EmailCampaign {
   templateId: string;
   targetAudience: TargetAudience;
   audienceFilters?: { eventUserStatus?: string[] };
+  utmParams?: UtmParam[] | null;
   status: CampaignStatus;
   startedAt?: string;
   completedAt?: string;
@@ -81,6 +87,7 @@ export async function createCampaign(payload: {
   templateId: string;
   targetAudience: TargetAudience;
   audienceFilters?: { eventUserStatus?: string[] };
+  utmParams?: UtmParam[];
 }): Promise<EmailCampaign> {
   const { data } = await api.post("/email-campaign", payload);
   return data;

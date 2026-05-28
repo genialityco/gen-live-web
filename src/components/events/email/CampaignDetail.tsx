@@ -39,7 +39,32 @@ import {
   type EmailDelivery,
   type DeliveryStatus,
   type CampaignStatus,
+  type UtmParam,
 } from "../../../api/email-campaign";
+
+function UtmSummary({ utmParams }: { utmParams: UtmParam[] }) {
+  if (utmParams.length === 0) return null;
+
+  return (
+    <Card withBorder radius="md" p="sm">
+      <Group gap="xs" align="center" wrap="wrap">
+        <Text size="xs" fw={600} c="dimmed" style={{ whiteSpace: "nowrap" }}>
+          UTMs configurados:
+        </Text>
+        {utmParams.map((p, i) => (
+          <Badge key={i} size="sm" variant="light" color="violet">
+            <Text span fw={400} c="dimmed">{p.name}=</Text>
+            {p.value.startsWith("form.") ? (
+              <Text span c="blue">{p.value}</Text>
+            ) : (
+              p.value
+            )}
+          </Badge>
+        ))}
+      </Group>
+    </Card>
+  );
+}
 
 interface CampaignDetailProps {
   campaignId: string;
@@ -308,6 +333,9 @@ export default function CampaignDetail({
           </Tooltip>
         </Group>
       </Group>
+
+      {/* UTM config summary */}
+      {campaign.utmParams?.length && <UtmSummary utmParams={campaign.utmParams} />}
 
       {/* Progress bar (solo si enviando o hay datos) */}
       {stats.total > 0 && (
