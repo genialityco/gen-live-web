@@ -56,6 +56,8 @@ function UtmSummary({ utmParams }: { utmParams: UtmParam[] }) {
             <Text span fw={400} c="dimmed">{p.name}=</Text>
             {p.value.startsWith("form.") ? (
               <Text span c="blue">{p.value}</Text>
+            ) : p.value.startsWith("event.") || p.value.startsWith("attendee.") ? (
+              <Text span c="teal">{p.value}</Text>
             ) : (
               p.value
             )}

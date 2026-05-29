@@ -30,6 +30,7 @@ import type { AvailableVariable, EmailTemplate } from "../../../api/event-email"
 
 type UtmRowValue =
   | { mode: "field"; fieldKey: string }
+  | { mode: "variable"; varKey: string }
   | { mode: "text"; text: string };
 
 interface UtmRow {
@@ -59,12 +60,28 @@ const UTM_STATIC_PLACEHOLDERS: Record<string, string> = {
   utm_term: "cardiologia",
 };
 
+const CONTEXT_VARIABLE_OPTIONS = [
+  { value: "event.slug", label: "Slug del evento  (ej. webinar-jun-2026)" },
+  { value: "event.title", label: "Título del evento" },
+  { value: "attendee.email", label: "Email del asistente" },
+  { value: "attendee.id", label: "ID del asistente" },
+];
+
 let nextId = 1;
 const makeRow = (): UtmRow => ({
   id: nextId++,
   name: "",
   val: { mode: "text", text: "" },
 });
+
+const DEFAULT_UTM_ROWS: UtmRow[] = [
+  { id: nextId++, name: "utm_source",          val: { mode: "text",     text: "email" } },
+  { id: nextId++, name: "utm_medium",          val: { mode: "text",     text: "email_campaign" } },
+  { id: nextId++, name: "utm_campaign",        val: { mode: "variable", varKey: "event.slug" } },
+  { id: nextId++, name: "utm_perfil",          val: { mode: "field",    fieldKey: "form.field_1764364059930" } },
+  { id: nextId++, name: "utm_especialidad",    val: { mode: "field",    fieldKey: "form.field_1764364185864" } },
+  { id: nextId++, name: "utm_subespecialidad", val: { mode: "field",    fieldKey: "form.field_1764364257048" } },
+];
 
 // ─── Sub-component: one UTM row ──────────────────────────────────────────────
 
@@ -79,8 +96,9 @@ function UtmRowEditor({ row, formFields, onChange, onRemove }: UtmRowProps) {
   const fieldOptions = formFields.map((f) => ({ value: f.key, label: f.label }));
 
   const handleModeChange = (v: string | null) => {
-    if (v === "field") onChange({ ...row, val: { mode: "field", fieldKey: fieldOptions[0]?.value ?? "" } });
-    else onChange({ ...row, val: { mode: "text", text: "" } });
+    if (v === "field")    onChange({ ...row, val: { mode: "field",    fieldKey: fieldOptions[0]?.value ?? "" } });
+    else if (v === "variable") onChange({ ...row, val: { mode: "variable", varKey: CONTEXT_VARIABLE_OPTIONS[0].value } });
+    else                  onChange({ ...row, val: { mode: "text",     text: "" } });
   };
 
   return (
@@ -100,13 +118,14 @@ function UtmRowEditor({ row, formFields, onChange, onRemove }: UtmRowProps) {
       <Select
         label="Tipo"
         data={[
-          { value: "text", label: "Texto fijo" },
+          { value: "text",     label: "Texto fijo" },
+          { value: "variable", label: "Variable del evento" },
           ...(formFields.length > 0 ? [{ value: "field", label: "Campo del form" }] : []),
         ]}
         value={row.val.mode}
         onChange={handleModeChange}
         size="xs"
-        style={{ width: 150, flexShrink: 0 }}
+        style={{ width: 170, flexShrink: 0 }}
       />
 
       {/* Value */}
@@ -118,6 +137,15 @@ function UtmRowEditor({ row, formFields, onChange, onRemove }: UtmRowProps) {
           value={row.val.fieldKey}
           onChange={(v) => v && onChange({ ...row, val: { mode: "field", fieldKey: v } })}
           searchable
+          size="xs"
+          style={{ flex: 1 }}
+        />
+      ) : row.val.mode === "variable" ? (
+        <Select
+          label="Variable"
+          data={CONTEXT_VARIABLE_OPTIONS}
+          value={row.val.varKey}
+          onChange={(v) => v && onChange({ ...row, val: { mode: "variable", varKey: v } })}
           size="xs"
           style={{ flex: 1 }}
         />
@@ -152,12 +180,16 @@ function buildUtmParams(rows: UtmRow[]): UtmParam[] | undefined {
   const result: UtmParam[] = rows
     .filter((r) => {
       if (!r.name.trim()) return false;
-      if (r.val.mode === "text") return r.val.text.trim().length > 0;
+      if (r.val.mode === "text")     return r.val.text.trim().length > 0;
+      if (r.val.mode === "variable") return r.val.varKey.length > 0;
       return r.val.fieldKey.length > 0;
     })
     .map((r) => ({
       name: r.name.trim(),
-      value: r.val.mode === "field" ? r.val.fieldKey : r.val.text.trim(),
+      value:
+        r.val.mode === "field"    ? r.val.fieldKey :
+        r.val.mode === "variable" ? r.val.varKey   :
+        r.val.text.trim(),
     }));
   return result.length > 0 ? result : undefined;
 }
@@ -200,8 +232,10 @@ export default function CreateCampaignModal({
   const [targetAudience, setTargetAudience] = useState<string | null>(null);
   const [eventUserStatus, setEventUserStatus] = useState<string[]>([]);
   const [excludeEventUsers, setExcludeEventUsers] = useState(false);
-  const [utmOpen, setUtmOpen] = useState(false);
-  const [utmRows, setUtmRows] = useState<UtmRow[]>([]);
+  const [utmOpen, setUtmOpen] = useState(true);
+  const [utmRows, setUtmRows] = useState<UtmRow[]>(() =>
+    DEFAULT_UTM_ROWS.map((r) => ({ ...r })),
+  );
   const [saving, setSaving] = useState(false);
 
   const utmParams = buildUtmParams(utmRows);
@@ -223,6 +257,24 @@ export default function CreateCampaignModal({
     value: t._id,
     label: `${t.type === "INVITATION" ? "Invitación" : "Recordatorio"}: ${t.name}`,
   }));
+
+  const selectedTemplate = availableTemplates.find((t) => t._id === templateId) ?? null;
+
+  const handleTemplateChange = (value: string | null) => {
+    setTemplateId(value);
+    if (!value) return;
+    const tpl = availableTemplates.find((t) => t._id === value);
+    if (!tpl) return;
+    if (tpl.type === "INVITATION") {
+      setTargetAudience("org_attendees");
+      setExcludeEventUsers(true);
+      setEventUserStatus([]);
+    } else if (tpl.type === "REMINDER") {
+      setTargetAudience("event_users");
+      setExcludeEventUsers(false);
+      setEventUserStatus([]);
+    }
+  };
 
   const includesEventUsers =
     targetAudience === "event_users" || targetAudience === "both";
@@ -282,8 +334,8 @@ export default function CreateCampaignModal({
     setTargetAudience(null);
     setEventUserStatus([]);
     setExcludeEventUsers(false);
-    setUtmRows([]);
-    setUtmOpen(false);
+    setUtmRows(DEFAULT_UTM_ROWS.map((r) => ({ ...r })));
+    setUtmOpen(true);
   };
 
   return (
@@ -316,7 +368,7 @@ export default function CreateCampaignModal({
           placeholder="Selecciona una plantilla"
           data={templateOptions}
           value={templateId}
-          onChange={setTemplateId}
+          onChange={handleTemplateChange}
           required
           disabled={availableTemplates.length === 0}
         />
@@ -351,14 +403,30 @@ export default function CreateCampaignModal({
         )}
 
         {targetAudience && (
-          <Text size="xs" c="dimmed">
-            {targetAudience === "event_users" &&
-              "Se enviarán emails a los usuarios registrados en este evento."}
-            {targetAudience === "org_attendees" &&
-              "Se enviarán emails a toda la base de contactos de la organización."}
-            {targetAudience === "both" &&
-              "Se enviará a la unión de registrados al evento y base de contactos (sin duplicados)."}
-          </Text>
+          <Alert
+            color={
+              selectedTemplate?.type === "INVITATION" ? "blue"
+              : selectedTemplate?.type === "REMINDER" ? "teal"
+              : "gray"
+            }
+            variant="light"
+            p="xs"
+          >
+            <Text size="xs">
+              {targetAudience === "event_users" && (
+                selectedTemplate?.type === "REMINDER"
+                  ? "Recordatorio enviado únicamente a personas ya registradas en el evento. No recibirán el email quienes no se hayan inscrito."
+                  : "Se enviarán emails a los usuarios registrados en este evento."
+              )}
+              {targetAudience === "org_attendees" && (
+                excludeEventUsers
+                  ? "Invitación enviada a toda la base de contactos de la organización, excluyendo a quienes ya están registrados en este evento. Así nadie recibe una invitación si ya se inscribió."
+                  : "Se enviarán emails a toda la base de contactos de la organización (incluyendo ya registrados)."
+              )}
+              {targetAudience === "both" &&
+                "Se enviará a la unión de registrados al evento y base de contactos (sin duplicados)."}
+            </Text>
+          </Alert>
         )}
 
         <Divider />

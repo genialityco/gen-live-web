@@ -10,11 +10,13 @@ import {
   Center,
   Alert,
   ActionIcon,
+  Modal,
 } from "@mantine/core";
-import { IconPlus, IconChevronRight } from "@tabler/icons-react";
+import { IconPlus, IconChevronRight, IconTrash } from "@tabler/icons-react";
 import { notifications } from "@mantine/notifications";
 import {
   listCampaigns,
+  deleteCampaign,
   type EmailCampaign,
   type CampaignStatus,
 } from "../../../api/email-campaign";
@@ -60,6 +62,8 @@ export default function CampaignList({
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [formFields, setFormFields] = useState<AvailableVariable[]>([]);
+  const [confirmDelete, setConfirmDelete] = useState<EmailCampaign | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const fetchedRef = useRef(false);
 
   const load = useCallback(async () => {
@@ -87,6 +91,21 @@ export default function CampaignList({
   useEffect(() => {
     load();
   }, [load]);
+
+  const handleDelete = async () => {
+    if (!confirmDelete) return;
+    setDeleting(true);
+    try {
+      await deleteCampaign(confirmDelete._id);
+      setCampaigns((prev) => prev.filter((c) => c._id !== confirmDelete._id));
+      notifications.show({ title: "Campaña eliminada", message: confirmDelete.name, color: "gray" });
+      setConfirmDelete(null);
+    } catch {
+      notifications.show({ title: "Error", message: "No se pudo eliminar la campaña", color: "red" });
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -174,9 +193,21 @@ export default function CampaignList({
                     </Text>
                   </Table.Td>
                   <Table.Td>
-                    <ActionIcon variant="subtle" color="gray">
-                      <IconChevronRight size={16} />
-                    </ActionIcon>
+                    <Group gap={4} justify="flex-end" wrap="nowrap">
+                      {c.status !== "sending" && (
+                        <ActionIcon
+                          variant="subtle"
+                          color="red"
+                          size="sm"
+                          onClick={(e) => { e.stopPropagation(); setConfirmDelete(c); }}
+                        >
+                          <IconTrash size={14} />
+                        </ActionIcon>
+                      )}
+                      <ActionIcon variant="subtle" color="gray">
+                        <IconChevronRight size={16} />
+                      </ActionIcon>
+                    </Group>
                   </Table.Td>
                 </Table.Tr>
               ))}
@@ -184,6 +215,39 @@ export default function CampaignList({
           </Table>
         )}
       </Stack>
+
+      <Modal
+        opened={!!confirmDelete}
+        onClose={() => !deleting && setConfirmDelete(null)}
+        title="Eliminar campaña"
+        centered
+        size="sm"
+      >
+        {confirmDelete && (
+          <Stack gap="md">
+            {confirmDelete.status === "completed" ? (
+              <Alert color="red" title="Esta campaña ya fue enviada">
+                Se eliminará <strong>{confirmDelete.name}</strong> y el historial
+                de {confirmDelete.stats.sent.toLocaleString()} emails enviados.
+                Esta acción no se puede deshacer.
+              </Alert>
+            ) : (
+              <Text size="sm">
+                ¿Eliminar la campaña <strong>{confirmDelete.name}</strong>? Esta
+                acción no se puede deshacer.
+              </Text>
+            )}
+            <Group justify="flex-end">
+              <Button variant="default" onClick={() => setConfirmDelete(null)} disabled={deleting}>
+                Cancelar
+              </Button>
+              <Button color="red" onClick={handleDelete} loading={deleting}>
+                Eliminar
+              </Button>
+            </Group>
+          </Stack>
+        )}
+      </Modal>
 
       <CreateCampaignModal
         opened={modalOpen}

@@ -128,6 +128,10 @@ export async function resumeCampaign(
   return data;
 }
 
+export async function deleteCampaign(campaignId: string): Promise<void> {
+  await api.delete(`/email-campaign/${campaignId}`);
+}
+
 export async function listDeliveries(
   campaignId: string,
   params?: { status?: DeliveryStatus; page?: number; limit?: number }

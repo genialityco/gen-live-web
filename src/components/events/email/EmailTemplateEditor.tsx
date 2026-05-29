@@ -87,7 +87,7 @@ const TEMPLATE_DEFAULTS: Record<
 </table>
 
 <p>Regístrate y accede al evento desde el siguiente enlace:</p>
-<p><a href="{{event.joinUrl}}" style="display: inline-block; padding: 10px 24px; background-color: #4263eb; color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600;">Ver evento</a></p>
+<p><a href="{{event.joinUrlWithUtm}}" style="display: inline-block; padding: 10px 24px; background-color: #4263eb; color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600;">Ver evento</a></p>
 
 <p>¡Esperamos contar con tu presencia!</p>`,
   },
@@ -116,7 +116,7 @@ const TEMPLATE_DEFAULTS: Record<
 </table>
 
 <p>Accede al evento en el momento indicado desde este enlace:</p>
-<p><a href="{{event.joinUrl}}" style="display: inline-block; padding: 10px 24px; background-color: #4263eb; color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600;">Ir al evento</a></p>
+<p><a href="{{event.joinUrlWithUtm}}" style="display: inline-block; padding: 10px 24px; background-color: #4263eb; color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600;">Ir al evento</a></p>
 
 <p>¡Hasta pronto!</p>`,
   },
