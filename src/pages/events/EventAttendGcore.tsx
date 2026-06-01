@@ -2,7 +2,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type React from "react";
 import { useState, useEffect, useMemo } from "react";
-import { useParams, useNavigate, Link } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams, Link } from "react-router-dom";
 import {
   Container,
   Stack,
@@ -338,8 +338,19 @@ function EventAttendHeader({
 export default function EventAttendGcore() {
   const { slug, eventSlug } = useParams<{ slug: string; eventSlug: string }>();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const isMobile = useMediaQuery("(max-width: 768px)");
   const { user, sessionName } = useAuth();
+
+  // Email click arrival confirmation
+  useEffect(() => {
+    const tc = searchParams.get("_tc");
+    if (!tc) return;
+    const apiUrl = import.meta.env.VITE_API_URL as string;
+    fetch(`${apiUrl}/track/arrive/${tc}`).catch(() => {});
+    searchParams.delete("_tc");
+    setSearchParams(searchParams, { replace: true });
+  }, []);
 
   const [org, setOrg] = useState<Org | null>(null);
   const [event, setEvent] = useState<EventItem | null>(null);

@@ -43,6 +43,19 @@ export interface CampaignStats {
   failed: number;
   bounced: number;
   complained: number;
+  clicked: number;
+  totalClicks: number;
+}
+
+export interface UtmValueStat {
+  value: string;
+  clicks: number;
+}
+
+export interface CampaignAnalytics {
+  totalClicks: number;
+  uniqueClickers: number;
+  byUtm: Record<string, UtmValueStat[]>;
 }
 
 export interface EmailCampaign {
@@ -156,4 +169,13 @@ export async function fetchSuppressedAttendees(
 
 export async function restoreAttendeeEmail(attendeeId: string): Promise<void> {
   await api.post(`/email-campaign/attendee/${attendeeId}/restore-email`);
+}
+
+export async function getCampaignAnalytics(
+  campaignId: string
+): Promise<CampaignAnalytics> {
+  const { data } = await api.get(
+    `/email-campaign/${campaignId}/analytics`
+  );
+  return data;
 }

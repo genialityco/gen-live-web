@@ -17,6 +17,7 @@ import {
   ActionIcon,
   Tooltip,
   Alert,
+  Divider,
 } from "@mantine/core";
 import {
   IconArrowLeft,
@@ -34,11 +35,13 @@ import {
   cancelCampaign,
   resumeCampaign,
   listDeliveries,
+  getCampaignAnalytics,
   type EmailCampaign,
   type EmailDelivery,
   type DeliveryStatus,
   type CampaignStatus,
   type UtmParam,
+  type CampaignAnalytics,
 } from "../../../api/email-campaign";
 
 // ─── Sub-components ──────────────────────────────────────────────────────────
@@ -132,6 +135,7 @@ export default function CampaignDetail({ campaignId, onBack }: CampaignDetailPro
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [analytics, setAnalytics] = useState<CampaignAnalytics | null>(null);
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const activeStatus = statusFilter === "all" ? undefined : (statusFilter as DeliveryStatus);
@@ -155,10 +159,23 @@ export default function CampaignDetail({ campaignId, onBack }: CampaignDetailPro
     [campaignId]
   );
 
+  const loadAnalytics = useCallback(async () => {
+    try {
+      const data = await getCampaignAnalytics(campaignId);
+      setAnalytics(data);
+    } catch {
+      // analytics are optional — don't block the view on error
+    }
+  }, [campaignId]);
+
   const loadAll = useCallback(async () => {
     try {
       const camp = await loadCampaign();
       await loadDeliveries(page, activeStatus);
+
+      if (camp.status !== "draft") {
+        loadAnalytics();
+      }
 
       if (camp.status === "sending") {
         if (!pollingRef.current) {
@@ -169,6 +186,7 @@ export default function CampaignDetail({ campaignId, onBack }: CampaignDetailPro
               clearInterval(pollingRef.current);
               pollingRef.current = null;
               await loadDeliveries(page, activeStatus);
+              loadAnalytics();
             }
           }, 5000);
         }
@@ -181,7 +199,7 @@ export default function CampaignDetail({ campaignId, onBack }: CampaignDetailPro
     } finally {
       setLoading(false);
     }
-  }, [campaignId, page, activeStatus, loadCampaign, loadDeliveries]);
+  }, [campaignId, page, activeStatus, loadCampaign, loadDeliveries, loadAnalytics]);
 
   useEffect(() => {
     loadAll();
@@ -412,6 +430,83 @@ export default function CampaignDetail({ campaignId, onBack }: CampaignDetailPro
           {errorCount.toLocaleString()} emails con error (fallidos + rechazados)
         </Text>
       )}
+
+      {/* ── Analíticas de clics ─────────────────────────────────────────────── */}
+      {analytics && (analytics.totalClicks > 0 || campaign.status === "completed") && (
+        <>
+          <Divider label="Analíticas de clics" labelPosition="left" />
+          <SimpleGrid cols={{ base: 2, sm: 3 }}>
+            <Card withBorder p="sm" radius="md">
+              <Text size="xs" c="dimmed">Clics únicos</Text>
+              <Text size="xl" fw={700} c="blue">
+                {analytics.uniqueClickers.toLocaleString()}
+              </Text>
+              {stats.sent > 0 && (
+                <Text size="xs" c="dimmed">
+                  {((analytics.uniqueClickers / stats.sent) * 100).toFixed(1)}% de enviados
+                </Text>
+              )}
+            </Card>
+            <Card withBorder p="sm" radius="md">
+              <Text size="xs" c="dimmed">Total clics</Text>
+              <Text size="xl" fw={700} c="indigo">
+                {analytics.totalClicks.toLocaleString()}
+              </Text>
+            </Card>
+            <Card withBorder p="sm" radius="md">
+              <Text size="xs" c="dimmed">Tasa de clic</Text>
+              <Text size="xl" fw={700} c={analytics.uniqueClickers > 0 ? "teal" : "dimmed"}>
+                {stats.sent > 0
+                  ? `${((analytics.uniqueClickers / stats.sent) * 100).toFixed(1)}%`
+                  : "—"}
+              </Text>
+            </Card>
+          </SimpleGrid>
+
+          {Object.keys(analytics.byUtm).length > 0 && (
+            <SimpleGrid cols={{ base: 1, sm: 2 }}>
+              {Object.entries(analytics.byUtm).map(([utmKey, values]) => {
+                const maxClicks = values[0]?.clicks ?? 1;
+                return (
+                  <Card key={utmKey} withBorder radius="md" p="sm">
+                    <Text size="sm" fw={600} mb="xs" c="dimmed">
+                      {utmKey}
+                    </Text>
+                    <Stack gap={6}>
+                      {values.slice(0, 10).map(({ value, clicks }) => (
+                        <div key={value}>
+                          <Group justify="space-between" mb={2}>
+                            <Text size="xs" truncate maw={180}>{value}</Text>
+                            <Text size="xs" fw={600}>{clicks.toLocaleString()}</Text>
+                          </Group>
+                          <Progress
+                            value={(clicks / maxClicks) * 100}
+                            size="sm"
+                            color="blue"
+                            radius="xl"
+                          />
+                        </div>
+                      ))}
+                      {values.length > 10 && (
+                        <Text size="xs" c="dimmed">
+                          +{values.length - 10} valores más
+                        </Text>
+                      )}
+                    </Stack>
+                  </Card>
+                );
+              })}
+            </SimpleGrid>
+          )}
+
+          {analytics.totalClicks === 0 && (
+            <Text size="sm" c="dimmed">
+              Sin clics registrados aún. Los clics aparecen en tiempo real cuando los destinatarios abren el link del evento.
+            </Text>
+          )}
+        </>
+      )}
+      {/* ──────────────────────────────────────────────────────────────────────── */}
 
       {bounceRate >= 2 && (
         <Alert
