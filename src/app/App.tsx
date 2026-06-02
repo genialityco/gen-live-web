@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { RouterProvider } from "react-router-dom";
 import { router } from "./router";
+import { sendPageView } from "../lib/utmTracking";
 import { MantineProvider, createTheme } from "@mantine/core";
 import { DatesProvider } from "@mantine/dates";
 import { Notifications } from "@mantine/notifications";
@@ -115,6 +116,19 @@ export default function App() {
     if (targetPath && window.location.pathname === "/") {
       window.location.replace(`${targetPath}?v=${CACHE_VERSION}`);
     }
+  }, []);
+
+  // Tracking GA4 — page_view manual por cada cambio de ruta
+  useEffect(() => {
+    // Primer page_view al cargar la app
+    sendPageView(window.location.pathname, window.location.search);
+
+    // Navegaciones internas (router.subscribe no dispara en la carga inicial)
+    const unsubscribe = router.subscribe((state) => {
+      sendPageView(state.location.pathname, state.location.search);
+    });
+
+    return unsubscribe;
   }, []);
 
   // 🔴 Kill switch global

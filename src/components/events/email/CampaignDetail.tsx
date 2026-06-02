@@ -434,10 +434,16 @@ export default function CampaignDetail({ campaignId, onBack }: CampaignDetailPro
       {/* ── Analíticas de clics ─────────────────────────────────────────────── */}
       {analytics && (analytics.totalClicks > 0 || campaign.status === "completed") && (
         <>
-          <Divider label="Analíticas de clics" labelPosition="left" />
+          <Divider />
+          <Stack gap={2}>
+            <Title order={5}>Interacciones de la campaña</Title>
+            <Text size="sm" c="dimmed">
+              Estas son las analíticas de las interacciones en la campaña enviada.
+            </Text>
+          </Stack>
           <SimpleGrid cols={{ base: 2, sm: 3 }}>
             <Card withBorder p="sm" radius="md">
-              <Text size="xs" c="dimmed">Clics únicos</Text>
+              <Text size="xs" c="dimmed">Usuarios que hicieron clic</Text>
               <Text size="xl" fw={700} c="blue">
                 {analytics.uniqueClickers.toLocaleString()}
               </Text>
@@ -451,14 +457,6 @@ export default function CampaignDetail({ campaignId, onBack }: CampaignDetailPro
               <Text size="xs" c="dimmed">Total clics</Text>
               <Text size="xl" fw={700} c="indigo">
                 {analytics.totalClicks.toLocaleString()}
-              </Text>
-            </Card>
-            <Card withBorder p="sm" radius="md">
-              <Text size="xs" c="dimmed">Tasa de clic</Text>
-              <Text size="xl" fw={700} c={analytics.uniqueClickers > 0 ? "teal" : "dimmed"}>
-                {stats.sent > 0
-                  ? `${((analytics.uniqueClickers / stats.sent) * 100).toFixed(1)}%`
-                  : "—"}
               </Text>
             </Card>
           </SimpleGrid>
