@@ -24,9 +24,9 @@ export function captureUtms(): void {
 
   // User-scoped: asocia el valor al usuario, no solo al page_view
   window.gtag?.('set', 'user_properties', {
-    perfil: captured.utm_perfil,
-    especialidad: captured.utm_especialidad,
-    subespecialidad: captured.utm_subespecialidad,
+    utm_perfil: captured.utm_perfil,
+    utm_especialidad: captured.utm_especialidad,
+    utm_subespecialidad: captured.utm_subespecialidad,
   });
 }
 
@@ -44,8 +44,8 @@ export function sendPageView(pathname: string, search: string): void {
     page_path: pathname + search,
     page_location: window.location.origin + pathname + search,
     page_title: document.title,
-    ...(utms.utm_perfil && { perfil: utms.utm_perfil }),
-    ...(utms.utm_especialidad && { especialidad: utms.utm_especialidad }),
-    ...(utms.utm_subespecialidad && { subespecialidad: utms.utm_subespecialidad }),
+    ...(utms.utm_perfil && { utm_perfil: utms.utm_perfil }),
+    ...(utms.utm_especialidad && { utm_especialidad: utms.utm_especialidad }),
+    ...(utms.utm_subespecialidad && { utm_subespecialidad: utms.utm_subespecialidad }),
   });
 }
