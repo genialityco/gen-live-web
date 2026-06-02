@@ -464,21 +464,32 @@ export default function CampaignDetail({ campaignId, onBack }: CampaignDetailPro
           {Object.keys(analytics.byUtm).length > 0 && (
             <SimpleGrid cols={{ base: 1, sm: 2 }}>
               {Object.entries(analytics.byUtm).map(([utmKey, values]) => {
-                const maxClicks = values[0]?.clicks ?? 1;
+                const maxUnique = values[0]?.uniqueClickers ?? 1;
                 return (
                   <Card key={utmKey} withBorder radius="md" p="sm">
                     <Text size="sm" fw={600} mb="xs" c="dimmed">
                       {utmKey}
                     </Text>
                     <Stack gap={6}>
-                      {values.slice(0, 10).map(({ value, clicks }) => (
+                      {values.slice(0, 10).map(({ value, clicks, uniqueClickers }) => (
                         <div key={value}>
                           <Group justify="space-between" mb={2}>
-                            <Text size="xs" truncate maw={180}>{value}</Text>
-                            <Text size="xs" fw={600}>{clicks.toLocaleString()}</Text>
+                            <Text size="xs" truncate maw={160}>{value}</Text>
+                            <Group gap={8}>
+                              <Tooltip label="Clickers únicos">
+                                <Text size="xs" fw={700} c="blue">
+                                  {uniqueClickers.toLocaleString()}
+                                </Text>
+                              </Tooltip>
+                              <Tooltip label="Total clics">
+                                <Text size="xs" c="dimmed">
+                                  ({clicks.toLocaleString()})
+                                </Text>
+                              </Tooltip>
+                            </Group>
                           </Group>
                           <Progress
-                            value={(clicks / maxClicks) * 100}
+                            value={(uniqueClickers / maxUnique) * 100}
                             size="sm"
                             color="blue"
                             radius="xl"

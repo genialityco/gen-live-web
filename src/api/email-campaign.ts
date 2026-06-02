@@ -50,6 +50,7 @@ export interface CampaignStats {
 export interface UtmValueStat {
   value: string;
   clicks: number;
+  uniqueClickers: number;
 }
 
 export interface CampaignAnalytics {
