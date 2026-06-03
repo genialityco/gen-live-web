@@ -1,10 +1,9 @@
 import { useState, useEffect, useCallback } from "react";
 import {
   Stack, Group, Title, Text, Badge, Button, Card, SimpleGrid,
-  Loader, Center, Modal, TextInput, Select, ActionIcon, Tooltip,
-  Alert, Code,
+  Loader, Center, ActionIcon, Tooltip, Alert, Code,
 } from "@mantine/core";
-import { IconRefresh, IconSend, IconPlus, IconAlertTriangle } from "@tabler/icons-react";
+import { IconRefresh, IconSend, IconAlertTriangle } from "@tabler/icons-react";
 import { notifications } from "@mantine/notifications";
 import {
   listWaTemplates, submitWaTemplate, syncWaTemplate,

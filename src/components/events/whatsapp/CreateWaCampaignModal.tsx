@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import {
-  Modal, Stack, TextInput, Select, Button, Group, Text,
+  Modal, Stack, TextInput, Select, Button, Group,
   ActionIcon, Divider, Alert,
 } from "@mantine/core";
 import { IconPlus, IconTrash, IconAlertTriangle } from "@tabler/icons-react";
@@ -17,12 +17,6 @@ interface Props {
   eventId: string;
   onCreated: (campaign: WaCampaign) => void;
 }
-
-const UTM_VALUE_SUGGESTIONS = [
-  { value: "event.slug", label: "event.slug — slug del evento" },
-  { value: "attendee.name", label: "attendee.name — nombre del asistente" },
-  { value: "form.especialidad", label: "form.especialidad — campo del form" },
-];
 
 export default function CreateWaCampaignModal({ opened, onClose, orgId, eventId, onCreated }: Props) {
   const [name, setName] = useState("");

@@ -4,9 +4,7 @@ import {
   Progress, Table, Select, Loader, Center, Pagination, ActionIcon,
   Divider,
 } from "@mantine/core";
-import {
-  IconArrowLeft, IconPlayerPlay, IconX, IconRefresh,
-} from "@tabler/icons-react";
+import { IconArrowLeft, IconPlayerPlay, IconX } from "@tabler/icons-react";
 import { notifications } from "@mantine/notifications";
 import {
   getWaCampaign, sendWaCampaign, cancelWaCampaign, listWaDeliveries,
