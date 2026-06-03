@@ -1,0 +1,150 @@
+import { api } from '../core/api';
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+export type WaTemplateStatus = 'draft' | 'pending_review' | 'approved' | 'rejected' | 'paused' | 'disabled';
+export type WaCampaignStatus = 'draft' | 'sending' | 'completed' | 'failed' | 'cancelled';
+export type WaDeliveryStatus = 'pending' | 'sent' | 'delivered' | 'read' | 'failed' | 'opted_out';
+
+export interface WaTemplateComponent {
+  type: 'HEADER' | 'BODY' | 'FOOTER' | 'BUTTONS';
+  format?: string;
+  text?: string;
+  buttons?: Array<{ type: string; text: string; url?: string; example?: string[] }>;
+  example?: { body_text?: string[][]; header_text?: string[] };
+}
+
+export interface WaTemplate {
+  _id: string;
+  name: string;
+  displayName: string;
+  category: 'MARKETING' | 'UTILITY' | 'AUTHENTICATION';
+  language: string;
+  components: WaTemplateComponent[];
+  variableMappings: Record<string, string>;
+  status: WaTemplateStatus;
+  metaTemplateId: string | null;
+  rejectionReason: string | null;
+  isDefault: boolean;
+  createdBy: string;
+  createdAt: string;
+}
+
+export interface WaUtmParam {
+  name: string;
+  value: string;
+}
+
+export interface WaCampaignStats {
+  total: number;
+  pending: number;
+  sent: number;
+  delivered: number;
+  read: number;
+  failed: number;
+  optedOut: number;
+  clicked: number;
+  totalClicks: number;
+}
+
+export interface WaCampaign {
+  _id: string;
+  orgId: string;
+  eventId: string;
+  name: string;
+  templateId: string;
+  utmParams: WaUtmParam[] | null;
+  status: WaCampaignStatus;
+  stats: WaCampaignStats;
+  startedAt: string | null;
+  completedAt: string | null;
+  createdAt: string;
+}
+
+export interface WaDelivery {
+  _id: string;
+  phone: string;
+  name: string;
+  status: WaDeliveryStatus;
+  waMessageId: string | null;
+  errorMessage: string | null;
+  sentAt: string | null;
+  deliveredAt: string | null;
+  readAt: string | null;
+  clickCount: number;
+  firstClickAt: string | null;
+}
+
+// ─── Template API ─────────────────────────────────────────────────────────────
+
+export async function listWaTemplates(): Promise<WaTemplate[]> {
+  const res = await api.get('/wa-campaign/templates');
+  return res.data;
+}
+
+export async function listApprovedWaTemplates(): Promise<WaTemplate[]> {
+  const res = await api.get('/wa-campaign/templates/approved');
+  return res.data;
+}
+
+export async function createWaTemplate(data: {
+  name: string;
+  displayName: string;
+  category: 'MARKETING' | 'UTILITY' | 'AUTHENTICATION';
+  language: string;
+  components: WaTemplateComponent[];
+  variableMappings: Record<string, string>;
+}): Promise<WaTemplate> {
+  const res = await api.post('/wa-campaign/templates', data);
+  return res.data;
+}
+
+export async function submitWaTemplate(id: string): Promise<WaTemplate> {
+  const res = await api.post(`/wa-campaign/templates/${id}/submit`);
+  return res.data;
+}
+
+export async function syncWaTemplate(id: string): Promise<WaTemplate> {
+  const res = await api.post(`/wa-campaign/templates/${id}/sync`);
+  return res.data;
+}
+
+// ─── Campaign API ─────────────────────────────────────────────────────────────
+
+export async function listWaCampaigns(orgId: string, eventId: string): Promise<WaCampaign[]> {
+  const res = await api.get('/wa-campaign', { params: { orgId, eventId } });
+  return res.data;
+}
+
+export async function getWaCampaign(id: string): Promise<WaCampaign> {
+  const res = await api.get(`/wa-campaign/${id}`);
+  return res.data;
+}
+
+export async function createWaCampaign(data: {
+  orgId: string;
+  eventId: string;
+  name: string;
+  templateId: string;
+  utmParams?: WaUtmParam[];
+}): Promise<WaCampaign> {
+  const res = await api.post('/wa-campaign', data);
+  return res.data;
+}
+
+export async function sendWaCampaign(id: string): Promise<{ total: number }> {
+  const res = await api.post(`/wa-campaign/${id}/send`);
+  return res.data;
+}
+
+export async function cancelWaCampaign(id: string): Promise<void> {
+  await api.patch(`/wa-campaign/${id}/cancel`);
+}
+
+export async function listWaDeliveries(
+  campaignId: string,
+  params: { status?: string; page?: number; limit?: number },
+): Promise<{ data: WaDelivery[]; total: number }> {
+  const res = await api.get(`/wa-campaign/${campaignId}/deliveries`, { params });
+  return res.data;
+}

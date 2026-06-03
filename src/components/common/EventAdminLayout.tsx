@@ -117,10 +117,10 @@ export default function EventAdminLayout({
       description: "Administrar el chat del evento",
     },
     {
-      label: "Email",
-      icon: "✉️",
+      label: "Comunicaciones",
+      icon: "📣",
       href: `/org/${slug}/event/${eventSlug}/admin/email`,
-      description: "Plantillas y envío de correos",
+      description: "Campañas de email y WhatsApp",
     },
     {
       label: "Configuración",
