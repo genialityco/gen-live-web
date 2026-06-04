@@ -135,6 +135,7 @@ export default function CampaignDetail({ campaignId, onBack }: CampaignDetailPro
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [exportingInforme, setExportingInforme] = useState(false);
   const [analytics, setAnalytics] = useState<CampaignAnalytics | null>(null);
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -243,6 +244,96 @@ export default function CampaignDetail({ campaignId, onBack }: CampaignDetailPro
       notifications.show({ title: "Error", message: "No se pudo exportar", color: "red" });
     } finally {
       setExporting(false);
+    }
+  };
+
+  const handleExportInforme = async () => {
+    if (!campaign) return;
+    setExportingInforme(true);
+    try {
+      const wb = XLSX.utils.book_new();
+
+      // ── Hoja 1: Resumen ───────────────────────────────────────────────────
+      const errorCount = stats.failed + stats.rejected;
+      const bounceRateVal = stats.total > 0 ? ((bounced + complained) / stats.total) * 100 : 0;
+      const clickRate = stats.sent > 0 && analytics ? ((analytics.uniqueClickers / stats.sent) * 100).toFixed(1) : "0";
+
+      const resumenRows = [
+        { Métrica: "Campaña", Valor: campaign.name },
+        { Métrica: "Estado", Valor: STATUS_LABELS[campaign.status] },
+        { Métrica: "Iniciada", Valor: campaign.startedAt ? new Date(campaign.startedAt).toLocaleString("es") : "—" },
+        { Métrica: "Completada", Valor: campaign.completedAt ? new Date(campaign.completedAt).toLocaleString("es") : "—" },
+        { Métrica: "", Valor: "" },
+        { Métrica: "── Métricas de envío ──", Valor: "" },
+        { Métrica: "Total destinatarios", Valor: stats.total },
+        { Métrica: "Enviados", Valor: stats.sent },
+        { Métrica: "Pendientes", Valor: stats.pending },
+        { Métrica: "Fallidos", Valor: stats.failed },
+        { Métrica: "Rechazados", Valor: stats.rejected },
+        { Métrica: "Rebotados", Valor: bounced },
+        { Métrica: "Spam / Queja", Valor: complained },
+        { Métrica: "Total errores (fallidos + rechazados)", Valor: errorCount },
+        { Métrica: "Tasa de rebotes", Valor: `${bounceRateVal.toFixed(1)}%` },
+        { Métrica: "", Valor: "" },
+        { Métrica: "── Interacciones ──", Valor: "" },
+        { Métrica: "Clickers únicos", Valor: analytics?.uniqueClickers ?? 0 },
+        { Métrica: "Total clics", Valor: analytics?.totalClicks ?? 0 },
+        { Métrica: "Tasa de clics (sobre enviados)", Valor: `${clickRate}%` },
+      ];
+
+      const wsResumen = XLSX.utils.json_to_sheet(resumenRows);
+      wsResumen["!cols"] = [{ wch: 38 }, { wch: 22 }];
+      XLSX.utils.book_append_sheet(wb, wsResumen, "Resumen");
+
+      // ── Hoja 2: Interacciones por UTM ─────────────────────────────────────
+      if (analytics && Object.keys(analytics.byUtm).length > 0) {
+        const utmRows: Record<string, string | number>[] = [];
+        for (const [utmKey, values] of Object.entries(analytics.byUtm)) {
+          for (const { value, uniqueClickers, clicks } of values) {
+            utmRows.push({
+              "Parámetro UTM": utmKey,
+              "Valor": value,
+              "Clickers únicos": uniqueClickers,
+              "Total clics": clicks,
+            });
+          }
+        }
+        const wsUtm = XLSX.utils.json_to_sheet(utmRows);
+        wsUtm["!cols"] = [{ wch: 22 }, { wch: 30 }, { wch: 18 }, { wch: 14 }];
+        XLSX.utils.book_append_sheet(wb, wsUtm, "Interacciones UTM");
+      }
+
+      // ── Hoja 3: Destinatarios (todos, sin filtro, paginado de 200 en 200) ──
+      const PAGE_SIZE = 200;
+      const allData: EmailDelivery[] = [];
+      let fetchPage = 1;
+      let totalDeliveries = Infinity;
+      while (allData.length < totalDeliveries) {
+        const result = await listDeliveries(campaignId, { page: fetchPage, limit: PAGE_SIZE });
+        totalDeliveries = result.total;
+        allData.push(...result.data);
+        fetchPage++;
+        if (result.data.length < PAGE_SIZE) break;
+      }
+      const destRows = allData.map((d) => ({
+        Email: d.email,
+        Nombre: d.name,
+        Estado: DELIVERY_STATUS_LABELS[d.status] ?? d.status,
+        "Fecha envío": d.sentAt ? new Date(d.sentAt).toLocaleString("es") : "",
+        "Fecha entrega SES": d.deliveredAt ? new Date(d.deliveredAt).toLocaleString("es") : "",
+        "ID SES": d.sesMessageId ?? "",
+        Error: d.errorMessage ?? "",
+      }));
+      const wsDest = XLSX.utils.json_to_sheet(destRows);
+      wsDest["!cols"] = [{ wch: 30 }, { wch: 22 }, { wch: 14 }, { wch: 20 }, { wch: 20 }, { wch: 40 }, { wch: 35 }];
+      XLSX.utils.book_append_sheet(wb, wsDest, "Destinatarios");
+
+      const slug = campaign.name.toLowerCase().replace(/\s+/g, "-").slice(0, 30);
+      XLSX.writeFile(wb, `informe-campana-${slug}.xlsx`);
+    } catch {
+      notifications.show({ title: "Error", message: "No se pudo generar el informe", color: "red" });
+    } finally {
+      setExportingInforme(false);
     }
   };
 
@@ -542,19 +633,34 @@ export default function CampaignDetail({ campaignId, onBack }: CampaignDetailPro
           style={{ width: 220 }}
           allowDeselect={false}
         />
-        <Tooltip label="Exportar a Excel según filtro activo">
-          <Button
-            variant="light"
-            color="teal"
-            size="sm"
-            leftSection={<IconFileSpreadsheet size={16} />}
-            onClick={handleExportExcel}
-            loading={exporting}
-            disabled={stats.total === 0}
-          >
-            Exportar Excel
-          </Button>
-        </Tooltip>
+        <Group gap="xs">
+          <Tooltip label="Informe completo: resumen + UTMs + destinatarios (3 hojas)">
+            <Button
+              variant="light"
+              color="violet"
+              size="sm"
+              leftSection={<IconFileSpreadsheet size={16} />}
+              onClick={handleExportInforme}
+              loading={exportingInforme}
+              disabled={stats.total === 0}
+            >
+              Exportar Informe
+            </Button>
+          </Tooltip>
+          <Tooltip label="Exportar destinatarios según filtro activo">
+            <Button
+              variant="light"
+              color="teal"
+              size="sm"
+              leftSection={<IconFileSpreadsheet size={16} />}
+              onClick={handleExportExcel}
+              loading={exporting}
+              disabled={stats.total === 0}
+            >
+              Exportar Excel
+            </Button>
+          </Tooltip>
+        </Group>
       </Group>
 
       {/* Pending alert */}

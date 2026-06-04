@@ -1,14 +1,16 @@
 import { useState, useEffect, useCallback } from "react";
 import {
   Stack, Group, Title, Text, Badge, Button, Card, SimpleGrid,
-  Loader, Center, ActionIcon, Tooltip, Alert, Code,
+  Loader, Center, ActionIcon, Tooltip, Code,
 } from "@mantine/core";
-import { IconRefresh, IconSend, IconAlertTriangle } from "@tabler/icons-react";
+import { IconRefresh, IconSend, IconPlus } from "@tabler/icons-react";
 import { notifications } from "@mantine/notifications";
 import {
   listWaTemplates, submitWaTemplate, syncWaTemplate,
   type WaTemplate,
 } from "../../../api/wa-campaign";
+import { type FormField } from "../../../types";
+import CreateWaTemplateDrawer from "./CreateWaTemplateDrawer";
 
 const STATUS_LABELS: Record<WaTemplate["status"], string> = {
   draft: "Borrador",
@@ -28,10 +30,15 @@ const STATUS_COLORS: Record<WaTemplate["status"], string> = {
   disabled: "dark",
 };
 
-export default function WaTemplateManager() {
+interface Props {
+  registrationFields: FormField[];
+}
+
+export default function WaTemplateManager({ registrationFields }: Props) {
   const [templates, setTemplates] = useState<WaTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionId, setActionId] = useState<string | null>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -83,12 +90,22 @@ export default function WaTemplateManager() {
             Los templates deben ser aprobados por Meta antes de usarlos en campañas.
           </Text>
         </Stack>
+        <Button
+          size="sm"
+          leftSection={<IconPlus size={14} />}
+          color="green"
+          onClick={() => setDrawerOpen(true)}
+        >
+          Nuevo template
+        </Button>
       </Group>
 
-      <Alert color="blue" icon={<IconAlertTriangle size={16} />}>
-        Los templates se crean en Meta Business Manager. Aquí puedes ver su estado
-        y sincronizarlo manualmente si no llega el webhook automático.
-      </Alert>
+      <CreateWaTemplateDrawer
+        opened={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        onCreated={() => { setDrawerOpen(false); load(); }}
+        registrationFields={registrationFields}
+      />
 
       {templates.length === 0 ? (
         <Card withBorder p="xl" radius="md">
