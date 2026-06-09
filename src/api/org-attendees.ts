@@ -22,6 +22,17 @@ export async function fetchOrgAttendeeByEmail(
   return data as OrgAttendee | null;
 }
 
+export async function searchOrgAttendees(
+  organizationId: string,
+  query: string
+): Promise<OrgAttendee[]> {
+  const { data } = await api.get(
+    `/org-attendees/search/${organizationId}`,
+    { params: { query } }
+  );
+  return data as OrgAttendee[];
+}
+
 // 👇 NUEVO: recuperar acceso por identificadores
 export async function recoverOrgAccess(
   organizationId: string,

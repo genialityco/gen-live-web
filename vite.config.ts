@@ -30,7 +30,10 @@ export default defineConfig({
           if (id.includes('/pdfjs-dist/') || id.includes('/react-pdf/')) return 'vendor-pdf';
           if (id.includes('/recharts/') || id.includes('/d3-') || id.includes('/d3/')) return 'vendor-charts';
           if (id.includes('/xlsx/')) return 'vendor-xlsx';
-          if (id.includes('/react-dom/') || id.includes('/react-router') || id.includes('/react/')) return 'vendor-react';
+          // react/react-dom/react-router no se separan manualmente:
+          // recharts y otros usan React.forwardRef a nivel de módulo, y si
+          // vendor-react carga después de vendor-charts el runtime explota.
+          // Rollup los ubica en el entry chunk, garantizando orden correcto.
         },
       },
     },

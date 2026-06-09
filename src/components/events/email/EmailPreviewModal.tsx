@@ -11,12 +11,16 @@ import {
   Alert,
   Badge,
   Paper,
+  ActionIcon,
+  Box,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
+import { IconSearch, IconX, IconUser } from "@tabler/icons-react";
 import {
   previewTemplate,
   sendTestEmail as sendTestEmailApi,
 } from "../../../api/event-email";
+import { searchOrgAttendees, type OrgAttendee } from "../../../api/org-attendees";
 
 interface EmailPreviewModalProps {
   opened: boolean;
@@ -47,7 +51,14 @@ export default function EmailPreviewModal({
   const [sendingTest, setSendingTest] = useState(false);
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
-  const loadPreview = useCallback(async () => {
+  // Attendee sample selector state
+  const [attendeeQuery, setAttendeeQuery] = useState("");
+  const [searching, setSearching] = useState(false);
+  const [searchResults, setSearchResults] = useState<OrgAttendee[]>([]);
+  const [selectedAttendee, setSelectedAttendee] = useState<OrgAttendee | null>(null);
+  const [searchError, setSearchError] = useState<string | null>(null);
+
+  const loadPreview = useCallback(async (sampleAttendeeId?: string) => {
     setLoading(true);
     setError(null);
     try {
@@ -56,6 +67,7 @@ export default function EmailPreviewModal({
         eventId,
         subject,
         body,
+        sampleAttendeeId,
       });
       setPreview(result);
     } catch {
@@ -64,6 +76,37 @@ export default function EmailPreviewModal({
       setLoading(false);
     }
   }, [orgId, eventId, subject, body]);
+
+  const handleSearchAttendee = async () => {
+    if (!attendeeQuery.trim()) return;
+    setSearching(true);
+    setSearchError(null);
+    setSearchResults([]);
+    try {
+      const results = await searchOrgAttendees(orgId, attendeeQuery.trim());
+      if (results.length === 0) {
+        setSearchError("No se encontraron asistentes con ese criterio");
+      } else {
+        setSearchResults(results.slice(0, 5));
+      }
+    } catch {
+      setSearchError("Error al buscar asistentes");
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  const handleSelectAttendee = (attendee: OrgAttendee) => {
+    setSelectedAttendee(attendee);
+    setSearchResults([]);
+    setAttendeeQuery("");
+    loadPreview(attendee._id);
+  };
+
+  const handleClearAttendee = () => {
+    setSelectedAttendee(null);
+    loadPreview(undefined);
+  };
 
   const handleSendTest = async () => {
     if (!testEmail) return;
@@ -74,6 +117,7 @@ export default function EmailPreviewModal({
         subject,
         body,
         to: testEmail,
+        sampleAttendeeId: selectedAttendee?._id,
       });
       notifications.show({
         title: "Email enviado",
@@ -103,7 +147,11 @@ export default function EmailPreviewModal({
   useEffect(() => {
     if (opened) {
       setPreview(null);
-      loadPreview();
+      setSelectedAttendee(null);
+      setAttendeeQuery("");
+      setSearchResults([]);
+      setSearchError(null);
+      loadPreview(undefined);
     }
   }, [opened]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -116,6 +164,83 @@ export default function EmailPreviewModal({
       centered
     >
       <Stack gap="md">
+        {/* Attendee selector */}
+        <Paper p="sm" radius="sm" withBorder>
+          <Text size="xs" fw={600} c="dimmed" mb={8}>
+            Datos de muestra
+          </Text>
+
+          {selectedAttendee ? (
+            <Group gap="xs">
+              <IconUser size={14} />
+              <Text size="sm" fw={500} style={{ flex: 1 }}>
+                {selectedAttendee.email}
+                {selectedAttendee.name ? ` — ${selectedAttendee.name}` : ""}
+              </Text>
+              <Badge size="xs" color="teal" variant="light">Real</Badge>
+              <ActionIcon size="xs" variant="subtle" color="gray" onClick={handleClearAttendee}>
+                <IconX size={12} />
+              </ActionIcon>
+            </Group>
+          ) : (
+            <>
+              <Group gap="xs" align="flex-end">
+                <TextInput
+                  placeholder="Buscar asistente por email o nombre..."
+                  value={attendeeQuery}
+                  onChange={(e) => {
+                    setAttendeeQuery(e.currentTarget.value);
+                    setSearchError(null);
+                    setSearchResults([]);
+                  }}
+                  onKeyDown={(e) => e.key === "Enter" && handleSearchAttendee()}
+                  size="xs"
+                  style={{ flex: 1 }}
+                  rightSection={searching ? <Loader size={12} /> : undefined}
+                />
+                <Button
+                  size="xs"
+                  variant="light"
+                  leftSection={<IconSearch size={12} />}
+                  onClick={handleSearchAttendee}
+                  loading={searching}
+                  disabled={!attendeeQuery.trim()}
+                >
+                  Buscar
+                </Button>
+              </Group>
+              {!selectedAttendee && !searchResults.length && !searchError && (
+                <Text size="xs" c="dimmed" mt={4}>
+                  Sin asistente seleccionado — se usan datos de ejemplo genéricos
+                </Text>
+              )}
+            </>
+          )}
+
+          {searchError && (
+            <Text size="xs" c="red" mt={4}>{searchError}</Text>
+          )}
+
+          {searchResults.length > 0 && (
+            <Box mt={6} style={{ border: "1px solid #dee2e6", borderRadius: 6, overflow: "hidden" }}>
+              {searchResults.map((a) => (
+                <Box
+                  key={a._id}
+                  px="sm"
+                  py={6}
+                  style={{ cursor: "pointer", borderBottom: "1px solid #f1f3f5" }}
+                  onClick={() => handleSelectAttendee(a)}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = "#f8f9fa")}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = "")}
+                >
+                  <Text size="xs" fw={500}>{a.email}</Text>
+                  {a.name && <Text size="xs" c="dimmed">{a.name}</Text>}
+                </Box>
+              ))}
+            </Box>
+          )}
+        </Paper>
+
         {loading && (
           <Center py="xl">
             <Loader />
@@ -170,6 +295,9 @@ export default function EmailPreviewModal({
             <Paper p="sm" radius="sm" withBorder>
               <Text size="xs" fw={600} c="dimmed" mb={8}>
                 Enviar correo de prueba
+                {selectedAttendee && (
+                  <Text span c="teal" ml={4}>(con datos de {selectedAttendee.email})</Text>
+                )}
               </Text>
               <Group>
                 <TextInput
