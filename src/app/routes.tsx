@@ -2,12 +2,13 @@ import { lazy } from "react";
 import AdminRoute from "../auth/guards/AdminRoute";
 import PublicAnonGate from "../auth/guards/PublicAnonGate";
 import Layout from "../components/common/Layout";
-import OrgAccess from "../pages/organizations/OrgAccess";
-import { StudioPage } from "../pages/studio/StudioPage";
-import { SpeakerInvitePage } from "../pages/studio/SpeakerInvitePage";
-import { LiveViewerPage } from "../pages/viewer/LiveViewerPage";
-import EventAttendGcore from "../pages/events/EventAttendGcore";
-import LkEgressProgram from "../pages/studio/LkEgressProgram";
+
+const OrgAccess = lazy(() => import("../pages/organizations/OrgAccess"));
+const StudioPage = lazy(() => import("../pages/studio/StudioPage").then(m => ({ default: m.StudioPage })));
+const SpeakerInvitePage = lazy(() => import("../pages/studio/SpeakerInvitePage").then(m => ({ default: m.SpeakerInvitePage })));
+const LiveViewerPage = lazy(() => import("../pages/viewer/LiveViewerPage").then(m => ({ default: m.LiveViewerPage })));
+const EventAttendGcore = lazy(() => import("../pages/events/EventAttendGcore"));
+const LkEgressProgram = lazy(() => import("../pages/studio/LkEgressProgram"));
 
 // Lazy imports
 const Home = lazy(() => import("../pages/home/Home"));
