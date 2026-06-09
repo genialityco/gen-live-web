@@ -1,11 +1,11 @@
 import { useState, useEffect, useCallback } from "react";
 import {
   Stack, Group, Button, Text, Badge, Table,
-  Loader, Center, Alert, ActionIcon,
+  Loader, Center, Alert, ActionIcon, Modal,
 } from "@mantine/core";
-import { IconPlus, IconChevronRight } from "@tabler/icons-react";
+import { IconPlus, IconChevronRight, IconTrash } from "@tabler/icons-react";
 import { notifications } from "@mantine/notifications";
-import { listWaCampaigns, type WaCampaign, type WaCampaignStatus } from "../../../api/wa-campaign";
+import { listWaCampaigns, deleteWaCampaign, type WaCampaign, type WaCampaignStatus } from "../../../api/wa-campaign";
 import CreateWaCampaignModal from "./CreateWaCampaignModal";
 
 interface Props {
@@ -34,6 +34,32 @@ export default function WaCampaignList({ orgId, eventId, onSelect }: Props) {
   const [campaigns, setCampaigns] = useState<WaCampaign[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<WaCampaign | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  const handleDeleteClick = (campaign: WaCampaign, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setDeleteTarget(campaign);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      await deleteWaCampaign(deleteTarget._id);
+      setCampaigns((prev) => prev.filter((c) => c._id !== deleteTarget._id));
+      notifications.show({ title: "Eliminada", message: deleteTarget.name, color: "green" });
+      setDeleteTarget(null);
+    } catch (err: any) {
+      notifications.show({
+        title: "Error",
+        message: err?.response?.data?.message ?? "No se pudo eliminar",
+        color: "red",
+      });
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   const load = useCallback(async () => {
     try {
@@ -115,9 +141,20 @@ export default function WaCampaignList({ orgId, eventId, onSelect }: Props) {
                     </Text>
                   </Table.Td>
                   <Table.Td>
-                    <ActionIcon variant="subtle" color="gray">
-                      <IconChevronRight size={16} />
-                    </ActionIcon>
+                    <Group gap={4} justify="flex-end" wrap="nowrap">
+                      {c.status !== "sending" && (
+                        <ActionIcon
+                          variant="subtle"
+                          color="red"
+                          onClick={(e) => handleDeleteClick(c, e)}
+                        >
+                          <IconTrash size={15} />
+                        </ActionIcon>
+                      )}
+                      <ActionIcon variant="subtle" color="gray">
+                        <IconChevronRight size={16} />
+                      </ActionIcon>
+                    </Group>
                   </Table.Td>
                 </Table.Tr>
               ))}
@@ -136,6 +173,29 @@ export default function WaCampaignList({ orgId, eventId, onSelect }: Props) {
           setCampaigns((prev) => [campaign, ...prev]);
         }}
       />
+
+      <Modal
+        opened={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        title="Eliminar campaña"
+        centered
+        size="sm"
+      >
+        <Text size="sm">
+          ¿Seguro que quieres eliminar <b>{deleteTarget?.name}</b>?
+          {deleteTarget && deleteTarget.stats.total > 0 && (
+            <> Se eliminarán también los {deleteTarget.stats.total.toLocaleString()} registros de envío.</>
+          )}
+        </Text>
+        <Group justify="flex-end" mt="md" gap="sm">
+          <Button variant="default" onClick={() => setDeleteTarget(null)} disabled={deleting}>
+            Cancelar
+          </Button>
+          <Button color="red" onClick={handleDeleteConfirm} loading={deleting}>
+            Eliminar
+          </Button>
+        </Group>
+      </Modal>
     </>
   );
 }

@@ -8,6 +8,7 @@ import { IconArrowLeft, IconPlayerPlay, IconX } from "@tabler/icons-react";
 import { notifications } from "@mantine/notifications";
 import {
   getWaCampaign, sendWaCampaign, cancelWaCampaign, listWaDeliveries,
+  previewWaRecipients,
   type WaCampaign, type WaDelivery, type WaCampaignStatus, type WaDeliveryStatus,
 } from "../../../api/wa-campaign";
 
@@ -54,6 +55,12 @@ export default function WaCampaignDetail({ campaignId, onBack }: Props) {
   const [actionLoading, setActionLoading] = useState(false);
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // Preview de destinatarios (solo en draft)
+  const [previewRecipients, setPreviewRecipients] = useState<{ phone: string; name: string }[]>([]);
+  const [previewTotal, setPreviewTotal] = useState(0);
+  const [previewPage, setPreviewPage] = useState(1);
+  const [previewLoading, setPreviewLoading] = useState(false);
+
   const loadDeliveries = useCallback(async (p: number, status?: string) => {
     const result = await listWaDeliveries(campaignId, {
       status: status === "all" ? undefined : status,
@@ -64,11 +71,28 @@ export default function WaCampaignDetail({ campaignId, onBack }: Props) {
     setTotal(result.total);
   }, [campaignId]);
 
+  const loadPreviewRecipients = useCallback(async (p: number) => {
+    setPreviewLoading(true);
+    try {
+      const result = await previewWaRecipients(campaignId, { page: p, limit: LIMIT });
+      setPreviewRecipients(result.data);
+      setPreviewTotal(result.total);
+    } catch {
+      notifications.show({ title: "Error", message: "No se pudieron cargar los destinatarios", color: "red" });
+    } finally {
+      setPreviewLoading(false);
+    }
+  }, [campaignId]);
+
   const loadAll = useCallback(async () => {
     try {
       const camp = await getWaCampaign(campaignId);
       setCampaign(camp);
-      await loadDeliveries(page, statusFilter);
+      if (camp.status === "draft") {
+        await loadPreviewRecipients(previewPage);
+      } else {
+        await loadDeliveries(page, statusFilter);
+      }
 
       if (camp.status === "sending") {
         if (!pollingRef.current) {
@@ -91,12 +115,19 @@ export default function WaCampaignDetail({ campaignId, onBack }: Props) {
     } finally {
       setLoading(false);
     }
-  }, [campaignId, page, statusFilter, loadDeliveries]);
+  }, [campaignId, page, statusFilter, previewPage, loadDeliveries, loadPreviewRecipients]);
 
   useEffect(() => {
     loadAll();
     return () => { if (pollingRef.current) clearInterval(pollingRef.current); };
   }, [loadAll]);
+
+  // Recargar preview al cambiar página (solo draft)
+  useEffect(() => {
+    if (campaign?.status === "draft") {
+      loadPreviewRecipients(previewPage);
+    }
+  }, [previewPage]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSend = async () => {
     setActionLoading(true);
@@ -200,67 +231,123 @@ export default function WaCampaignDetail({ campaignId, onBack }: Props) {
 
       <Divider />
 
-      {/* Filtro deliveries */}
-      <Select
-        label="Filtrar por estado"
-        data={STATUS_FILTER_OPTIONS}
-        value={statusFilter}
-        onChange={(v) => { if (v) { setStatusFilter(v); setPage(1); } }}
-        size="sm"
-        style={{ width: 220 }}
-        allowDeselect={false}
-      />
+      {campaign.status === "draft" ? (
+        /* ── Vista previa de destinatarios (antes de enviar) ── */
+        <Stack gap="sm">
+          <Group gap="xs">
+            <Text size="sm" fw={600}>Destinatarios</Text>
+            {previewLoading
+              ? <Loader size={14} />
+              : <Badge size="sm" variant="light" color="blue">{previewTotal.toLocaleString()} personas</Badge>
+            }
+            <Text size="xs" c="dimmed">— asistentes con teléfono válido en esta organización</Text>
+          </Group>
 
-      {/* Tabla */}
-      <Table highlightOnHover>
-        <Table.Thead>
-          <Table.Tr>
-            <Table.Th>Teléfono</Table.Th>
-            <Table.Th>Nombre</Table.Th>
-            <Table.Th>Estado</Table.Th>
-            <Table.Th>Enviado / Entregado / Leído</Table.Th>
-            <Table.Th>Error</Table.Th>
-          </Table.Tr>
-        </Table.Thead>
-        <Table.Tbody>
-          {deliveries.length === 0 ? (
-            <Table.Tr>
-              <Table.Td colSpan={5}>
-                <Text size="sm" c="dimmed" ta="center" py="md">Sin registros</Text>
-              </Table.Td>
-            </Table.Tr>
-          ) : (
-            deliveries.map((d) => (
-              <Table.Tr key={d._id}>
-                <Table.Td><Text size="sm">{d.phone}</Text></Table.Td>
-                <Table.Td><Text size="sm" c="dimmed">{d.name}</Text></Table.Td>
-                <Table.Td>
-                  <Badge size="sm" color={DELIVERY_COLORS[d.status]} variant="light">
-                    {DELIVERY_LABELS[d.status]}
-                  </Badge>
-                </Table.Td>
-                <Table.Td>
-                  <Stack gap={2}>
-                    {d.sentAt && <Text size="xs" c="dimmed">✉ {new Date(d.sentAt).toLocaleString("es", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}</Text>}
-                    {d.deliveredAt && <Text size="xs" c="teal">✓ {new Date(d.deliveredAt).toLocaleString("es", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}</Text>}
-                    {d.readAt && <Text size="xs" c="green">👁 {new Date(d.readAt).toLocaleString("es", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}</Text>}
-                  </Stack>
-                </Table.Td>
-                <Table.Td>
-                  {d.errorMessage
-                    ? <Text size="xs" c="red" lineClamp={2} maw={250}>{d.errorMessage}</Text>
-                    : <Text size="xs" c="dimmed">—</Text>}
-                </Table.Td>
-              </Table.Tr>
-            ))
+          {!previewLoading && previewTotal === 0 && (
+            <Text size="sm" c="orange" py="sm">
+              No hay asistentes con teléfono registrado en esta organización.
+            </Text>
           )}
-        </Table.Tbody>
-      </Table>
 
-      {total > LIMIT && (
-        <Group justify="center" mt="sm">
-          <Pagination total={Math.ceil(total / LIMIT)} value={page} onChange={setPage} size="sm" />
-        </Group>
+          <Table highlightOnHover>
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th>Teléfono</Table.Th>
+                <Table.Th>Nombre</Table.Th>
+              </Table.Tr>
+            </Table.Thead>
+            <Table.Tbody>
+              {previewLoading ? (
+                <Table.Tr>
+                  <Table.Td colSpan={2}><Center py="md"><Loader size="sm" /></Center></Table.Td>
+                </Table.Tr>
+              ) : previewRecipients.length === 0 ? (
+                <Table.Tr>
+                  <Table.Td colSpan={2}>
+                    <Text size="sm" c="dimmed" ta="center" py="md">Sin destinatarios</Text>
+                  </Table.Td>
+                </Table.Tr>
+              ) : (
+                previewRecipients.map((r, i) => (
+                  <Table.Tr key={i}>
+                    <Table.Td><Text size="sm">{r.phone}</Text></Table.Td>
+                    <Table.Td><Text size="sm" c="dimmed">{r.name || "—"}</Text></Table.Td>
+                  </Table.Tr>
+                ))
+              )}
+            </Table.Tbody>
+          </Table>
+
+          {previewTotal > LIMIT && (
+            <Group justify="center" mt="sm">
+              <Pagination total={Math.ceil(previewTotal / LIMIT)} value={previewPage} onChange={setPreviewPage} size="sm" />
+            </Group>
+          )}
+        </Stack>
+      ) : (
+        /* ── Tabla de deliveries (enviando / completada / fallida) ── */
+        <Stack gap="sm">
+          <Select
+            label="Filtrar por estado"
+            data={STATUS_FILTER_OPTIONS}
+            value={statusFilter}
+            onChange={(v) => { if (v) { setStatusFilter(v); setPage(1); } }}
+            size="sm"
+            style={{ width: 220 }}
+            allowDeselect={false}
+          />
+
+          <Table highlightOnHover>
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th>Teléfono</Table.Th>
+                <Table.Th>Nombre</Table.Th>
+                <Table.Th>Estado</Table.Th>
+                <Table.Th>Enviado / Entregado / Leído</Table.Th>
+                <Table.Th>Error</Table.Th>
+              </Table.Tr>
+            </Table.Thead>
+            <Table.Tbody>
+              {deliveries.length === 0 ? (
+                <Table.Tr>
+                  <Table.Td colSpan={5}>
+                    <Text size="sm" c="dimmed" ta="center" py="md">Sin registros</Text>
+                  </Table.Td>
+                </Table.Tr>
+              ) : (
+                deliveries.map((d) => (
+                  <Table.Tr key={d._id}>
+                    <Table.Td><Text size="sm">{d.phone}</Text></Table.Td>
+                    <Table.Td><Text size="sm" c="dimmed">{d.name}</Text></Table.Td>
+                    <Table.Td>
+                      <Badge size="sm" color={DELIVERY_COLORS[d.status]} variant="light">
+                        {DELIVERY_LABELS[d.status]}
+                      </Badge>
+                    </Table.Td>
+                    <Table.Td>
+                      <Stack gap={2}>
+                        {d.sentAt && <Text size="xs" c="dimmed">✉ {new Date(d.sentAt).toLocaleString("es", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}</Text>}
+                        {d.deliveredAt && <Text size="xs" c="teal">✓ {new Date(d.deliveredAt).toLocaleString("es", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}</Text>}
+                        {d.readAt && <Text size="xs" c="green">👁 {new Date(d.readAt).toLocaleString("es", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}</Text>}
+                      </Stack>
+                    </Table.Td>
+                    <Table.Td>
+                      {d.errorMessage
+                        ? <Text size="xs" c="red" lineClamp={2} maw={250}>{d.errorMessage}</Text>
+                        : <Text size="xs" c="dimmed">—</Text>}
+                    </Table.Td>
+                  </Table.Tr>
+                ))
+              )}
+            </Table.Tbody>
+          </Table>
+
+          {total > LIMIT && (
+            <Group justify="center" mt="sm">
+              <Pagination total={Math.ceil(total / LIMIT)} value={page} onChange={setPage} size="sm" />
+            </Group>
+          )}
+        </Stack>
       )}
     </Stack>
   );

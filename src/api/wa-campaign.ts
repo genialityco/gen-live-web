@@ -141,10 +141,22 @@ export async function cancelWaCampaign(id: string): Promise<void> {
   await api.patch(`/wa-campaign/${id}/cancel`);
 }
 
+export async function deleteWaCampaign(id: string): Promise<void> {
+  await api.delete(`/wa-campaign/${id}`);
+}
+
 export async function listWaDeliveries(
   campaignId: string,
   params: { status?: string; page?: number; limit?: number },
 ): Promise<{ data: WaDelivery[]; total: number }> {
   const res = await api.get(`/wa-campaign/${campaignId}/deliveries`, { params });
+  return res.data;
+}
+
+export async function previewWaRecipients(
+  campaignId: string,
+  params: { page?: number; limit?: number },
+): Promise<{ data: { phone: string; name: string }[]; total: number }> {
+  const res = await api.get(`/wa-campaign/${campaignId}/preview-recipients`, { params });
   return res.data;
 }
