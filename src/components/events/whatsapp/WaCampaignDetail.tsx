@@ -2,19 +2,47 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import {
   Stack, Group, Title, Badge, Button, Text, SimpleGrid, Card,
   Progress, Table, Select, Loader, Center, Pagination, ActionIcon,
-  Divider,
+  Divider, Tooltip,
 } from "@mantine/core";
 import { IconArrowLeft, IconPlayerPlay, IconX } from "@tabler/icons-react";
 import { notifications } from "@mantine/notifications";
 import {
   getWaCampaign, sendWaCampaign, cancelWaCampaign, listWaDeliveries,
-  previewWaRecipients,
+  previewWaRecipients, getWaCampaignAnalytics,
   type WaCampaign, type WaDelivery, type WaCampaignStatus, type WaDeliveryStatus,
+  type WaUtmParam, type WaCampaignAnalytics,
 } from "../../../api/wa-campaign";
 
 interface Props {
   campaignId: string;
   onBack: () => void;
+}
+
+// ─── Sub-components ──────────────────────────────────────────────────────────
+
+function UtmSummary({ utmParams }: { utmParams: WaUtmParam[] }) {
+  if (utmParams.length === 0) return null;
+  return (
+    <Card withBorder radius="md" p="sm">
+      <Group gap="xs" align="center" wrap="wrap">
+        <Text size="xs" fw={600} c="dimmed" style={{ whiteSpace: "nowrap" }}>
+          UTMs configurados:
+        </Text>
+        {utmParams.map((p, i) => (
+          <Badge key={i} size="sm" variant="light" color="violet">
+            <Text span fw={400} c="dimmed">{p.name}=</Text>
+            {p.value.startsWith("form.") ? (
+              <Text span c="blue">{p.value}</Text>
+            ) : p.value.startsWith("event.") || p.value.startsWith("attendee.") ? (
+              <Text span c="teal">{p.value}</Text>
+            ) : (
+              p.value
+            )}
+          </Badge>
+        ))}
+      </Group>
+    </Card>
+  );
 }
 
 const STATUS_LABELS: Record<WaCampaignStatus, string> = {
@@ -53,6 +81,7 @@ export default function WaCampaignDetail({ campaignId, onBack }: Props) {
   const [statusFilter, setStatusFilter] = useState("all");
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
+  const [analytics, setAnalytics] = useState<WaCampaignAnalytics | null>(null);
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Preview de destinatarios (solo en draft)
@@ -84,6 +113,15 @@ export default function WaCampaignDetail({ campaignId, onBack }: Props) {
     }
   }, [campaignId]);
 
+  const loadAnalytics = useCallback(async () => {
+    try {
+      const data = await getWaCampaignAnalytics(campaignId);
+      setAnalytics(data);
+    } catch {
+      // analytics are optional — don't block the view on error
+    }
+  }, [campaignId]);
+
   const loadAll = useCallback(async () => {
     try {
       const camp = await getWaCampaign(campaignId);
@@ -92,6 +130,7 @@ export default function WaCampaignDetail({ campaignId, onBack }: Props) {
         await loadPreviewRecipients(previewPage);
       } else {
         await loadDeliveries(page, statusFilter);
+        loadAnalytics();
       }
 
       if (camp.status === "sending") {
@@ -103,6 +142,7 @@ export default function WaCampaignDetail({ campaignId, onBack }: Props) {
               clearInterval(pollingRef.current);
               pollingRef.current = null;
               await loadDeliveries(page, statusFilter);
+              loadAnalytics();
             }
           }, 5000);
         }
@@ -115,7 +155,7 @@ export default function WaCampaignDetail({ campaignId, onBack }: Props) {
     } finally {
       setLoading(false);
     }
-  }, [campaignId, page, statusFilter, previewPage, loadDeliveries, loadPreviewRecipients]);
+  }, [campaignId, page, statusFilter, previewPage, loadDeliveries, loadPreviewRecipients, loadAnalytics]);
 
   useEffect(() => {
     loadAll();
@@ -228,6 +268,93 @@ export default function WaCampaignDetail({ campaignId, onBack }: Props) {
           <Text size="xl" fw={700} c={stats.optedOut > 0 ? "orange" : "dimmed"}>{stats.optedOut.toLocaleString()}</Text>
         </Card>
       </SimpleGrid>
+
+      {campaign.utmParams?.length ? <UtmSummary utmParams={campaign.utmParams} /> : null}
+
+      {/* ── Analíticas de clics ─────────────────────────────────────────────── */}
+      {analytics && (analytics.totalClicks > 0 || campaign.status === "completed") && (
+        <>
+          <Stack gap={2}>
+            <Title order={5}>Interacciones de la campaña</Title>
+            <Text size="sm" c="dimmed">
+              Clics registrados en el link del evento enviado por WhatsApp.
+            </Text>
+          </Stack>
+          <SimpleGrid cols={{ base: 2, sm: 3 }}>
+            <Card withBorder p="sm" radius="md">
+              <Text size="xs" c="dimmed">Usuarios que hicieron clic</Text>
+              <Text size="xl" fw={700} c="blue">
+                {analytics.uniqueClickers.toLocaleString()}
+              </Text>
+              {stats.sent > 0 && (
+                <Text size="xs" c="dimmed">
+                  {((analytics.uniqueClickers / stats.sent) * 100).toFixed(1)}% de enviados
+                </Text>
+              )}
+            </Card>
+            <Card withBorder p="sm" radius="md">
+              <Text size="xs" c="dimmed">Total clics</Text>
+              <Text size="xl" fw={700} c="indigo">
+                {analytics.totalClicks.toLocaleString()}
+              </Text>
+            </Card>
+          </SimpleGrid>
+
+          {Object.keys(analytics.byUtm).length > 0 && (
+            <SimpleGrid cols={{ base: 1, sm: 2 }}>
+              {Object.entries(analytics.byUtm).map(([utmKey, values]) => {
+                const maxUnique = values[0]?.uniqueClickers ?? 1;
+                return (
+                  <Card key={utmKey} withBorder radius="md" p="sm">
+                    <Text size="sm" fw={600} mb="xs" c="dimmed">
+                      {utmKey}
+                    </Text>
+                    <Stack gap={6}>
+                      {values.slice(0, 10).map(({ value, clicks, uniqueClickers }) => (
+                        <div key={value}>
+                          <Group justify="space-between" mb={2}>
+                            <Text size="xs" truncate maw={160}>{value}</Text>
+                            <Group gap={8}>
+                              <Tooltip label="Clickers únicos">
+                                <Text size="xs" fw={700} c="blue">
+                                  {uniqueClickers.toLocaleString()}
+                                </Text>
+                              </Tooltip>
+                              <Tooltip label="Total clics">
+                                <Text size="xs" c="dimmed">
+                                  ({clicks.toLocaleString()})
+                                </Text>
+                              </Tooltip>
+                            </Group>
+                          </Group>
+                          <Progress
+                            value={(uniqueClickers / maxUnique) * 100}
+                            size="sm"
+                            color="blue"
+                            radius="xl"
+                          />
+                        </div>
+                      ))}
+                      {values.length > 10 && (
+                        <Text size="xs" c="dimmed">
+                          +{values.length - 10} valores más
+                        </Text>
+                      )}
+                    </Stack>
+                  </Card>
+                );
+              })}
+            </SimpleGrid>
+          )}
+
+          {analytics.totalClicks === 0 && (
+            <Text size="sm" c="dimmed">
+              Sin clics registrados aún. Los clics aparecen cuando los destinatarios abren el link del evento.
+            </Text>
+          )}
+        </>
+      )}
+      {/* ──────────────────────────────────────────────────────────────────────── */}
 
       <Divider />
 

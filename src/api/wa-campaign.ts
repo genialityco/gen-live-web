@@ -75,6 +75,18 @@ export interface WaDelivery {
   firstClickAt: string | null;
 }
 
+export interface WaUtmValueStat {
+  value: string;
+  clicks: number;
+  uniqueClickers: number;
+}
+
+export interface WaCampaignAnalytics {
+  totalClicks: number;
+  uniqueClickers: number;
+  byUtm: Record<string, WaUtmValueStat[]>;
+}
+
 // ─── Template API ─────────────────────────────────────────────────────────────
 
 export async function listWaTemplates(): Promise<WaTemplate[]> {
@@ -158,5 +170,10 @@ export async function previewWaRecipients(
   params: { page?: number; limit?: number },
 ): Promise<{ data: { phone: string; name: string }[]; total: number }> {
   const res = await api.get(`/wa-campaign/${campaignId}/preview-recipients`, { params });
+  return res.data;
+}
+
+export async function getWaCampaignAnalytics(campaignId: string): Promise<WaCampaignAnalytics> {
+  const res = await api.get(`/wa-campaign/${campaignId}/analytics`);
   return res.data;
 }

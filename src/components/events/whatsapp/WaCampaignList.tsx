@@ -6,6 +6,7 @@ import {
 import { IconPlus, IconChevronRight, IconTrash } from "@tabler/icons-react";
 import { notifications } from "@mantine/notifications";
 import { listWaCampaigns, deleteWaCampaign, type WaCampaign, type WaCampaignStatus } from "../../../api/wa-campaign";
+import { fetchEmailVariables, type AvailableVariable } from "../../../api/event-email";
 import CreateWaCampaignModal from "./CreateWaCampaignModal";
 
 interface Props {
@@ -36,6 +37,7 @@ export default function WaCampaignList({ orgId, eventId, onSelect }: Props) {
   const [modalOpen, setModalOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<WaCampaign | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [formFields, setFormFields] = useState<AvailableVariable[]>([]);
 
   const handleDeleteClick = (campaign: WaCampaign, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -63,8 +65,12 @@ export default function WaCampaignList({ orgId, eventId, onSelect }: Props) {
 
   const load = useCallback(async () => {
     try {
-      const data = await listWaCampaigns(orgId, eventId);
+      const [data, vars] = await Promise.all([
+        listWaCampaigns(orgId, eventId),
+        fetchEmailVariables(orgId, eventId).catch(() => []),
+      ]);
       setCampaigns(data);
+      setFormFields(vars.filter((v) => v.section === "Formulario"));
     } catch {
       notifications.show({ title: "Error", message: "No se pudieron cargar las campañas", color: "red" });
     } finally {
@@ -168,6 +174,7 @@ export default function WaCampaignList({ orgId, eventId, onSelect }: Props) {
         onClose={() => setModalOpen(false)}
         orgId={orgId}
         eventId={eventId}
+        formFields={formFields}
         onCreated={(campaign) => {
           setModalOpen(false);
           setCampaigns((prev) => [campaign, ...prev]);

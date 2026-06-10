@@ -231,12 +231,13 @@ export default function EventAttend() {
   const isMobile = useMediaQuery("(max-width: 768px)");
   const { user, sessionName } = useAuth();
 
-  // Email click arrival confirmation
+  // Click arrival confirmation (email y WhatsApp comparten el parámetro _tc)
   useEffect(() => {
     const tc = searchParams.get("_tc");
     if (!tc) return;
     const apiUrl = import.meta.env.VITE_API_URL as string;
     fetch(`${apiUrl}/track/arrive/${tc}`).catch(() => {});
+    fetch(`${apiUrl}/wa/track/arrive/${tc}`).catch(() => {});
     searchParams.delete("_tc");
     setSearchParams(searchParams, { replace: true });
   }, []);
