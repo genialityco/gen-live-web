@@ -30,6 +30,7 @@ import { useAuth } from "../../auth/AuthProvider";
 import { BrandedFooter } from "../../components/branding";
 import UserSession from "../../components/auth/UserSession";
 import { useMediaQuery } from "@mantine/hooks";
+import { trackEvent } from "../../lib/utmTracking";
 
 // --------------------------------------------------------------
 // Helpers de Branding y Accesibilidad
@@ -395,9 +396,16 @@ function NextEventSection({
       p={0}
       radius="lg"
       style={{ overflow: "hidden", cursor: "pointer" }}
-      onClick={() =>
-        navigate(`/org/${orgSlug}/event/${event.slug || event._id}`)
-      }
+      onClick={() => {
+        trackEvent("select_event", {
+          content_type: "event",
+          item_id: event._id,
+          event_title: event.title,
+          event_status: event.status,
+          card_location: "next_event",
+        });
+        navigate(`/org/${orgSlug}/event/${event.slug || event._id}`);
+      }}
       // onClick={() =>
       //   (window.location.href =
       //     "https://liveevents.geniality.com.co/68fcf6db6d9f9db64809e042")
@@ -513,9 +521,16 @@ function PastEventCard({
         (e.currentTarget.style.transform = "translateY(-2px)")
       }
       onMouseLeave={(e) => (e.currentTarget.style.transform = "")}
-      onClick={() =>
-        navigate(`/org/${orgSlug}/event/${event.slug || event._id}`)
-      }
+      onClick={() => {
+        trackEvent("select_event", {
+          content_type: "event",
+          item_id: event._id,
+          event_title: event.title,
+          event_status: event.status,
+          card_location: "past_events",
+        });
+        navigate(`/org/${orgSlug}/event/${event.slug || event._id}`);
+      }}
       // onClick={() => (window.location.href = event.stream?.url as string)}
     >
       <EventBanner
@@ -589,9 +604,16 @@ function UpcomingEventCard({
         (e.currentTarget.style.transform = "translateY(-2px)")
       }
       onMouseLeave={(e) => (e.currentTarget.style.transform = "")}
-      onClick={() =>
-        navigate(`/org/${orgSlug}/event/${event.slug || event._id}`)
-      }
+      onClick={() => {
+        trackEvent("select_event", {
+          content_type: "event",
+          item_id: event._id,
+          event_title: event.title,
+          event_status: event.status,
+          card_location: "upcoming_events",
+        });
+        navigate(`/org/${orgSlug}/event/${event.slug || event._id}`);
+      }}
       // onClick={() => (window.location.href = event.stream?.url as string)}
     >
       <Box style={{ position: "relative" }}>

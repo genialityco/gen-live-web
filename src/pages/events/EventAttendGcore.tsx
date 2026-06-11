@@ -69,6 +69,7 @@ import {
 import { ViewerHlsPlayer } from "../viewer/ViewerHlsPlayer";
 import { VodHlsPlayer } from "../viewer/VodHlsPlayer";
 import { Track } from "livekit-client";
+import { trackEvent } from "../../lib/utmTracking";
 
 function SpeakerPreview() {
   const tracks = useTracks(
@@ -658,6 +659,14 @@ export default function EventAttendGcore() {
   const handleJoinRequest = async () => {
     if (!eventSlugToUse) return;
     if (!isRegistered && !isOwner) return;
+
+    // 📊 Evento clave: solicitud de unirse al estudio en vivo
+    trackEvent("request_join_studio", {
+      content_type: "join_studio_request",
+      item_id: event?._id,
+      event_slug: eventSlugToUse,
+      org_slug: slug,
+    });
 
     setJoinState("pending");
     try {

@@ -49,3 +49,17 @@ export function sendPageView(pathname: string, search: string): void {
     ...(utms.utm_subespecialidad && { utm_subespecialidad: utms.utm_subespecialidad }),
   });
 }
+
+/**
+ * Envía un evento personalizado a GA4, incluyendo los UTMs custom
+ * almacenados en sesión para poder segmentar las conversiones.
+ */
+export function trackEvent(name: string, params?: Record<string, unknown>): void {
+  const utms = getStoredUtms();
+  window.gtag?.('event', name, {
+    ...params,
+    ...(utms.utm_perfil && { utm_perfil: utms.utm_perfil }),
+    ...(utms.utm_especialidad && { utm_especialidad: utms.utm_especialidad }),
+    ...(utms.utm_subespecialidad && { utm_subespecialidad: utms.utm_subespecialidad }),
+  });
+}

@@ -31,6 +31,7 @@ import {
   pageBackground,
   resolveBrandingColorsFromBranding,
 } from "../../utils/branding";
+import { trackEvent } from "../../lib/utmTracking";
 
 interface UpdateFormState {
   attendeeId: string;
@@ -138,6 +139,17 @@ export default function EventLanding() {
 
   // Manejar el click en el botón principal
   const handleMainAction = async () => {
+    // 📊 Evento clave: clic en el CTA principal (registro / ingreso al evento)
+    trackEvent("event_cta_click", {
+      content_type: "event_main_cta",
+      item_id: eventData?._id,
+      event_slug: eventSlug,
+      org_slug: slug,
+      event_status: status,
+      is_registered: !!isRegisteredForEvent,
+      cta_label: getActionButtonText(status, !!isRegisteredForEvent),
+    });
+
     // 🟡 1) Si NO hay sesión → ir siempre al flujo centralizado /access
     if (!user) {
       if (!slug) {
