@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { LiveKitRoom, RoomAudioRenderer } from "@livekit/components-react";
 import { LiveMonitor } from "./LiveMonitor";
 import { useStage } from "../../hooks/useStage"; // ajusta tu path real
-import { getEffectiveMediaConfig } from "../../api/media-library-service";
+import { getEffectiveMediaConfig, deactivateMedia } from "../../api/media-library-service";
 
 const qp = (k: string) =>
   new URLSearchParams(window.location.search).get(k) || "";
@@ -220,6 +220,10 @@ function ProgramCanvas({ eventSlug }: { eventSlug: string }) {
         presentationSlide={stage.presentationSlide}
         presentationSlides={presentationSlides}
         presentationMimeType={presentationMimeType}
+        // El canvas de Egress también debe poder autolimpiar el media al
+        // terminar, sin depender de que el operador tenga StudioView abierto
+        onVisualEnded={() => void deactivateMedia(eventSlug, "visual")}
+        onAudioEnded={() => void deactivateMedia(eventSlug, "audio")}
       />
 
       {/* Signal to LiveKit Egress that page is ready */}
