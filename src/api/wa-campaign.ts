@@ -121,6 +121,11 @@ export async function syncWaTemplate(id: string): Promise<WaTemplate> {
   return res.data;
 }
 
+export async function syncWaTemplateUrl(id: string): Promise<WaTemplate> {
+  const res = await api.post(`/wa-campaign/templates/${id}/sync-url`);
+  return res.data;
+}
+
 // ─── Campaign API ─────────────────────────────────────────────────────────────
 
 export async function listWaCampaigns(orgId: string, eventId: string): Promise<WaCampaign[]> {

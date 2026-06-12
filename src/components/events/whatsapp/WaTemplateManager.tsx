@@ -3,10 +3,10 @@ import {
   Stack, Group, Title, Text, Badge, Button, Card, SimpleGrid,
   Loader, Center, ActionIcon, Tooltip, Code,
 } from "@mantine/core";
-import { IconRefresh, IconSend, IconPlus } from "@tabler/icons-react";
+import { IconRefresh, IconSend, IconPlus, IconLink } from "@tabler/icons-react";
 import { notifications } from "@mantine/notifications";
 import {
-  listWaTemplates, submitWaTemplate, syncWaTemplate,
+  listWaTemplates, submitWaTemplate, syncWaTemplate, syncWaTemplateUrl,
   type WaTemplate,
 } from "../../../api/wa-campaign";
 import { type FormField } from "../../../types";
@@ -74,6 +74,19 @@ export default function WaTemplateManager({ registrationFields }: Props) {
       notifications.show({ title: "Sincronizado", message: `Estado: ${STATUS_LABELS[updated.status]}`, color: "teal" });
     } catch {
       notifications.show({ title: "Error", message: "No se pudo sincronizar", color: "red" });
+    } finally {
+      setActionId(null);
+    }
+  };
+
+  const handleSyncUrl = async (id: string) => {
+    setActionId(id);
+    try {
+      const updated = await syncWaTemplateUrl(id);
+      setTemplates((prev) => prev.map((t) => (t._id === id ? updated : t)));
+      notifications.show({ title: "URL actualizada", message: `Estado: ${STATUS_LABELS[updated.status]}`, color: "teal" });
+    } catch (err: any) {
+      notifications.show({ title: "Error", message: err?.response?.data?.message ?? "No se pudo actualizar la URL", color: "red" });
     } finally {
       setActionId(null);
     }
@@ -157,6 +170,20 @@ export default function WaTemplateManager({ registrationFields }: Props) {
                       </ActionIcon>
                     </Tooltip>
                   )}
+                  {t.metaTemplateId &&
+                    t.components.some((c) => c.type === "BUTTONS" && c.buttons?.some((b) => b.type === "URL")) && (
+                      <Tooltip label="Actualizar URL del botón al dominio actual del frontend">
+                        <ActionIcon
+                          variant="light"
+                          color="grape"
+                          size="sm"
+                          loading={actionId === t._id}
+                          onClick={() => handleSyncUrl(t._id)}
+                        >
+                          <IconLink size={14} />
+                        </ActionIcon>
+                      </Tooltip>
+                    )}
                 </Group>
               </Stack>
             </Card>
