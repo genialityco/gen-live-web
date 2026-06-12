@@ -10,8 +10,10 @@ export interface WaTemplateComponent {
   type: 'HEADER' | 'BODY' | 'FOOTER' | 'BUTTONS';
   format?: string;
   text?: string;
-  buttons?: Array<{ type: string; text: string; url?: string; example?: string[] }>;
-  example?: { body_text?: string[][]; header_text?: string[] };
+  buttons?: Array<{ type: string; text: string; url?: string; phone_number?: string; example?: string[] }>;
+  example?: { body_text?: string[][]; header_text?: string[]; header_handle?: string[] };
+  /** Solo para HEADER format IMAGE: URL pública de una imagen de ejemplo para la revisión de Meta */
+  exampleImageUrl?: string;
 }
 
 export interface WaTemplate {
@@ -109,6 +111,25 @@ export async function createWaTemplate(data: {
 }): Promise<WaTemplate> {
   const res = await api.post('/wa-campaign/templates', data);
   return res.data;
+}
+
+export async function updateWaTemplate(
+  id: string,
+  data: {
+    name: string;
+    displayName: string;
+    category: 'MARKETING' | 'UTILITY' | 'AUTHENTICATION';
+    language: string;
+    components: WaTemplateComponent[];
+    variableMappings: Record<string, string>;
+  },
+): Promise<WaTemplate> {
+  const res = await api.patch(`/wa-campaign/templates/${id}`, data);
+  return res.data;
+}
+
+export async function deleteWaTemplate(id: string): Promise<void> {
+  await api.delete(`/wa-campaign/templates/${id}`);
 }
 
 export async function submitWaTemplate(id: string): Promise<WaTemplate> {

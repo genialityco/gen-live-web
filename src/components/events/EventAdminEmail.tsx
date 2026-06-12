@@ -130,7 +130,10 @@ export default function EventAdminEmail({ org, event }: EventAdminEmailProps) {
           </Tabs.Panel>
 
           <Tabs.Panel value="templates" pt="md">
-            <WaTemplateManager registrationFields={org.registrationForm?.fields ?? []} />
+            <WaTemplateManager
+              registrationFields={org.registrationForm?.fields ?? []}
+              coverImageUrl={event.branding?.coverImageUrl ?? org.branding?.logoUrl}
+            />
           </Tabs.Panel>
         </Tabs>
       )}

@@ -1,12 +1,12 @@
 import { useState, useEffect, useCallback } from "react";
 import {
   Stack, Group, Title, Text, Badge, Button, Card, SimpleGrid,
-  Loader, Center, ActionIcon, Tooltip, Code,
+  Loader, Center, ActionIcon, Tooltip, Code, Box, Divider,
 } from "@mantine/core";
-import { IconRefresh, IconSend, IconPlus, IconLink } from "@tabler/icons-react";
+import { IconRefresh, IconSend, IconPlus, IconLink, IconPencil, IconTrash, IconPhoto } from "@tabler/icons-react";
 import { notifications } from "@mantine/notifications";
 import {
-  listWaTemplates, submitWaTemplate, syncWaTemplate, syncWaTemplateUrl,
+  listWaTemplates, submitWaTemplate, syncWaTemplate, syncWaTemplateUrl, deleteWaTemplate,
   type WaTemplate,
 } from "../../../api/wa-campaign";
 import { type FormField } from "../../../types";
@@ -30,15 +30,26 @@ const STATUS_COLORS: Record<WaTemplate["status"], string> = {
   disabled: "dark",
 };
 
-interface Props {
-  registrationFields: FormField[];
+function renderPreviewText(text: string): React.ReactNode[] {
+  return text.split(/(\*[^*\n]+\*)/).map((part, i) =>
+    part.startsWith("*") && part.endsWith("*") && part.length > 2
+      ? <strong key={i}>{part.slice(1, -1)}</strong>
+      : part,
+  );
 }
 
-export default function WaTemplateManager({ registrationFields }: Props) {
+interface Props {
+  registrationFields: FormField[];
+  /** Imagen de portada del evento (o logo de la organización), usada como ejemplo en la vista previa del encabezado */
+  coverImageUrl?: string;
+}
+
+export default function WaTemplateManager({ registrationFields, coverImageUrl }: Props) {
   const [templates, setTemplates] = useState<WaTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionId, setActionId] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [editingTemplate, setEditingTemplate] = useState<WaTemplate | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -74,6 +85,20 @@ export default function WaTemplateManager({ registrationFields }: Props) {
       notifications.show({ title: "Sincronizado", message: `Estado: ${STATUS_LABELS[updated.status]}`, color: "teal" });
     } catch {
       notifications.show({ title: "Error", message: "No se pudo sincronizar", color: "red" });
+    } finally {
+      setActionId(null);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm("¿Eliminar este template? Esta acción no se puede deshacer.")) return;
+    setActionId(id);
+    try {
+      await deleteWaTemplate(id);
+      notifications.show({ title: "Template eliminado", message: "El borrador se eliminó correctamente", color: "teal" });
+      await load();
+    } catch (err: any) {
+      notifications.show({ title: "Error", message: err?.response?.data?.message ?? "No se pudo eliminar", color: "red" });
     } finally {
       setActionId(null);
     }
@@ -115,9 +140,11 @@ export default function WaTemplateManager({ registrationFields }: Props) {
 
       <CreateWaTemplateDrawer
         opened={drawerOpen}
-        onClose={() => setDrawerOpen(false)}
-        onCreated={() => { setDrawerOpen(false); load(); }}
+        onClose={() => { setDrawerOpen(false); setEditingTemplate(null); }}
+        onCreated={() => { setDrawerOpen(false); setEditingTemplate(null); load(); }}
         registrationFields={registrationFields}
+        template={editingTemplate}
+        coverImageUrl={coverImageUrl}
       />
 
       {templates.length === 0 ? (
@@ -126,7 +153,13 @@ export default function WaTemplateManager({ registrationFields }: Props) {
         </Card>
       ) : (
         <SimpleGrid cols={{ base: 1, sm: 2 }}>
-          {templates.map((t) => (
+          {templates.map((t) => {
+            const header = t.components.find((c) => c.type === "HEADER");
+            const body = t.components.find((c) => c.type === "BODY");
+            const footer = t.components.find((c) => c.type === "FOOTER");
+            const buttonsComp = t.components.find((c) => c.type === "BUTTONS");
+
+            return (
             <Card key={t._id} withBorder radius="md" p="md">
               <Stack gap="xs">
                 <Group justify="space-between">
@@ -143,6 +176,79 @@ export default function WaTemplateManager({ registrationFields }: Props) {
                   <Badge size="xs" variant="outline" color="gray">{t.language}</Badge>
                 </Group>
 
+                {/* ── Vista previa del mensaje ─────────────────────────── */}
+                <Box style={{ background: "#e5ddd5", borderRadius: 6, padding: 8 }}>
+                  <Box
+                    style={{
+                      background: "#fff",
+                      borderRadius: "0 6px 6px 6px",
+                      padding: "8px 10px",
+                      boxShadow: "0 1px 2px rgba(0,0,0,0.12)",
+                    }}
+                  >
+                    {header?.format === "IMAGE" ? (
+                      <Box
+                        mb={4}
+                        style={{
+                          borderRadius: 4,
+                          overflow: "hidden",
+                          aspectRatio: "1.91 / 1",
+                          background: "#f1f1f1",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                        }}
+                      >
+                        {header.exampleImageUrl ? (
+                          <img
+                            src={header.exampleImageUrl}
+                            alt="Encabezado"
+                            style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+                            onError={(e) => { e.currentTarget.style.display = "none"; }}
+                          />
+                        ) : (
+                          <IconPhoto size={20} color="#bbb" />
+                        )}
+                      </Box>
+                    ) : header?.text ? (
+                      <Text fw={700} size="xs" mb={2}>{renderPreviewText(header.text)}</Text>
+                    ) : null}
+
+                    {body?.text && (
+                      <Text
+                        size="xs"
+                        style={{
+                          whiteSpace: "pre-wrap",
+                          wordBreak: "break-word",
+                          display: "-webkit-box",
+                          WebkitLineClamp: 4,
+                          WebkitBoxOrient: "vertical",
+                          overflow: "hidden",
+                        }}
+                      >
+                        {renderPreviewText(body.text)}
+                      </Text>
+                    )}
+
+                    {footer?.text && (
+                      <Text size="xs" c="dimmed" mt={2}>{footer.text}</Text>
+                    )}
+
+                    {buttonsComp?.buttons && buttonsComp.buttons.length > 0 && (
+                      <>
+                        <Divider my={4} />
+                        <Stack gap={2}>
+                          {buttonsComp.buttons.map((b, i) => (
+                            <Text key={i} size="xs" ta="center" c="blue" fw={500}>
+                              {b.text}
+                            </Text>
+                          ))}
+                        </Stack>
+                      </>
+                    )}
+                  </Box>
+                </Box>
+
                 {t.rejectionReason && (
                   <Text size="xs" c="red">Motivo: {t.rejectionReason}</Text>
                 )}
@@ -157,6 +263,31 @@ export default function WaTemplateManager({ registrationFields }: Props) {
                     >
                       Enviar a revisión
                     </Button>
+                  )}
+                  {t.status === "draft" && (
+                    <Tooltip label="Editar borrador">
+                      <ActionIcon
+                        variant="light"
+                        size="sm"
+                        loading={actionId === t._id}
+                        onClick={() => { setEditingTemplate(t); setDrawerOpen(true); }}
+                      >
+                        <IconPencil size={14} />
+                      </ActionIcon>
+                    </Tooltip>
+                  )}
+                  {t.status === "draft" && !t.isDefault && (
+                    <Tooltip label="Eliminar borrador">
+                      <ActionIcon
+                        variant="light"
+                        color="red"
+                        size="sm"
+                        loading={actionId === t._id}
+                        onClick={() => handleDelete(t._id)}
+                      >
+                        <IconTrash size={14} />
+                      </ActionIcon>
+                    </Tooltip>
                   )}
                   {t.metaTemplateId && (
                     <Tooltip label="Sincronizar estado con Meta">
@@ -187,7 +318,8 @@ export default function WaTemplateManager({ registrationFields }: Props) {
                 </Group>
               </Stack>
             </Card>
-          ))}
+            );
+          })}
         </SimpleGrid>
       )}
     </Stack>

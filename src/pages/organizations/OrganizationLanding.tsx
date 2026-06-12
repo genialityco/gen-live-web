@@ -331,7 +331,7 @@ function InfoRow({ date }: { date?: string | null }) {
       <ThemeIcon variant="light" size="sm">
         <IconCalendar size={16} />
       </ThemeIcon>
-      <Text size="sm" fw={600}>
+      <Text size="sm" c="var(--mantine-color-brand-7)" fw={600}>
         {formatShortDate(date)}
       </Text>
       <ThemeIcon variant="light" size="sm">

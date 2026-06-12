@@ -1,11 +1,11 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   Drawer, Stack, TextInput, Textarea, Select, Switch, Button,
   Group, Text, Title, Paper, Box, Divider, ActionIcon, ScrollArea,
 } from "@mantine/core";
 import { IconPlus, IconTrash, IconBrandWhatsapp } from "@tabler/icons-react";
 import { notifications } from "@mantine/notifications";
-import { createWaTemplate, type WaTemplateComponent } from "../../../api/wa-campaign";
+import { createWaTemplate, updateWaTemplate, type WaTemplate, type WaTemplateComponent } from "../../../api/wa-campaign";
 import { type FormField } from "../../../types";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -16,6 +16,7 @@ const FIXED_SOURCES = [
   { value: "event.title", label: "Título del evento" },
   { value: "event.startDate", label: "Fecha del evento" },
   { value: "event.slug", label: "Slug del evento" },
+  { value: "event.coverImageUrl", label: "Imagen de portada del evento" },
   { value: "org.slug", label: "Slug de la organización" },
   { value: "_tracking_url", label: "URL de seguimiento (tracking)" },
 ];
@@ -26,6 +27,7 @@ const FIXED_exampleValues: Record<string, string> = {
   "event.title": "Mi Evento 2026",
   "event.startDate": "15 jun 2026, 10:00",
   "event.slug": "mi-evento",
+  "event.coverImageUrl": "https://storage.googleapis.com/.../portada-evento.jpg",
   "org.slug": "mi-organizacion",
   "_tracking_url": "org/mi-org/event/mi-evento/attend",
 };
@@ -86,17 +88,23 @@ interface Props {
   onClose: () => void;
   onCreated: () => void;
   registrationFields?: FormField[];
+  /** Si se provee, el drawer edita este template (borrador) en vez de crear uno nuevo */
+  template?: WaTemplate | null;
+  /** Imagen de portada del evento actual (o logo de la organización), usada como ejemplo en la vista previa del encabezado */
+  coverImageUrl?: string;
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
-export default function CreateWaTemplateDrawer({ opened, onClose, onCreated, registrationFields = [] }: Props) {
+export default function CreateWaTemplateDrawer({ opened, onClose, onCreated, registrationFields = [], template = null, coverImageUrl }: Props) {
   const [displayName, setDisplayName] = useState("");
   const [name, setName] = useState("");
   const [category, setCategory] = useState<"MARKETING" | "UTILITY" | "AUTHENTICATION">("MARKETING");
   const [language, setLanguage] = useState("es");
   const [headerEnabled, setHeaderEnabled] = useState(false);
+  const [headerFormat, setHeaderFormat] = useState<"TEXT" | "IMAGE">("TEXT");
   const [headerText, setHeaderText] = useState("");
+  const [headerExampleImageUrl, setHeaderExampleImageUrl] = useState("");
   const [bodyText, setBodyText] = useState("");
   const [footerEnabled, setFooterEnabled] = useState(false);
   const [footerText, setFooterText] = useState("");
@@ -153,8 +161,12 @@ export default function CreateWaTemplateDrawer({ opened, onClose, onCreated, reg
         formExamples[`form.${f.id}`] = f.placeholder ?? f.label;
       }
     }
-    return { ...FIXED_exampleValues, ...formExamples };
-  }, [registrationFields]);
+    return {
+      ...FIXED_exampleValues,
+      ...(coverImageUrl ? { "event.coverImageUrl": coverImageUrl } : {}),
+      ...formExamples,
+    };
+  }, [registrationFields, coverImageUrl]);
 
   // ── derived state ────────────────────────────────────────────────────────────
 
@@ -169,9 +181,14 @@ export default function CreateWaTemplateDrawer({ opened, onClose, onCreated, reg
     for (const m of bodyText.matchAll(/\{\{(\d+)\}\}/g))
       push(`body.${m[1]}`, `Cuerpo {{${m[1]}}}`);
 
-    if (headerEnabled)
-      for (const m of headerText.matchAll(/\{\{(\d+)\}\}/g))
-        push(`header.${m[1]}`, `Encabezado {{${m[1]}}}`);
+    if (headerEnabled) {
+      if (headerFormat === "IMAGE") {
+        push("header.1", "Encabezado — Imagen dinámica");
+      } else {
+        for (const m of headerText.matchAll(/\{\{(\d+)\}\}/g))
+          push(`header.${m[1]}`, `Encabezado {{${m[1]}}}`);
+      }
+    }
 
     buttons.forEach((btn, i) => {
       if (btn.type === "URL" && /\{\{1\}\}/.test(btn.url))
@@ -179,7 +196,7 @@ export default function CreateWaTemplateDrawer({ opened, onClose, onCreated, reg
     });
 
     return vars;
-  }, [bodyText, headerEnabled, headerText, buttons]);
+  }, [bodyText, headerEnabled, headerFormat, headerText, buttons]);
 
   const preview = useMemo(() => {
     const replace = (text: string, prefix: string) =>
@@ -187,19 +204,33 @@ export default function CreateWaTemplateDrawer({ opened, onClose, onCreated, reg
         const src = variableMappings[`${prefix}.${n}`];
         return src ? (exampleValues[src] ?? `{{${n}}}`) : `{{${n}}}`;
       });
+    const headerImageUrl =
+      headerEnabled && headerFormat === "IMAGE"
+        ? exampleValues[variableMappings["header.1"] ?? ""] || headerExampleImageUrl
+        : "";
     return {
-      header: headerEnabled ? replace(headerText, "header") : "",
+      header: headerEnabled && headerFormat === "TEXT" ? replace(headerText, "header") : "",
+      headerImageUrl,
       body: replace(bodyText, "body"),
       footer: footerEnabled ? footerText : "",
     };
-  }, [bodyText, headerEnabled, headerText, footerEnabled, footerText, variableMappings, exampleValues]);
+  }, [
+    bodyText, headerEnabled, headerFormat, headerText, headerExampleImageUrl,
+    footerEnabled, footerText, variableMappings, exampleValues,
+  ]);
 
   // ── build payload ────────────────────────────────────────────────────────────
 
   const buildComponents = (): WaTemplateComponent[] => {
     const comps: WaTemplateComponent[] = [];
 
-    if (headerEnabled && headerText.trim()) {
+    if (headerEnabled && headerFormat === "IMAGE" && headerExampleImageUrl.trim()) {
+      comps.push({
+        type: "HEADER",
+        format: "IMAGE",
+        exampleImageUrl: headerExampleImageUrl.trim(),
+      });
+    } else if (headerEnabled && headerFormat === "TEXT" && headerText.trim()) {
       const comp: WaTemplateComponent = { type: "HEADER", format: "TEXT", text: headerText.trim() };
       if (/\{\{\d+\}\}/.test(headerText)) {
         comp.example = {
@@ -264,27 +295,47 @@ export default function CreateWaTemplateDrawer({ opened, onClose, onCreated, reg
       return;
     }
 
+    if (headerEnabled && headerFormat === "IMAGE" && !headerExampleImageUrl.trim()) {
+      notifications.show({
+        title: "Falta imagen de ejemplo",
+        message: "El encabezado de imagen requiere una URL de imagen de ejemplo para Meta",
+        color: "orange",
+      });
+      return;
+    }
+
     setSaving(true);
     try {
-      await createWaTemplate({
+      const payload = {
         name: name.trim(),
         displayName: displayName.trim(),
         category,
         language,
         components: buildComponents(),
         variableMappings,
-      });
-      notifications.show({
-        title: "Template creado",
-        message: "Guardado como borrador. Ahora puedes enviarlo a revisión en Meta.",
-        color: "green",
-      });
+      };
+
+      if (template) {
+        await updateWaTemplate(template._id, payload);
+        notifications.show({
+          title: "Template actualizado",
+          message: "Los cambios se guardaron en el borrador.",
+          color: "green",
+        });
+      } else {
+        await createWaTemplate(payload);
+        notifications.show({
+          title: "Template creado",
+          message: "Guardado como borrador. Ahora puedes enviarlo a revisión en Meta.",
+          color: "green",
+        });
+      }
       onCreated();
       resetForm();
     } catch (err: any) {
       notifications.show({
         title: "Error",
-        message: err?.response?.data?.message ?? "No se pudo crear el template",
+        message: err?.response?.data?.message ?? "No se pudo guardar el template",
         color: "red",
       });
     } finally {
@@ -294,11 +345,61 @@ export default function CreateWaTemplateDrawer({ opened, onClose, onCreated, reg
 
   const resetForm = () => {
     setDisplayName(""); setName(""); setCategory("MARKETING"); setLanguage("es");
-    setHeaderEnabled(false); setHeaderText("");
+    setHeaderEnabled(false); setHeaderFormat("TEXT"); setHeaderText(""); setHeaderExampleImageUrl("");
     setBodyText("");
     setFooterEnabled(false); setFooterText("");
     setButtons([]); setVariableMappings({});
   };
+
+  // ── precarga al editar un template existente ───────────────────────────────
+  useEffect(() => {
+    if (!opened) return;
+    if (!template) {
+      resetForm();
+      return;
+    }
+
+    setDisplayName(template.displayName);
+    setName(template.name);
+    setCategory(template.category);
+    setLanguage(template.language);
+    setVariableMappings(template.variableMappings ?? {});
+
+    const header = template.components.find((c) => c.type === "HEADER");
+    if (header) {
+      setHeaderEnabled(true);
+      if (header.format === "IMAGE") {
+        setHeaderFormat("IMAGE");
+        setHeaderExampleImageUrl(header.exampleImageUrl ?? "");
+      } else {
+        setHeaderFormat("TEXT");
+        setHeaderText(header.text ?? "");
+      }
+    } else {
+      setHeaderEnabled(false);
+      setHeaderFormat("TEXT");
+      setHeaderText("");
+      setHeaderExampleImageUrl("");
+    }
+
+    const body = template.components.find((c) => c.type === "BODY");
+    setBodyText(body?.text ?? "");
+
+    const footer = template.components.find((c) => c.type === "FOOTER");
+    setFooterEnabled(!!footer);
+    setFooterText(footer?.text ?? "");
+
+    const buttonsComp = template.components.find((c) => c.type === "BUTTONS");
+    setButtons(
+      (buttonsComp?.buttons ?? []).map((b) => ({
+        type: b.type as BtnType,
+        text: b.text,
+        url: b.url ?? "",
+        phone_number: b.phone_number ?? "",
+      })),
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [opened, template]);
 
   const handleClose = () => { resetForm(); onClose(); };
 
@@ -311,7 +412,7 @@ export default function CreateWaTemplateDrawer({ opened, onClose, onCreated, reg
       title={
         <Group gap="xs">
           <IconBrandWhatsapp size={18} color="#25D366" />
-          <Text fw={600}>Nuevo template de WhatsApp</Text>
+          <Text fw={600}>{template ? "Editar template de WhatsApp" : "Nuevo template de WhatsApp"}</Text>
         </Group>
       }
       position="right"
@@ -362,7 +463,7 @@ export default function CreateWaTemplateDrawer({ opened, onClose, onCreated, reg
           <Group justify="space-between">
             <Stack gap={2}>
               <Title order={6} c="dimmed">ENCABEZADO</Title>
-              <Text size="xs" c="dimmed">Texto en negrita sobre el cuerpo. Opcional.</Text>
+              <Text size="xs" c="dimmed">Texto en negrita o imagen sobre el cuerpo. Opcional.</Text>
             </Stack>
             <Switch
               size="sm"
@@ -372,12 +473,35 @@ export default function CreateWaTemplateDrawer({ opened, onClose, onCreated, reg
             />
           </Group>
           {headerEnabled && (
-            <TextInput
-              placeholder="Ej: ¡Hola {{1}}!"
-              value={headerText}
-              onChange={(e) => setHeaderText(e.currentTarget.value)}
-              description="Puedes usar {{1}} para una variable dinámica"
-            />
+            <>
+              <Select
+                size="sm"
+                label="Tipo de encabezado"
+                data={[
+                  { value: "TEXT", label: "Texto" },
+                  { value: "IMAGE", label: "Imagen" },
+                ]}
+                value={headerFormat}
+                onChange={(v) => v && setHeaderFormat(v as "TEXT" | "IMAGE")}
+                allowDeselect={false}
+              />
+              {headerFormat === "TEXT" ? (
+                <TextInput
+                  placeholder="Ej: ¡Hola {{1}}!"
+                  value={headerText}
+                  onChange={(e) => setHeaderText(e.currentTarget.value)}
+                  description="Puedes usar {{1}} para una variable dinámica"
+                />
+              ) : (
+                <TextInput
+                  placeholder="https://.../portada-evento.jpg"
+                  value={headerExampleImageUrl}
+                  onChange={(e) => setHeaderExampleImageUrl(e.currentTarget.value)}
+                  label="Imagen de ejemplo"
+                  description="URL pública usada como ejemplo para la revisión de Meta. En cada envío se reemplazará por la imagen real (mapeada abajo)."
+                />
+              )}
+            </>
           )}
         </Stack>
 
@@ -559,6 +683,24 @@ export default function CreateWaTemplateDrawer({ opened, onClose, onCreated, reg
                     boxShadow: "0 1px 2px rgba(0,0,0,0.15)",
                   }}
                 >
+                  {preview.headerImageUrl && (
+                    <Box
+                      mb={6}
+                      style={{
+                        borderRadius: 6,
+                        overflow: "hidden",
+                        aspectRatio: "1.91 / 1",
+                        background: "#f1f1f1",
+                      }}
+                    >
+                      <img
+                        src={preview.headerImageUrl}
+                        alt="Encabezado"
+                        style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+                        onError={(e) => { e.currentTarget.style.display = "none"; }}
+                      />
+                    </Box>
+                  )}
                   {preview.header && (
                     <Text fw={700} size="sm" mb={4}>{preview.header}</Text>
                   )}
@@ -612,7 +754,7 @@ export default function CreateWaTemplateDrawer({ opened, onClose, onCreated, reg
             disabled={!displayName.trim() || !name.trim() || !bodyText.trim()}
             color="green"
           >
-            Guardar como borrador
+            {template ? "Guardar cambios" : "Guardar como borrador"}
           </Button>
         </Group>
 
