@@ -1,9 +1,15 @@
 /**
- * Catálogos de datos para formularios personalizados
- * Usando librería country-state-city para datos completos del mundo
+ * Catálogos de datos para formularios personalizados.
+ *
+ * País y Estado/Departamento usan country-state-city directamente (datasets
+ * pequeños: ~95KB y ~554KB). Ciudad usa un dataset propio partido por país
+ * en src/data/cities/<ISO2>.json (generado por scripts/split-cities.mjs a
+ * partir de country-state-city), cargado de forma diferida vía
+ * import.meta.glob — evita bundlear las ~150k ciudades del mundo (~8MB) en
+ * un solo chunk cuando solo se necesitan las del país seleccionado.
  */
 
-import { Country, State, City } from "country-state-city";
+import { Country, State } from "country-state-city";
 import type { ICountry, IState, ICity } from "country-state-city";
 
 // Re-exportar tipos de la librería
@@ -19,40 +25,9 @@ export const getStatesByCountry = (countryCode: string): IState[] => {
   return State.getStatesOfCountry(countryCode);
 };
 
-// Obtener ciudades de un estado/departamento
-export const getCitiesByState = (
-  countryCode: string,
-  stateCode: string
-): ICity[] => {
-  return City.getCitiesOfState(countryCode, stateCode);
-};
-
-// Obtener todas las ciudades de un país
-export const getCitiesByCountry = (countryCode: string): ICity[] => {
-  return City.getCitiesOfCountry(countryCode) || [];
-};
-
 // Obtener información de un país por código
 export const getCountryByCode = (countryCode: string): ICountry | undefined => {
   return Country.getCountryByCode(countryCode);
-};
-
-// Obtener información de un estado por código
-export const getStateByCode = (
-  countryCode: string,
-  stateCode: string
-): IState | undefined => {
-  return State.getStateByCodeAndCountry(stateCode, countryCode);
-};
-
-// Helper: Obtener ciudades de Colombia (código CO)
-export const getColombianCities = (): ICity[] => {
-  return City.getCitiesOfCountry("CO") || [];
-};
-
-// Helper: Obtener departamentos de Colombia
-export const getColombianStates = (): IState[] => {
-  return State.getStatesOfCountry("CO") || [];
 };
 
 // Helper: Obtener código telefónico por país
@@ -65,59 +40,32 @@ export function getDialCodeByCountry(countryCode: string): string {
   return first;
 }
 
-// Helper: Obtener estado/departamento de una ciudad
-export function getStateByCity(
-  countryCode: string,
-  cityName: string
-): IState | undefined {
-  const cities = City.getCitiesOfCountry(countryCode) || [];
-  const city = cities.find((c) => c.name === cityName);
-  if (city && city.stateCode) {
-    return State.getStateByCodeAndCountry(city.stateCode, countryCode);
-  }
-  return undefined;
-}
+// ─── Ciudades: dataset propio partido por país (carga diferida) ────────────
 
-// Helper: Construir mapa dinámico de ciudad → estado para un país
-export function buildCityToStateMap(
-  countryCode: string
-): Record<string, string> {
-  const cities = City.getCitiesOfCountry(countryCode) || [];
-  const map: Record<string, string> = {};
+// Filas comprimidas: [name, stateCode, latitude, longitude]
+type CityRow = [name: string, stateCode: string, latitude: string, longitude: string];
 
-  cities.forEach((city) => {
-    if (city.stateCode) {
-      const state = State.getStateByCodeAndCountry(city.stateCode, countryCode);
-      if (state) {
-        map[city.name] = state.name;
-      }
-    }
-  });
+const cityModules = import.meta.glob<{ default: CityRow[] }>("./cities/*.json");
 
-  return map;
-}
+const cityCache = new Map<string, ICity[]>();
 
-// Obtener mapa de ciudades colombianas (cache)
-let colombianCityMap: Record<string, string> | null = null;
-export function getCityToStateMapColombia(): Record<string, string> {
-  if (!colombianCityMap) {
-    colombianCityMap = buildCityToStateMap("CO");
-  }
-  return colombianCityMap;
-}
+// Obtener todas las ciudades de un país (carga el chunk del país la primera vez)
+export async function getCitiesByCountry(countryCode: string): Promise<ICity[]> {
+  const cached = cityCache.get(countryCode);
+  if (cached) return cached;
 
-// Helper: Formatear código telefónico para mostrar (ej: "+57" o "+1")
-export function formatDialCode(countryCode: string): string {
-  const dialCode = getDialCodeByCountry(countryCode);
-  return dialCode ? `+${dialCode}` : "";
-}
+  const loadModule = cityModules[`./cities/${countryCode}.json`];
+  if (!loadModule) return [];
 
-// Helper: Obtener opciones de países con código telefónico para select
-export function getCountriesWithDialCode(): Array<{ value: string; label: string; dialCode: string }> {
-  const countries = getAllCountries();
-  return countries.map((country) => ({
-    value: country.isoCode,
-    label: country.name,
-    dialCode: country.phonecode ? `+${country.phonecode}` : "",
+  const rows = (await loadModule()).default;
+  const cities: ICity[] = rows.map(([name, stateCode, latitude, longitude]) => ({
+    name,
+    countryCode,
+    stateCode,
+    latitude,
+    longitude,
   }));
+
+  cityCache.set(countryCode, cities);
+  return cities;
 }

@@ -32,6 +32,7 @@ import {
   getAllCountries,
   getStatesByCountry,
   getCitiesByCountry,
+  type ICity,
 } from "../../data/form-catalogs";
 
 interface AdvancedRegistrationFormProps {
@@ -452,6 +453,32 @@ export function AdvancedRegistrationForm({
     countryOptions,
   ]);
 
+  // --- ID del campo de ciudad (si el form lo tiene) ---
+  const cityFieldId = useMemo(() => {
+    const field = sortedFields.find((f) => {
+      const id = f.id.toLowerCase();
+      return id.includes("ciudad") || id.includes("city");
+    });
+    return field?.id;
+  }, [sortedFields]);
+
+  // --- Ciudades del país seleccionado, cargadas de forma diferida ---
+  const [citiesByCountry, setCitiesByCountry] = useState<Record<string, ICity[]>>({});
+
+  const resolvedCountryCode = useMemo(
+    () => resolveCountryCode(form.values, sortedFields, countryOptions),
+    [form.values[countryFieldId as keyof FormValues], sortedFields, countryOptions],
+  );
+
+  useEffect(() => {
+    if (!cityFieldId || !resolvedCountryCode) return;
+    if (citiesByCountry[resolvedCountryCode]) return;
+
+    getCitiesByCountry(resolvedCountryCode).then((cities) => {
+      setCitiesByCountry((prev) => ({ ...prev, [resolvedCountryCode]: cities }));
+    });
+  }, [cityFieldId, resolvedCountryCode, citiesByCountry]);
+
   /**
    * Devuelve las opciones para un campo select.
    * - Para País/Estado/Ciudad: usa la librería country-state-city (options no vienen de BD).
@@ -516,7 +543,7 @@ export function AdvancedRegistrationForm({
             ? (currentValues[stateField.id] as string)
             : undefined;
 
-        const cities = getCitiesByCountry(countryCode!);
+        const cities = citiesByCountry[countryCode!] ?? [];
         const states = getStatesByCountry(countryCode!);
 
         return uniqueOptions(
@@ -561,7 +588,7 @@ export function AdvancedRegistrationForm({
 
       return uniqueOptions(field.options as any);
     },
-    [sortedFields, countryOptions],
+    [sortedFields, countryOptions, citiesByCountry],
   );
 
   // Buscar si existe OrgAttendee cuando se llenan campos identificadores
