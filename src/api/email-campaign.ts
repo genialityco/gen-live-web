@@ -59,6 +59,31 @@ export interface CampaignAnalytics {
   byUtm: Record<string, UtmValueStat[]>;
 }
 
+export interface CountryReportItem {
+  value: string; // valor del campo país (normalmente ISO2, ej: 'CO')
+  label: string | null; // etiqueta del formulario si existe
+  count: number;
+}
+
+export interface CountryReport {
+  fieldId: string | null; // null si la org no tiene campo país en el formulario
+  fieldLabel: string | null;
+  byCountry: CountryReportItem[];
+  unknown: number; // envíos sin país declarado
+  total: number;
+}
+
+export interface GeoCountryStat {
+  country: string; // ISO2 resuelto por geolocalización
+  clicks: number;
+  uniqueClickers: number;
+}
+
+export interface GeoAnalytics {
+  byCountry: GeoCountryStat[];
+  unknown: { clicks: number; uniqueClickers: number };
+}
+
 export interface EmailCampaign {
   _id: string;
   orgId: string;
@@ -178,5 +203,26 @@ export async function getCampaignAnalytics(
   const { data } = await api.get(
     `/email-campaign/${campaignId}/analytics`
   );
+  return data;
+}
+
+export async function getCountryReport(
+  campaignId: string
+): Promise<CountryReport> {
+  const { data } = await api.get(`/email-campaign/${campaignId}/country-report`);
+  return data;
+}
+
+export async function getGeoAnalytics(
+  campaignId: string
+): Promise<GeoAnalytics> {
+  const { data } = await api.get(`/email-campaign/${campaignId}/geo-analytics`);
+  return data;
+}
+
+export async function backfillGeo(
+  campaignId: string
+): Promise<{ updated: number; pending: number }> {
+  const { data } = await api.post(`/email-campaign/${campaignId}/backfill-geo`);
   return data;
 }

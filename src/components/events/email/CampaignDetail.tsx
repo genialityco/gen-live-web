@@ -36,13 +36,35 @@ import {
   resumeCampaign,
   listDeliveries,
   getCampaignAnalytics,
+  getCountryReport,
+  getGeoAnalytics,
+  backfillGeo,
   type EmailCampaign,
   type EmailDelivery,
   type DeliveryStatus,
   type CampaignStatus,
   type UtmParam,
   type CampaignAnalytics,
+  type CountryReport,
+  type GeoAnalytics,
 } from "../../../api/email-campaign";
+import { getCountryByCode } from "../../../data/form-catalogs";
+
+// ─── País: helpers de presentación ───────────────────────────────────────────
+
+/** ISO2 → emoji de bandera (ej: 'CO' → 🇨🇴). Vacío si no es código de 2 letras. */
+function isoToFlag(iso: string): string {
+  if (!/^[A-Za-z]{2}$/.test(iso)) return "";
+  return iso
+    .toUpperCase()
+    .replace(/./g, (c) => String.fromCodePoint(127397 + c.charCodeAt(0)));
+}
+
+/** Nombre legible de un país a partir de su ISO2; cae al código si no se encuentra. */
+function countryName(iso: string): string {
+  if (!/^[A-Za-z]{2}$/.test(iso)) return iso;
+  return getCountryByCode(iso.toUpperCase())?.name ?? iso;
+}
 
 // ─── Sub-components ──────────────────────────────────────────────────────────
 
@@ -68,6 +90,69 @@ function UtmSummary({ utmParams }: { utmParams: UtmParam[] }) {
         ))}
       </Group>
     </Card>
+  );
+}
+
+interface CountryRow {
+  key: string;
+  flag: string;
+  name: string;
+  value: number; // métrica principal (count o uniqueClickers)
+  secondary?: number; // métrica secundaria opcional (total clics)
+}
+
+/** Lista de barras por país, ordenada de mayor a menor, con color configurable. */
+function CountryBars({
+  rows,
+  color,
+  unknown,
+  unknownLabel,
+}: {
+  rows: CountryRow[];
+  color: string;
+  unknown?: number;
+  unknownLabel: string;
+}) {
+  if (rows.length === 0 && !unknown) {
+    return (
+      <Text size="sm" c="dimmed">
+        Sin datos todavía.
+      </Text>
+    );
+  }
+  const max = rows[0]?.value ?? 1;
+  return (
+    <Stack gap={6}>
+      {rows.slice(0, 15).map((r) => (
+        <div key={r.key}>
+          <Group justify="space-between" mb={2}>
+            <Text size="xs" truncate maw={220}>
+              <Text span mr={6}>{r.flag}</Text>
+              {r.name}
+            </Text>
+            <Group gap={8}>
+              <Text size="xs" fw={700} c={color}>
+                {r.value.toLocaleString()}
+              </Text>
+              {r.secondary != null && (
+                <Tooltip label="Total clics">
+                  <Text size="xs" c="dimmed">({r.secondary.toLocaleString()})</Text>
+                </Tooltip>
+              )}
+            </Group>
+          </Group>
+          <Progress value={(r.value / max) * 100} size="sm" color={color} radius="xl" />
+        </div>
+      ))}
+      {rows.length > 15 && (
+        <Text size="xs" c="dimmed">+{rows.length - 15} países más</Text>
+      )}
+      {!!unknown && unknown > 0 && (
+        <Text size="xs" c="dimmed" mt={4}>
+          {unknownLabel}: {unknown.toLocaleString()}
+        </Text>
+      )}
+    </Stack>
   );
 }
 
@@ -137,6 +222,9 @@ export default function CampaignDetail({ campaignId, onBack }: CampaignDetailPro
   const [exporting, setExporting] = useState(false);
   const [exportingInforme, setExportingInforme] = useState(false);
   const [analytics, setAnalytics] = useState<CampaignAnalytics | null>(null);
+  const [countryReport, setCountryReport] = useState<CountryReport | null>(null);
+  const [geo, setGeo] = useState<GeoAnalytics | null>(null);
+  const [backfilling, setBackfilling] = useState(false);
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const activeStatus = statusFilter === "all" ? undefined : (statusFilter as DeliveryStatus);
@@ -162,10 +250,34 @@ export default function CampaignDetail({ campaignId, onBack }: CampaignDetailPro
 
   const loadAnalytics = useCallback(async () => {
     try {
-      const data = await getCampaignAnalytics(campaignId);
-      setAnalytics(data);
+      const [a, cr, g] = await Promise.all([
+        getCampaignAnalytics(campaignId),
+        getCountryReport(campaignId).catch(() => null),
+        getGeoAnalytics(campaignId).catch(() => null),
+      ]);
+      setAnalytics(a);
+      setCountryReport(cr);
+      setGeo(g);
     } catch {
       // analytics are optional — don't block the view on error
+    }
+  }, [campaignId]);
+
+  const handleBackfillGeo = useCallback(async () => {
+    setBackfilling(true);
+    try {
+      const result = await backfillGeo(campaignId);
+      notifications.show({
+        title: "Geolocalización actualizada",
+        message: `${result.updated.toLocaleString()} de ${result.pending.toLocaleString()} clics sin país fueron resueltos`,
+        color: "teal",
+      });
+      const g = await getGeoAnalytics(campaignId).catch(() => null);
+      setGeo(g);
+    } catch {
+      notifications.show({ title: "Error", message: "No se pudo geolocalizar los clics", color: "red" });
+    } finally {
+      setBackfilling(false);
     }
   }, [campaignId]);
 
@@ -301,6 +413,42 @@ export default function CampaignDetail({ campaignId, onBack }: CampaignDetailPro
         const wsUtm = XLSX.utils.json_to_sheet(utmRows);
         wsUtm["!cols"] = [{ wch: 22 }, { wch: 30 }, { wch: 18 }, { wch: 14 }];
         XLSX.utils.book_append_sheet(wb, wsUtm, "Interacciones UTM");
+      }
+
+      // ── Hoja: Países de registro (país declarado) ─────────────────────────
+      if (countryReport && countryReport.byCountry.length > 0) {
+        const rows: Record<string, string | number>[] = countryReport.byCountry.map((c) => ({
+          "País (código)": c.value,
+          País: c.label ?? countryName(c.value),
+          Registrados: c.count,
+        }));
+        if (countryReport.unknown > 0) {
+          rows.push({ "País (código)": "—", País: "Sin país declarado", Registrados: countryReport.unknown });
+        }
+        const wsReg = XLSX.utils.json_to_sheet(rows);
+        wsReg["!cols"] = [{ wch: 14 }, { wch: 28 }, { wch: 14 }];
+        XLSX.utils.book_append_sheet(wb, wsReg, "Países registro");
+      }
+
+      // ── Hoja: Países de clics (geolocalización por IP) ────────────────────
+      if (geo && geo.byCountry.length > 0) {
+        const rows: Record<string, string | number>[] = geo.byCountry.map((c) => ({
+          "País (código)": c.country,
+          País: countryName(c.country),
+          "Clickers únicos": c.uniqueClickers,
+          "Total clics": c.clicks,
+        }));
+        if (geo.unknown.uniqueClickers > 0) {
+          rows.push({
+            "País (código)": "—",
+            País: "Sin ubicación determinada",
+            "Clickers únicos": geo.unknown.uniqueClickers,
+            "Total clics": geo.unknown.clicks,
+          });
+        }
+        const wsGeo = XLSX.utils.json_to_sheet(rows);
+        wsGeo["!cols"] = [{ wch: 14 }, { wch: 28 }, { wch: 16 }, { wch: 14 }];
+        XLSX.utils.book_append_sheet(wb, wsGeo, "Países clics");
       }
 
       // ── Hoja 3: Destinatarios (todos, sin filtro, paginado de 200 en 200) ──
@@ -607,6 +755,75 @@ export default function CampaignDetail({ campaignId, onBack }: CampaignDetailPro
         </>
       )}
       {/* ──────────────────────────────────────────────────────────────────────── */}
+
+      {/* ── Países de registro (país declarado en el formulario) ──────────────── */}
+      {countryReport && countryReport.byCountry.length > 0 && (
+        <>
+          <Divider />
+          <Stack gap={2}>
+            <Title order={5}>Países de registro</Title>
+            <Text size="sm" c="dimmed">
+              Distribución de los destinatarios según el país declarado en el formulario
+              {countryReport.fieldLabel ? ` ("${countryReport.fieldLabel}")` : ""}.
+            </Text>
+          </Stack>
+          <Card withBorder radius="md" p="sm">
+            <CountryBars
+              color="grape"
+              unknownLabel="Sin país declarado"
+              unknown={countryReport.unknown}
+              rows={countryReport.byCountry.map((c) => ({
+                key: c.value,
+                flag: isoToFlag(c.value),
+                name: c.label ?? countryName(c.value),
+                value: c.count,
+              }))}
+            />
+          </Card>
+        </>
+      )}
+
+      {/* ── Países desde donde hicieron clic (geolocalización por IP) ──────────── */}
+      {geo && (geo.byCountry.length > 0 || geo.unknown.uniqueClickers > 0) && (
+        <>
+          <Divider />
+          <Group justify="space-between" align="flex-end">
+            <Stack gap={2}>
+              <Title order={5}>Países desde donde hicieron clic</Title>
+              <Text size="sm" c="dimmed">
+                Ubicación real (geolocalización por IP) desde donde se abrieron los enlaces.
+              </Text>
+            </Stack>
+            {geo.unknown.uniqueClickers > 0 && (
+              <Tooltip label="Re-resuelve el país de clics antiguos guardados sin geolocalización">
+                <Button
+                  size="xs"
+                  variant="light"
+                  color="teal"
+                  loading={backfilling}
+                  onClick={handleBackfillGeo}
+                >
+                  Geolocalizar clics sin país
+                </Button>
+              </Tooltip>
+            )}
+          </Group>
+          <Card withBorder radius="md" p="sm">
+            <CountryBars
+              color="teal"
+              unknownLabel="Sin ubicación determinada"
+              unknown={geo.unknown.uniqueClickers}
+              rows={geo.byCountry.map((c) => ({
+                key: c.country,
+                flag: isoToFlag(c.country),
+                name: countryName(c.country),
+                value: c.uniqueClickers,
+                secondary: c.clicks,
+              }))}
+            />
+          </Card>
+        </>
+      )}
 
       {bounceRate >= 2 && (
         <Alert
