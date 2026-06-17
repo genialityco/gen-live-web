@@ -9,9 +9,12 @@ import { notifications } from "@mantine/notifications";
 import {
   getWaCampaign, sendWaCampaign, cancelWaCampaign, listWaDeliveries,
   previewWaRecipients, getWaCampaignAnalytics,
+  getWaCountryReport, getWaGeoAnalytics, backfillWaGeo,
   type WaCampaign, type WaDelivery, type WaCampaignStatus, type WaDeliveryStatus,
   type WaUtmParam, type WaCampaignAnalytics,
+  type WaCountryReport, type WaGeoAnalytics,
 } from "../../../api/wa-campaign";
+import { CountryBars, isoToFlag, countryName } from "../../common/CountryBars";
 
 interface Props {
   campaignId: string;
@@ -82,6 +85,9 @@ export default function WaCampaignDetail({ campaignId, onBack }: Props) {
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [analytics, setAnalytics] = useState<WaCampaignAnalytics | null>(null);
+  const [countryReport, setCountryReport] = useState<WaCountryReport | null>(null);
+  const [geo, setGeo] = useState<WaGeoAnalytics | null>(null);
+  const [backfilling, setBackfilling] = useState(false);
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Preview de destinatarios (solo en draft)
@@ -114,11 +120,32 @@ export default function WaCampaignDetail({ campaignId, onBack }: Props) {
   }, [campaignId]);
 
   const loadAnalytics = useCallback(async () => {
+    // analytics, país declarado y geo por IP son opcionales — no bloquean la vista
+    const [data, cr, g] = await Promise.all([
+      getWaCampaignAnalytics(campaignId).catch(() => null),
+      getWaCountryReport(campaignId).catch(() => null),
+      getWaGeoAnalytics(campaignId).catch(() => null),
+    ]);
+    if (data) setAnalytics(data);
+    setCountryReport(cr);
+    setGeo(g);
+  }, [campaignId]);
+
+  const handleBackfillGeo = useCallback(async () => {
+    setBackfilling(true);
     try {
-      const data = await getWaCampaignAnalytics(campaignId);
-      setAnalytics(data);
+      const result = await backfillWaGeo(campaignId);
+      notifications.show({
+        title: "Geolocalización completada",
+        message: `${result.updated} de ${result.pending} clics resueltos`,
+        color: "teal",
+      });
+      const g = await getWaGeoAnalytics(campaignId).catch(() => null);
+      setGeo(g);
     } catch {
-      // analytics are optional — don't block the view on error
+      notifications.show({ title: "Error", message: "No se pudo geolocalizar los clics", color: "red" });
+    } finally {
+      setBackfilling(false);
     }
   }, [campaignId]);
 
@@ -355,6 +382,75 @@ export default function WaCampaignDetail({ campaignId, onBack }: Props) {
         </>
       )}
       {/* ──────────────────────────────────────────────────────────────────────── */}
+
+      {/* ── Países de registro (país declarado en el formulario) ──────────────── */}
+      {countryReport && countryReport.byCountry.length > 0 && (
+        <>
+          <Divider />
+          <Stack gap={2}>
+            <Title order={5}>Países de registro</Title>
+            <Text size="sm" c="dimmed">
+              Distribución de los destinatarios según el país declarado en el formulario
+              {countryReport.fieldLabel ? ` ("${countryReport.fieldLabel}")` : ""}.
+            </Text>
+          </Stack>
+          <Card withBorder radius="md" p="sm">
+            <CountryBars
+              color="grape"
+              unknownLabel="Sin país declarado"
+              unknown={countryReport.unknown}
+              rows={countryReport.byCountry.map((c) => ({
+                key: c.value,
+                flag: isoToFlag(c.value),
+                name: c.label ?? countryName(c.value),
+                value: c.count,
+              }))}
+            />
+          </Card>
+        </>
+      )}
+
+      {/* ── Países desde donde hicieron clic (geolocalización por IP) ──────────── */}
+      {geo && (geo.byCountry.length > 0 || geo.unknown.uniqueClickers > 0) && (
+        <>
+          <Divider />
+          <Group justify="space-between" align="flex-end">
+            <Stack gap={2}>
+              <Title order={5}>Países desde donde hicieron clic</Title>
+              <Text size="sm" c="dimmed">
+                Ubicación real (geolocalización por IP) desde donde se abrieron los enlaces.
+              </Text>
+            </Stack>
+            {geo.unknown.uniqueClickers > 0 && (
+              <Tooltip label="Re-resuelve el país de clics antiguos guardados sin geolocalización">
+                <Button
+                  size="xs"
+                  variant="light"
+                  color="teal"
+                  loading={backfilling}
+                  onClick={handleBackfillGeo}
+                >
+                  Geolocalizar clics sin país
+                </Button>
+              </Tooltip>
+            )}
+          </Group>
+          <Card withBorder radius="md" p="sm">
+            <CountryBars
+              color="teal"
+              unknownLabel="Sin ubicación determinada"
+              unknown={geo.unknown.uniqueClickers}
+              rows={geo.byCountry.map((c) => ({
+                key: c.country,
+                flag: isoToFlag(c.country),
+                name: countryName(c.country),
+                value: c.uniqueClickers,
+                secondary: c.clicks,
+              }))}
+            />
+          </Card>
+        </>
+      )}
 
       <Divider />
 

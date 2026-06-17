@@ -89,6 +89,31 @@ export interface WaCampaignAnalytics {
   byUtm: Record<string, WaUtmValueStat[]>;
 }
 
+export interface WaCountryReportItem {
+  value: string; // valor del campo país (normalmente ISO2, ej: 'CO')
+  label: string | null; // etiqueta del formulario si existe
+  count: number;
+}
+
+export interface WaCountryReport {
+  fieldId: string | null; // null si la org no tiene campo país en el formulario
+  fieldLabel: string | null;
+  byCountry: WaCountryReportItem[];
+  unknown: number; // envíos sin país declarado
+  total: number;
+}
+
+export interface WaGeoCountryStat {
+  country: string; // ISO2 resuelto por geolocalización
+  clicks: number;
+  uniqueClickers: number;
+}
+
+export interface WaGeoAnalytics {
+  byCountry: WaGeoCountryStat[];
+  unknown: { clicks: number; uniqueClickers: number };
+}
+
 // ─── Template API ─────────────────────────────────────────────────────────────
 
 export async function listWaTemplates(): Promise<WaTemplate[]> {
@@ -201,5 +226,22 @@ export async function previewWaRecipients(
 
 export async function getWaCampaignAnalytics(campaignId: string): Promise<WaCampaignAnalytics> {
   const res = await api.get(`/wa-campaign/${campaignId}/analytics`);
+  return res.data;
+}
+
+export async function getWaCountryReport(campaignId: string): Promise<WaCountryReport> {
+  const res = await api.get(`/wa-campaign/${campaignId}/country-report`);
+  return res.data;
+}
+
+export async function getWaGeoAnalytics(campaignId: string): Promise<WaGeoAnalytics> {
+  const res = await api.get(`/wa-campaign/${campaignId}/geo-analytics`);
+  return res.data;
+}
+
+export async function backfillWaGeo(
+  campaignId: string,
+): Promise<{ updated: number; pending: number }> {
+  const res = await api.post(`/wa-campaign/${campaignId}/backfill-geo`);
   return res.data;
 }
