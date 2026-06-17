@@ -1,4 +1,5 @@
 import type { FormField } from "../types";
+import { getAllCountries } from "../data/form-catalogs";
 
 /**
  * Transforma los valores técnicos de registrationData a etiquetas legibles
@@ -42,11 +43,29 @@ export function transformRegistrationDataToLabels(
           searchValue = searchValue.split('|')[0];
         }
 
+        // País: el value es el isoCode (ej. "CO"); mostrar el nombre ("Colombia").
+        // Sus opciones son dinámicas (no están en field.options), por eso se
+        // resuelve contra el catálogo de países. Estado/ciudad ya guardan el
+        // nombre como value, así que caen al fallback y se muestran bien.
+        const idLower = field.id.toLowerCase();
+        const isCountryField =
+          (idLower.includes('pais') || idLower.includes('country')) &&
+          !idLower.includes('codigo') &&
+          !idLower.includes('code');
+
+        if (isCountryField && /^[A-Za-z]{2}$/.test(searchValue)) {
+          const country = getAllCountries().find(
+            c => c.isoCode === searchValue.toUpperCase()
+          );
+          transformed[fieldId] = country?.name || String(value);
+          break;
+        }
+
         // Buscar la etiqueta en las opciones
         const option = field.options?.find(
           opt => opt.value === searchValue || opt.value === String(value)
         );
-        
+
         transformed[fieldId] = option?.label || String(value);
         break;
       }

@@ -15,7 +15,6 @@
 // import type { RegistrationForm } from "../../types";
 // import type { FoundRegistration } from "../../api/events";
 // import { RegistrationAccessCard } from "../../components/auth/RegistrationAccessCard";
-// import { RegistrationSummaryCard } from "../../components/auth/RegistrationSummaryCard";
 // import { AdvancedRegistrationForm } from "../../components/auth/AdvancedRegistrationForm";
 // import { RegistrationVerificationForm } from "../../components/auth/RegistrationVerificationForm";
 // import UserSession from "../../components/auth/UserSession";
@@ -281,18 +280,6 @@
 //                 onNewRegistration={() => setFlowStep("full-registration")}
 //               />
 //             </Stack>
-//           )}
-
-//           {/* Resumen de registro encontrado */}
-//           {flowStep === "summary" && foundRegistration && (
-//             <RegistrationSummaryCard
-//               eventId={event._id}
-//               registration={foundRegistration}
-//               formConfig={formConfig}
-//               onContinueToEvent={handleSuccess}
-//               onUpdateInfo={() => setFlowStep("update-registration")}
-//               onBack={() => setFlowStep("access-options")}
-//             />
 //           )}
 
 //           {/* Formulario completo: Registro nuevo */}

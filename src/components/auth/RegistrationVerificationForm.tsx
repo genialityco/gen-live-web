@@ -11,7 +11,16 @@ import {
   Box,
   Divider,
   Select,
+  ThemeIcon,
+  Center,
+  Loader,
+  Anchor,
 } from "@mantine/core";
+import {
+  IconLogin2,
+  IconHelpCircle,
+  IconArrowLeft,
+} from "@tabler/icons-react";
 import { useForm } from "@mantine/form";
 import { useState, useEffect } from "react";
 import { fetchRegistrationForm } from "../../api/orgs";
@@ -346,10 +355,15 @@ export function RegistrationVerificationForm({
 
   if (formLoading) {
     return (
-      <Card shadow="md" padding="xl" radius="lg" withBorder>
-        <Stack align="center" gap="lg">
-          <Text>Cargando formulario...</Text>
-        </Stack>
+      <Card shadow="sm" padding="xl" radius="lg" withBorder>
+        <Center py="xl">
+          <Stack align="center" gap="sm">
+            <Loader size="sm" />
+            <Text size="sm" c="dimmed">
+              Cargando…
+            </Text>
+          </Stack>
+        </Center>
       </Card>
     );
   }
@@ -365,14 +379,14 @@ export function RegistrationVerificationForm({
 
   if (viewMode === "recover") {
     return (
-      <Card withBorder radius="2xl" p="xl" shadow="sm">
+      <Card withBorder radius="lg" p={{ base: "md", sm: "xl" }} shadow="sm">
         <Stack gap="lg">
-          <Group gap="sm" wrap="nowrap">
-            <Text fz={28} lh={1}>
-              🧠
-            </Text>
+          <Group gap="sm" wrap="nowrap" align="flex-start">
+            <ThemeIcon size={42} radius="md" variant="light" color="gray">
+              <IconHelpCircle size={24} stroke={1.6} />
+            </ThemeIcon>
             <Box>
-              <Title order={4} fw={900}>
+              <Title order={4} fw={600}>
                 Recordar mis datos
               </Title>
               <Text size="sm" c="dimmed">
@@ -396,7 +410,7 @@ export function RegistrationVerificationForm({
               }))}
               searchable
               nothingFoundMessage="No hay opciones"
-              radius="lg"
+              radius="md"
               size="md"
             />
 
@@ -407,7 +421,7 @@ export function RegistrationVerificationForm({
               onChange={(e) =>
                 setRecoveryIdentifierValue(e.currentTarget.value)
               }
-              radius="lg"
+              radius="md"
               size="md"
             />
           </Stack>
@@ -415,13 +429,15 @@ export function RegistrationVerificationForm({
           <Group justify="space-between" mt="xs">
             <Button
               variant="subtle"
-              radius="xl"
+              color="gray"
+              radius="md"
+              leftSection={<IconArrowLeft size={16} />}
               onClick={() => setViewMode("verify")}
             >
-              ← Volver
+              Volver
             </Button>
 
-            <Button radius="xl" loading={recovering} onClick={handleRecover}>
+            <Button radius="md" loading={recovering} onClick={handleRecover}>
               Enviarme recordatorio
             </Button>
           </Group>
@@ -431,15 +447,15 @@ export function RegistrationVerificationForm({
   }
 
 return (
-  <Card withBorder radius="2xl" p="xl" shadow="sm">
+  <Card withBorder radius="lg" p="xl" shadow="sm">
     <form onSubmit={form.onSubmit(handleVerify)}>
       <Stack gap="lg">
-        <Group gap="sm" wrap="nowrap">
-          <Text fz={28} lh={1}>
-            👋
-          </Text>
+        <Group gap="sm" wrap="nowrap" align="flex-start">
+          <ThemeIcon size={42} radius="md" variant="light">
+            <IconLogin2 size={24} stroke={1.6} />
+          </ThemeIcon>
           <Box>
-            <Title order={4} fw={900}>
+            <Title order={4} fw={600}>
               Ingresar
             </Title>
             <Text size="sm" c="dimmed">
@@ -450,7 +466,7 @@ return (
 
         <Divider />
 
-        <Stack gap="sm">
+        <Stack gap="md">
           {identifierFields.map((field) => {
             const isMismatched = mismatchedFields.includes(field.id);
 
@@ -468,13 +484,14 @@ return (
                 }
                 required={field.required}
                 size="md"
-                radius="lg"
+                radius="md"
                 {...form.getInputProps(field.id)}
                 error={form.errors[field.id] as string | undefined}
                 styles={(theme) => ({
                   label: {
                     color: isMismatched ? theme.colors.red[7] : undefined,
-                    fontWeight: 700,
+                    fontWeight: 600,
+                    marginBottom: 4,
                   },
                 })}
               />
@@ -482,40 +499,35 @@ return (
           })}
         </Stack>
 
-        <Group justify="center" align="center" mt={-4}>
-          <Text size="sm" c="dimmed">
-            ¿No recuerdas tus datos?
-          </Text>
+        <Button type="submit" size="md" radius="md" loading={loading} fullWidth>
+          Ingresar
+        </Button>
 
+        <Stack gap={4} align="center">
           <Button
             variant="subtle"
+            color="gray"
             size="sm"
-            radius="xl"
-            px={10}
+            radius="md"
             onClick={() => setViewMode("recover")}
           >
-            Recordar mis datos
-          </Button>
-        </Group>
-
-        <Stack gap="sm" mt="xs">
-          <Button type="submit" size="md" radius="xl" loading={loading} fullWidth>
-            Ingresar
+            ¿No recuerdas tus datos?
           </Button>
 
           {onNewRegistration && (
-            <Group justify="center" gap="xs">
+            <Group justify="center" gap={6}>
               <Text size="sm" c="dimmed">
                 ¿Primera vez aquí?
               </Text>
-              <Button
-                variant="light"
+              <Anchor
+                component="button"
+                type="button"
                 size="sm"
-                radius="xl"
+                fw={600}
                 onClick={onNewRegistration}
               >
                 Registrarme
-              </Button>
+              </Anchor>
             </Group>
           )}
         </Stack>

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import {
@@ -15,6 +16,7 @@ import {
   Box,
   MantineProvider,
 } from "@mantine/core";
+import { IconArrowLeft } from "@tabler/icons-react";
 import { fetchOrgBySlug, type Org } from "../../api/orgs";
 import { fetchEventsByOrg, type EventItem } from "../../api/events";
 import { AdvancedRegistrationForm } from "../../components/auth/AdvancedRegistrationForm";
@@ -589,21 +591,25 @@ export default function EventLanding() {
             justify="space-between"
             align="center"
             mb={{ base: "md", sm: "xl" }}
-            wrap="wrap"
+            wrap="nowrap"
+            gap="xs"
           >
             <Button
               component={Link}
               to={`/org/${slug}`}
               variant="subtle"
+              color="gray"
               size="sm"
               radius="xl"
-              leftSection="←"
+              leftSection={<IconArrowLeft size={16} />}
               style={{ flexShrink: 0 }}
             >
-              {org.name}
+              Volver
             </Button>
 
-            <UserSession eventId={eventData?._id} orgId={org?._id} />
+            <Box style={{ flexShrink: 0 }}>
+              <UserSession eventId={eventData?._id} orgId={org?._id} />
+            </Box>
           </Group>
 
           <Stack gap={"lg"} align="center">

@@ -23,6 +23,7 @@ import {
 import * as XLSX from "xlsx";
 import { api } from "../../core/api";
 import type { RegistrationForm } from "../../types";
+import { normalizeSelectStoredValue } from "../../utils/form-values";
 
 interface ImportAttendeesModalProps {
   opened: boolean;
@@ -268,8 +269,10 @@ export default function ImportAttendeesModal({
       }
 
       case "select": {
-        // normalmente quieres guardar el value (string) tal cual
-        return String(raw);
+        // Mapea la etiqueta importada (ej. "Colombia", "Médico General") al
+        // `value` canónico de la opción (isoCode / slug); si ya es un value o
+        // no hay match, lo deja igual.
+        return normalizeSelectStoredValue(field, String(raw));
       }
 
       case "date": {

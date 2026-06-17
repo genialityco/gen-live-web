@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   Card,
   Stack,
@@ -5,13 +6,19 @@ import {
   Text,
   Button,
   Group,
-  Box,
+  ThemeIcon,
   SimpleGrid,
   Affix,
   useMantineTheme,
 } from "@mantine/core";
 import { useMediaQuery } from "@mantine/hooks";
-import { IconBrandWhatsapp, IconArrowLeft } from "@tabler/icons-react";
+import {
+  IconBrandWhatsapp,
+  IconArrowLeft,
+  IconLogin2,
+  IconUserPlus,
+  type Icon,
+} from "@tabler/icons-react";
 
 interface RegistrationAccessCardProps {
   formTitle?: string;
@@ -22,54 +29,73 @@ interface RegistrationAccessCardProps {
 }
 
 function OptionCard({
-  emoji,
+  icon: IconComponent,
   title,
+  description,
   buttonLabel,
   variant,
   onClick,
 }: {
-  emoji: string;
+  icon: Icon;
   title: string;
+  description: string;
   buttonLabel: string;
-  variant: "filled" | "light";
+  variant: "filled" | "default";
   onClick: () => void;
 }) {
-  const theme = useMantineTheme();
+  const [hovered, setHovered] = useState(false);
 
   return (
     <Card
       withBorder
-      radius="xl"
-      padding="xl"
+      radius="md"
+      padding="lg"
       onClick={onClick}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onClick();
+        }
+      }}
       style={{
         cursor: "pointer",
-        textAlign: "center",
-        transition: "all 180ms ease",
-      }}
-      styles={{
-        root: {
-          "&:hover": {
-            transform: "translateY(-4px)",
-            boxShadow: theme.shadows.lg,
-            borderColor: theme.colors[theme.primaryColor][5],
-          },
-        },
+        height: "100%",
+        transition: "border-color 150ms ease, background-color 150ms ease",
+        borderColor: hovered
+          ? "var(--mantine-primary-color-filled)"
+          : undefined,
+        backgroundColor: hovered
+          ? "var(--mantine-primary-color-light)"
+          : undefined,
       }}
     >
-      <Stack gap="md" align="center">
-        <Text
-          style={{
-            fontSize: "3rem",
-            lineHeight: 1,
-          }}
-        >
-          {emoji}
-        </Text>
+      <Stack
+        gap="md"
+        align="center"
+        h="100%"
+        justify="space-between"
+        ta="center"
+      >
+        <Stack gap="xs" align="center">
+          <ThemeIcon size={52} radius="md" variant="light">
+            <IconComponent size={26} stroke={1.6} />
+          </ThemeIcon>
 
-        <Title order={4}>{title}</Title>
+          <Stack gap={2} align="center">
+            <Title order={4} fw={600}>
+              {title}
+            </Title>
+            <Text size="sm" c="dimmed" maw={240}>
+              {description}
+            </Text>
+          </Stack>
+        </Stack>
 
-        <Button fullWidth radius="xl" size="md" variant={variant}>
+        <Button component="div" fullWidth radius="md" size="md" variant={variant}>
           {buttonLabel}
         </Button>
       </Stack>
@@ -88,38 +114,33 @@ export function RegistrationAccessCard({
   const isMobile = useMediaQuery(`(max-width: ${theme.breakpoints.sm})`);
 
   return (
-    <Card
-      radius="2xl"
-      padding="xl"
-      withBorder
-      shadow="sm"
-      style={{
-        position: "relative",
-        background:
-          "radial-gradient(600px 300px at 10% 0%, rgba(34,139,230,.08), transparent 60%), #fff",
-      }}
-    >
+    <Card radius="lg" p={{ base: "md", sm: "xl" }} withBorder shadow="sm" pos="relative">
       <Stack gap="xl">
-        <Box ta="center">
-          <Title order={2} fw={900}>
+        <Stack gap={6} ta="center" align="center">
+          <Title order={2} fw={700} fz={{ base: "1.4rem", sm: "1.7rem" }}>
             {formTitle ?? "¿Cómo deseas continuar?"}
           </Title>
-        </Box>
+          <Text c="dimmed" size="sm" maw={420}>
+            Elige una opción para acceder al evento.
+          </Text>
+        </Stack>
 
-        <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="lg">
+        <SimpleGrid cols={{ base: 1, sm: 2 }} spacing={{ base: "md", sm: "lg" }}>
           <OptionCard
-            emoji="🔑"
+            icon={IconLogin2}
             title="Ya estoy registrado"
+            description="Ingresa con los datos de tu registro."
             buttonLabel="Ingresar"
             variant="filled"
             onClick={onSelectLogin}
           />
 
           <OptionCard
-            emoji="📝"
+            icon={IconUserPlus}
             title="Primera vez"
-            buttonLabel="Registrarme ahora"
-            variant="light"
+            description="Crea tu acceso en un minuto."
+            buttonLabel="Registrarme"
+            variant="default"
             onClick={onSelectRegister}
           />
         </SimpleGrid>
@@ -127,8 +148,9 @@ export function RegistrationAccessCard({
         <Group justify="center">
           <Button
             variant="subtle"
+            color="gray"
             leftSection={<IconArrowLeft size={16} />}
-            radius="xl"
+            radius="md"
             onClick={onCancel}
           >
             Volver al evento
@@ -136,12 +158,11 @@ export function RegistrationAccessCard({
         </Group>
       </Stack>
 
-      {/* WhatsApp flotante */}
+      {/* Soporte por WhatsApp (flotante, discreto) */}
       <Affix
         position={{
-          bottom: 20,
-          right: isMobile ? undefined : 20,
-          left: isMobile ? 20 : undefined,
+          bottom: `calc(20px + env(safe-area-inset-bottom, 0px))`,
+          right: 20,
         }}
       >
         <Button
@@ -151,15 +172,11 @@ export function RegistrationAccessCard({
           rel="noopener noreferrer"
           leftSection={<IconBrandWhatsapp size={18} />}
           color="green"
+          variant="light"
           radius="xl"
-          size="md"
-          fullWidth={isMobile}
-          style={{
-            boxShadow: "0 12px 30px rgba(0,0,0,.18)",
-            width: isMobile ? "calc(100vw - 40px)" : "auto",
-          }}
+          size={isMobile ? "sm" : "md"}
         >
-          Soporte Técnico
+          {isMobile ? "Soporte" : "Soporte técnico"}
         </Button>
       </Affix>
     </Card>

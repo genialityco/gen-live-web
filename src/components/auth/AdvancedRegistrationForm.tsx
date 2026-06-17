@@ -13,7 +13,12 @@ import {
   NumberInput,
   Title,
   Alert,
+  ThemeIcon,
+  Center,
+  Loader,
+  Anchor,
 } from "@mantine/core";
+import { IconUserPlus, IconPencil } from "@tabler/icons-react";
 import { useForm } from "@mantine/form";
 import { useState, useEffect, useMemo, useCallback, memo } from "react";
 import {
@@ -34,6 +39,8 @@ import {
   getCitiesByCountry,
   type ICity,
 } from "../../data/form-catalogs";
+import { isFieldEffectivelyVisible } from "../../utils/form-visibility";
+import { normalizeSelectStoredValue } from "../../utils/form-values";
 
 interface AdvancedRegistrationFormProps {
   orgSlug: string;
@@ -50,116 +57,6 @@ interface AdvancedRegistrationFormProps {
 }
 
 type FormValues = Record<string, string | number | boolean>;
-
-type ConditionalOperator = "equals" | "notEquals" | "contains" | "notContains";
-type ConditionalLogicLogic = "and" | "or";
-
-interface ConditionalCondition {
-  field: string;
-  operator: ConditionalOperator;
-  value: string | number | boolean;
-}
-
-interface ConditionalRule {
-  action: "show" | "hide";
-  conditions: ConditionalCondition[];
-  logic: ConditionalLogicLogic;
-}
-
-// Evalúa UNA condición
-function evaluateCondition(
-  condition: ConditionalCondition,
-  values: FormValues,
-): boolean {
-  const fieldValue = values[condition.field];
-
-  switch (condition.operator) {
-    case "equals":
-      return fieldValue === condition.value;
-    case "notEquals":
-      return fieldValue !== condition.value;
-    case "contains":
-      if (typeof fieldValue === "string") {
-        return fieldValue.includes(String(condition.value));
-      }
-      return false;
-    case "notContains":
-      if (typeof fieldValue === "string") {
-        return !fieldValue.includes(String(condition.value));
-      }
-      return true;
-    default:
-      return false;
-  }
-}
-
-// Evalúa un grupo de condiciones de una regla
-function evaluateRule(rule: ConditionalRule, values: FormValues): boolean {
-  if (!rule.conditions || rule.conditions.length === 0) return true;
-
-  if (rule.logic === "and") {
-    return rule.conditions.every((c) => evaluateCondition(c, values));
-  }
-
-  // logic === "or"
-  return rule.conditions.some((c) => evaluateCondition(c, values));
-}
-
-// Determina si el campo se debe mostrar
-function shouldShowField(field: FormField, values: FormValues): boolean {
-  if (field.hidden) return false;
-
-  const logic = field.conditionalLogic as ConditionalRule[] | null | undefined;
-  if (!logic || logic.length === 0) return true;
-
-  const showRules = logic.filter((r) => r.action === "show");
-  const hideRules = logic.filter((r) => r.action === "hide");
-
-  let visible = true;
-
-  if (showRules.length > 0) {
-    visible = showRules.some((rule) => evaluateRule(rule, values));
-  }
-
-  if (hideRules.length > 0) {
-    const mustHide = hideRules.some((rule) => evaluateRule(rule, values));
-    if (mustHide) visible = false;
-  }
-
-  return visible;
-}
-
-function isFieldEffectivelyVisible(
-  field: FormField,
-  values: FormValues,
-  allFields: FormField[],
-): boolean {
-  // 1. Si depende de otro campo, heredamos visibilidad y valor del padre
-  if (field.dependsOn) {
-    const parentField = allFields.find((f) => f.id === field.dependsOn);
-
-    if (parentField) {
-      const parentVisible = isFieldEffectivelyVisible(
-        parentField,
-        values,
-        allFields,
-      );
-      const parentValue = values[parentField.id];
-
-      if (
-        !parentVisible ||
-        parentValue === "" ||
-        parentValue === null ||
-        parentValue === undefined
-      ) {
-        return false;
-      }
-    }
-  }
-
-  // 2. Aplicar la lógica propia del campo (hidden + conditionalLogic)
-  return shouldShowField(field, values);
-}
 
 type SelectOption = { value: string; label?: string; parentValue?: string };
 
@@ -225,11 +122,12 @@ const FormFieldComponent = memo(
       placeholder: field.placeholder,
       required: field.required,
       style: { display: field.hidden ? "none" : "block" },
-      size: "sm" as const,
-      radius: "lg" as const,
+      size: "md" as const,
+      radius: "md" as const,
       description: helpText,
       disabled: isFieldDisabled,
       autoComplete: "new-password",
+      styles: { label: { fontWeight: 600, marginBottom: 4 } },
     };
 
     switch (field.type) {
@@ -259,8 +157,8 @@ const FormFieldComponent = memo(
         return (
           <Checkbox
             key={field.id}
-            size="sm"
-            radius="lg"
+            size="md"
+            radius="md"
             required={field.required}
             style={{ display: field.hidden ? "none" : "block" }}
             styles={{
@@ -371,13 +269,18 @@ export function AdvancedRegistrationForm({
     const initialValues: FormValues = {};
 
     formConfig.fields.forEach((field) => {
+      let raw: string | number | boolean;
       if (existingData?.registrationData[field.id] !== undefined) {
-        initialValues[field.id] = existingData.registrationData[field.id];
+        raw = existingData.registrationData[field.id];
       } else if (field.defaultValue !== undefined) {
-        initialValues[field.id] = field.defaultValue;
+        raw = field.defaultValue;
       } else {
-        initialValues[field.id] = field.type === "checkbox" ? false : "";
+        raw = field.type === "checkbox" ? false : "";
       }
+      // Normaliza valores legacy guardados como etiqueta (ej. país "Colombia")
+      // al value canónico de la opción, para que el Select lo muestre y al
+      // guardar se persista el value correcto.
+      initialValues[field.id] = normalizeSelectStoredValue(field, raw);
     });
 
     form.setInitialValues(initialValues);
@@ -799,9 +702,14 @@ export function AdvancedRegistrationForm({
   if (formLoading) {
     return mode === "modal" ? null : (
       <Card shadow="sm" padding="lg" radius="md" withBorder>
-        <Stack align="center" gap="sm">
-          <Text size="sm">Cargando formulario...</Text>
-        </Stack>
+        <Center py="xl">
+          <Stack align="center" gap="sm">
+            <Loader size="sm" />
+            <Text size="sm" c="dimmed">
+              Cargando…
+            </Text>
+          </Stack>
+        </Center>
       </Card>
     );
   }
@@ -827,40 +735,41 @@ export function AdvancedRegistrationForm({
     <form onSubmit={form.onSubmit(handleSubmit)} autoComplete="off">
       <Stack gap="md">
         {mode === "page" && (
-          <Stack gap={6} ta="center" mb={6}>
-            <Text fz={34} lh={1}>
-              {existingData ? "🛠️" : "📝"}
-            </Text>
+          <Stack gap={8} ta="center" align="center" mb={4}>
+            <ThemeIcon size={48} radius="md" variant="light">
+              {existingData ? (
+                <IconPencil size={26} stroke={1.6} />
+              ) : (
+                <IconUserPlus size={26} stroke={1.6} />
+              )}
+            </ThemeIcon>
 
-            <Title order={3} fw={900}>
-              {existingData
-                ? "Actualizar información"
-                : formConfig.title ||
-                  (isOrgOnly ? "Registro" : "Registro al evento")}
-            </Title>
-
-            {/* Si NO quieres descripción, puedes dejar solo esto (o borrar por completo) */}
-            {/* {formConfig.description && (
-              <Text c="dimmed" size="sm">
-                {formConfig.description}
+            <Stack gap={2} align="center">
+              <Title order={3} fw={600}>
+                {existingData
+                  ? "Actualizar información"
+                  : formConfig.title ||
+                    (isOrgOnly ? "Registro" : "Registro al evento")}
+              </Title>
+              <Text c="dimmed" size="sm" maw={420}>
+                {existingData
+                  ? "Revisa y completa tus datos para continuar."
+                  : "Completa tus datos para acceder al evento."}
               </Text>
-            )} */}
+            </Stack>
           </Stack>
         )}
 
         {/* Advertencia si ya existe un registro con los datos ingresados */}
         {existingWarning && (
-          <Stack maw={600} mx="auto" w="100%">
+          <Stack maw={560} mx="auto" w="100%">
             <Alert
               id="existing-warning"
               color="yellow"
               variant="light"
-              radius="lg"
+              radius="md"
               title="Registro encontrado"
-              styles={{
-                title: { fontWeight: 800 },
-                root: { border: "1px solid rgba(0,0,0,.06)" },
-              }}
+              styles={{ title: { fontWeight: 600 } }}
             >
               <Stack gap={6}>
                 <Text size="sm">
@@ -871,15 +780,9 @@ export function AdvancedRegistrationForm({
 
                 <Text size="sm">
                   Si ya te habías registrado antes,{" "}
-                  <Text
-                    span
-                    fw={800}
-                    c="blue"
-                    style={{ textDecoration: "underline", cursor: "pointer" }}
-                    onClick={onCancel}
-                  >
+                  <Anchor component="button" type="button" fw={600} onClick={onCancel}>
                     haz clic aquí para ingresar
-                  </Text>
+                  </Anchor>
                   .
                 </Text>
 
@@ -893,20 +796,8 @@ export function AdvancedRegistrationForm({
           </Stack>
         )}
 
-        <Card
-          withBorder
-          radius="xl"
-          p="lg"
-          shadow="xs"
-          maw={680}
-          mx="auto"
-          w="100%"
-          style={{
-            background: "rgba(255,255,255,.85)",
-            backdropFilter: "blur(6px)",
-          }}
-        >
-          <Stack gap="sm">
+        <Stack gap="md" maw={560} mx="auto" w="100%">
+          <Stack gap="md">
             {sortedFields.map((field) => {
               const currentValues = form.values;
 
@@ -958,14 +849,14 @@ export function AdvancedRegistrationForm({
               );
             })}
           </Stack>
-        </Card>
+        </Stack>
 
-        <Stack gap={10} maw={420} mx="auto" w="100%" mt={4}>
+        <Stack gap={10} maw={560} mx="auto" w="100%" mt={4}>
           <Button
             type="submit"
             loading={loading}
             size="md"
-            radius="xl"
+            radius="md"
             fullWidth
           >
             {existingData ? "Guardar cambios" : "Registrarme"}
@@ -974,8 +865,9 @@ export function AdvancedRegistrationForm({
           {onCancel && (
             <Button
               variant="subtle"
+              color="gray"
               size="sm"
-              radius="xl"
+              radius="md"
               onClick={onCancel}
               fullWidth
             >
@@ -1009,7 +901,7 @@ export function AdvancedRegistrationForm({
   }
 
   return (
-    <Card shadow="sm" padding="lg" radius="md" withBorder>
+    <Card shadow="sm" p={{ base: "md", sm: "lg" }} radius="md" withBorder>
       {formContent}
     </Card>
   );

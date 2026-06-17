@@ -20,6 +20,7 @@ import {
   Image,
   MantineProvider,
   Tabs,
+  Alert,
   // Divider,
   ThemeIcon,
   rem,
@@ -44,6 +45,8 @@ import {
 } from "../../api/events";
 import { useAuth } from "../../auth/AuthProvider";
 import { useEventRealtime } from "../../hooks/useEventRealtime";
+import { needsProfileUpdate } from "../../utils/registration-completeness";
+import { AdvancedRegistrationForm } from "../../components/auth/AdvancedRegistrationForm";
 import UserSession from "../../components/auth/UserSession";
 import { markEventUserAsAttended } from "../../api/event-users";
 import LivePollViewer from "../../components/events/LivePollViewer";
@@ -360,6 +363,9 @@ export default function EventAttendGcore() {
   const [error, setError] = useState<string | null>(null);
 
   const [attendeeId, setAttendeeId] = useState<string | null>(null);
+  const [attendeeData, setAttendeeData] = useState<Record<string, any> | null>(
+    null,
+  );
 
   const [isRegistered, setIsRegistered] = useState<boolean>(false);
   const [checkingRegistration, setCheckingRegistration] =
@@ -475,6 +481,7 @@ export default function EventAttendGcore() {
 
           if (result.orgAttendee?._id) {
             setAttendeeId(result.orgAttendee._id);
+            setAttendeeData(result.orgAttendee.registrationData ?? {});
           }
 
           setIsRegistered(!!result.isRegistered);
@@ -534,6 +541,39 @@ export default function EventAttendGcore() {
 
   const finalEvent = realtimeEvent || event;
 
+  // ¿Faltan datos obligatorios por completar antes de poder ver el evento?
+  // Mismo criterio (visibilidad efectiva) que el formulario, para no exigir
+  // campos que el usuario no puede ver/llenar. Aplica también aquí en /attend
+  // (los enlaces de campaña entran directo a esta página, sin pasar por la landing).
+  const needsUpdate = useMemo(() => {
+    if (!isRegistered || isOwner || !attendeeData) return false;
+    const fields = org?.registrationForm?.fields ?? [];
+    if (fields.length === 0) return false;
+    return needsProfileUpdate(fields, attendeeData);
+  }, [isRegistered, isOwner, attendeeData, org]);
+
+  // Tras completar el perfil: refrescar datos del attendee → needsUpdate pasa a
+  // false y el flujo de transmisión arranca normalmente.
+  const handleProfileUpdateSuccess = async () => {
+    try {
+      let userEmail: string | null = user?.email || null;
+      if (!userEmail && user?.uid) {
+        userEmail =
+          localStorage.getItem(`uid-${user.uid}-email`) ||
+          localStorage.getItem("user-email");
+      }
+      if (userEmail && event) {
+        const result = await checkIfRegistered(event._id, userEmail);
+        if (result.orgAttendee) {
+          if (result.orgAttendee._id) setAttendeeId(result.orgAttendee._id);
+          setAttendeeData(result.orgAttendee.registrationData ?? {});
+        }
+      }
+    } catch (err) {
+      console.error("Error refrescando datos tras completar perfil:", err);
+    }
+  };
+
   // Contador para upcoming
   useEffect(() => {
     if (status !== "upcoming") {
@@ -578,7 +618,7 @@ export default function EventAttendGcore() {
 
   // Tracking asistencia
   useEffect(() => {
-    if (!event || !attendeeId || !isRegistered) return;
+    if (!event || !attendeeId || !isRegistered || needsUpdate) return;
 
     const syncTracking = async () => {
       try {
@@ -592,11 +632,17 @@ export default function EventAttendGcore() {
     };
 
     void syncTracking();
-  }, [event?._id, attendeeId, isRegistered, status]);
+  }, [event?._id, attendeeId, isRegistered, status, needsUpdate]);
 
   useEffect(() => {
     const run = async () => {
       if (!eventSlugToUse) return;
+
+      // No iniciar la reproducción mientras el usuario debe completar su perfil
+      if (needsUpdate) {
+        setPlaybackUrl(null);
+        return;
+      }
 
       // solo cuando está LIVE
       if (status !== "live") {
@@ -617,7 +663,7 @@ export default function EventAttendGcore() {
     };
 
     void run();
-  }, [eventSlugToUse, status]);
+  }, [eventSlugToUse, status, needsUpdate]);
 
   useEffect(() => {
     if (!eventSlugToUse) return;
@@ -732,6 +778,52 @@ export default function EventAttendGcore() {
     (isRegistered || isOwner) &&
     mode !== "studio" &&
     joinState !== "pending";
+
+  // GATE: perfil incompleto → exigir completar datos antes de ver el evento.
+  // Se aplica sin importar la vía de entrada (incluye enlaces de campaña que
+  // caen directo en /attend). No se monta el reproductor hasta completar.
+  if (!contentLoading && needsUpdate && org && event) {
+    return (
+      <MantineProvider theme={theme} defaultColorScheme="light" withCssVariables>
+        <Box
+          style={{ ...cssVars(brand), ...pageBackground(brand), minHeight: "100vh" }}
+          c="var(--text-color)"
+        >
+          <EventAttendHeader
+            org={org}
+            slug={slug}
+            eventSlug={eventSlug}
+            isOwner={isOwner}
+            orgId={org?._id}
+            eventId={event?._id}
+          />
+          <Container size="sm" py="xl">
+            <Stack gap="md">
+              <Alert color="yellow" title="Completa tu perfil para continuar">
+                Antes de ingresar al evento necesitamos que actualices algunos
+                datos de tu registro.
+              </Alert>
+              <AdvancedRegistrationForm
+                orgSlug={org.domainSlug}
+                orgId={org._id}
+                eventId={event._id}
+                registrationScope="org-only"
+                existingData={{
+                  attendeeId: attendeeId ?? "",
+                  registrationData: (attendeeData ?? {}) as Record<
+                    string,
+                    string | number | boolean
+                  >,
+                }}
+                mode="page"
+                onSuccess={handleProfileUpdateSuccess}
+              />
+            </Stack>
+          </Container>
+        </Box>
+      </MantineProvider>
+    );
+  }
 
   return (
     <MantineProvider theme={theme} defaultColorScheme="light" withCssVariables>
