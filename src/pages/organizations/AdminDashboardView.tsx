@@ -11,6 +11,8 @@ import {
   SimpleGrid,
 } from "@mantine/core";
 import { Link, useParams } from "react-router-dom";
+import { IconCalendarEvent } from "@tabler/icons-react";
+import dayjs from "dayjs";
 import { fetchEventsByOrgPrivate, type EventItem } from "../../api/events";
 import { api } from "../../core/api";
 
@@ -153,6 +155,17 @@ export default function AdminDashboardView({ orgId, orgName }: AdminDashboardVie
                           {event.status}
                         </Badge>
                       </Group>
+
+                      {event.schedule?.startsAt && (
+                        <Group gap={6} wrap="nowrap" align="center">
+                          <IconCalendarEvent size={14} style={{ flexShrink: 0, opacity: 0.6 }} />
+                          <Text size="xs" c="dimmed" tt="capitalize">
+                            {dayjs(event.schedule.startsAt)
+                              .locale("es")
+                              .format("dddd D [de] MMMM YYYY, h:mm A")}
+                          </Text>
+                        </Group>
+                      )}
 
                       {event.description && (
                         <Text size="sm" c="dimmed" lineClamp={2}>

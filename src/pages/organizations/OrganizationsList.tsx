@@ -13,6 +13,7 @@ import {
   Container,
 } from "@mantine/core";
 import { Link } from "react-router-dom";
+import dayjs from "dayjs";
 import { fetchMyOrgs, type Org } from "../../api/orgs";
 import { useAuth } from "../../auth/AuthProvider";
 
@@ -141,12 +142,51 @@ export default function OrganizationsList() {
                     </Group>
 
                     {org.description && (
-                      <Text size="sm" c="dimmed" lineClamp={3} style={{ flex: 1 }}>
+                      <Text size="sm" c="dimmed" lineClamp={3}>
                         {org.description}
                       </Text>
                     )}
 
-                    <Group gap="sm" mt="auto">
+                    <Card.Section
+                      withBorder
+                      inheritPadding
+                      py="xs"
+                      mt="auto"
+                      style={{ borderLeft: 0, borderRight: 0, borderBottom: 0 }}
+                    >
+                      <Text size="xs" c="dimmed" tt="uppercase" fw={700} mb={4}>
+                        Próximo evento
+                      </Text>
+                      {org.nextEvent ? (
+                        <Group justify="space-between" align="center" wrap="nowrap" gap="xs">
+                          <Text
+                            size="sm"
+                            fw={600}
+                            lineClamp={1}
+                            component={Link}
+                            to={`/org/${org.domainSlug}/event/${org.nextEvent.slug}/admin`}
+                          >
+                            {org.nextEvent.title}
+                          </Text>
+                          {org.nextEvent.status === "live" && (
+                            <Badge color="red" variant="filled" size="xs">
+                              EN VIVO
+                            </Badge>
+                          )}
+                        </Group>
+                      ) : (
+                        <Text size="sm" c="dimmed">
+                          Sin próximos eventos
+                        </Text>
+                      )}
+                      {org.nextEvent && (
+                        <Text size="xs" c="dimmed" mt={2} tt="capitalize">
+                          {dayjs(org.nextEvent.startsAt).locale("es").format("dddd D [de] MMMM, h:mm A")}
+                        </Text>
+                      )}
+                    </Card.Section>
+
+                    <Group gap="sm">
                       <Button 
                         component={Link}
                         to={`/org/${org.domainSlug}`}

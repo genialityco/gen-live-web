@@ -38,6 +38,14 @@ export type {
   FormFieldType,
 } from "../types";
 
+export type OrgNextEvent = {
+  _id: string;
+  slug: string;
+  title: string;
+  status: "upcoming" | "live" | "ended" | "replay";
+  startsAt: string;
+};
+
 export type Org = {
   _id: string;
   name: string;
@@ -46,6 +54,7 @@ export type Org = {
   description?: string;
   branding?: BrandingConfig;
   registrationForm?: RegistrationForm;
+  nextEvent?: OrgNextEvent | null; // solo presente en /orgs/mine
 };
 
 export async function createOrg(payload: {
