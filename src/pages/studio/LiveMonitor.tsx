@@ -341,6 +341,9 @@ export function LiveMonitor({
         background: backgroundColor || "#000",
         overflow: "hidden",
         position: "relative",
+        // Permite que el banner escale en proporción al tamaño del monitor
+        // (preview chico vs. egress a pantalla completa) usando unidades cqw.
+        containerType: "inline-size",
       }}
     >
       {/* BACKGROUND IMAGE (zIndex 0) - Fondo personalizado */}
@@ -515,6 +518,40 @@ export function LiveMonitor({
             alt="Marco"
             style={{ width: "100%", height: "100%", objectFit: "cover" }}
           />
+        </Box>
+      )}
+
+      {/* BANNER DE ANUNCIOS (zIndex 25) — sincronizado vía RTDB, visible en monitor y egress */}
+      {stage.banner?.visible && !!stage.banner.text?.trim() && (
+        <Box
+          style={{
+            position: "absolute",
+            left: 0,
+            right: 0,
+            bottom: 0,
+            zIndex: 25,
+            pointerEvents: "none",
+            background: "linear-gradient(90deg, rgba(0,0,0,0.78), rgba(0,0,0,0.62))",
+            color: "#fff",
+            padding: "1.4cqw 2.4cqw",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <span
+            style={{
+              fontSize: "2.6cqw",
+              lineHeight: 1.25,
+              fontWeight: 600,
+              textAlign: "center",
+              textShadow: "0 1px 2px rgba(0,0,0,0.5)",
+              whiteSpace: "pre-wrap",
+              wordBreak: "break-word",
+            }}
+          >
+            {stage.banner.text}
+          </span>
         </Box>
       )}
 

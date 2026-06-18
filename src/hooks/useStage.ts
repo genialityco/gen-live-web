@@ -1,6 +1,6 @@
 // src/hooks/useStage.ts
 import { useEffect, useState } from "react";
-import { subscribeStageState, type ProgramMode, type NameTagStyle, type TileAppearance } from "../api/live-stage-service";
+import { subscribeStageState, type ProgramMode, type NameTagStyle, type TileAppearance, type BannerState } from "../api/live-stage-service";
 import type { LayoutMode } from "../types";
 
 export type StageState = {
@@ -13,6 +13,7 @@ export type StageState = {
   nameTags: Record<string, NameTagStyle>;
   presentationSlide: number;
   tileAppearance?: TileAppearance;
+  banner?: BannerState;
 };
 
 const DEFAULT_STAGE: StageState = {
@@ -25,6 +26,7 @@ const DEFAULT_STAGE: StageState = {
   nameTags: {},
   presentationSlide: 0,
   tileAppearance: undefined,
+  banner: undefined,
 };
 
 export function useStage(eventSlug: string) {
@@ -46,6 +48,7 @@ export function useStage(eventSlug: string) {
         nameTags: s?.nameTags ?? {},
         presentationSlide: s?.presentationSlide ?? 0,
         tileAppearance: s?.tileAppearance ?? undefined,
+        banner: s?.banner ?? undefined,
       });
     });
 

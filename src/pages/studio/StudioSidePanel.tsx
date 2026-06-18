@@ -20,6 +20,7 @@ import { JoinRequestsPanel } from "./JoinRequestsPanel";
 import { InvitationManager } from "../../components/studio/InvitationManager";
 import { FrameControls } from "./FrameControls";
 import { BackgroundControls } from "./BackgroundControls";
+import { BannerControls } from "./BannerControls";
 import { MediaLibrary } from "./MediaLibrary";
 import { TileAppearancePanel } from "./TileAppearancePanel";
 
@@ -133,6 +134,18 @@ export const StudioSidePanel: React.FC<Props> = ({
                     onUpdate={onRefreshFrameConfig}
                     disabled={disabled}
                   />
+                </Accordion.Panel>
+              </Accordion.Item>
+
+              <Accordion.Item value="banner">
+                <Accordion.Control>
+                  <Box>
+                    <Text size="sm" fw={600}>Banner de anuncios</Text>
+                    <Text size="xs" c="dimmed">Texto sobre el monitor y la transmisión</Text>
+                  </Box>
+                </Accordion.Control>
+                <Accordion.Panel>
+                  <BannerControls eventSlug={eventSlug} disabled={disabled} />
                 </Accordion.Panel>
               </Accordion.Item>
 

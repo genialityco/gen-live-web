@@ -42,6 +42,12 @@ export type TileAppearance = {
   accentColor?: string;
 };
 
+/** Banner de anuncios efímero, sincronizado via RTDB (aparece en monitor y egress) */
+export type BannerState = {
+  visible: boolean;
+  text: string;
+};
+
 export function setOnStage(eventSlug: string, uid: string, onStage: boolean) {
   const db = getDatabase();
   return set(ref(db, `/live/${eventSlug}/stage/onStage/${uid}`), onStage);
@@ -94,6 +100,11 @@ export function setTileAppearance(eventSlug: string, appearance: TileAppearance)
   return set(ref(db, `/live/${eventSlug}/tileAppearance`), appearance);
 }
 
+export function setBanner(eventSlug: string, banner: BannerState) {
+  const db = getDatabase();
+  return set(ref(db, `/live/${eventSlug}/banner`), banner);
+}
+
 export function subscribeStageState(
   eventSlug: string,
   cb: (s: {
@@ -106,6 +117,7 @@ export function subscribeStageState(
     nameTags: Record<string, NameTagStyle>;
     presentationSlide?: number;
     tileAppearance?: TileAppearance;
+    banner?: BannerState;
   }) => void
 ) {
   const db = getDatabase();
@@ -125,6 +137,7 @@ export function subscribeStageState(
       nameTags: (val.nameTags as Record<string, NameTagStyle>) ?? {},
       presentationSlide: typeof val.presentationSlide === "number" ? val.presentationSlide : 0,
       tileAppearance: (val.tileAppearance as TileAppearance) ?? undefined,
+      banner: (val.banner as BannerState) ?? undefined,
     });
   };
 
