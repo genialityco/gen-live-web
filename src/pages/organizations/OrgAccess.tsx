@@ -52,6 +52,7 @@ import {
 import { normalizeIdentifierValue } from "../../utils/normalizeByType";
 import { needsProfileUpdate } from "../../utils/registration-completeness";
 import { IconBrandWhatsapp } from "@tabler/icons-react";
+import { trackEvent } from "../../lib/utmTracking";
 
 type FlowStep =
   | "loading"
@@ -311,6 +312,7 @@ export default function OrgAccess() {
               console.log(
                 "✅ OrgAccess(EventMode): Auto-registration successful"
               );
+              trackSignUp("auto", foundEvent);
               navigate(`/org/${slug}/event/${foundEvent.slug}/attend`);
               return;
             }
@@ -334,6 +336,17 @@ export default function OrgAccess() {
     initFlow();
   }, [slug, eventSlugFromQuery, isEventMode, navigate, user, mode]);
 
+  // GA4: el usuario llegó a la página de acceso/registro (una vez por carga)
+  useEffect(() => {
+    trackEvent("begin_registration", {
+      content_type: "registration",
+      org_slug: slug,
+      event_slug: eventSlugFromQuery,
+      flow_mode: isEventMode ? "event" : "org",
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
     if (!formConfig) return;
     if (isEventMode) return;
@@ -350,6 +363,23 @@ export default function OrgAccess() {
     orgIdentifierForm.setValues(initialValues);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [formConfig, isEventMode]);
+
+  // GA4: registro a un evento completado. `registrationType` distingue el camino
+  // por el que se completó (auto / resumen / formulario).
+  const trackSignUp = (
+    registrationType: "auto" | "summary" | "form" | "form_update",
+    targetEvent?: EventItem | null,
+  ) => {
+    const ev = targetEvent ?? event;
+    trackEvent("sign_up", {
+      content_type: "event_registration",
+      item_id: ev?._id,
+      event_slug: ev?.slug ?? eventSlugFromQuery,
+      org_slug: slug,
+      event_status: ev?.status,
+      registration_type: registrationType,
+    });
+  };
 
   const handleSuccessEventMode = () => {
     navigate(`/org/${slug}/event/${event?.slug ?? eventSlugFromQuery}/attend`);
@@ -664,6 +694,8 @@ export default function OrgAccess() {
         formData: attendee.registrationData,
         firebaseUID,
       });
+
+      trackSignUp("summary");
 
       notifications.show({
         color: "green",
@@ -1179,7 +1211,10 @@ export default function OrgAccess() {
                 orgId={org._id}
                 eventId={event._id}
                 registrationScope="org+event"
-                onSuccess={handleSuccessEventMode}
+                onSuccess={() => {
+                  trackSignUp("form");
+                  handleSuccessEventMode();
+                }}
                 onCancel={() => {
                   const hasIdentifiers = formConfig?.fields.some(
                     (f) => f.isIdentifier
@@ -1223,7 +1258,12 @@ export default function OrgAccess() {
                 orgId={org._id}
                 eventId={event._id}
                 registrationScope={updateScope}
-                onSuccess={handleSuccessEventMode}
+                onSuccess={() => {
+                  // Solo cuenta como registro al evento cuando el scope crea el
+                  // EventUser; "org-only" es solo actualización de perfil.
+                  if (updateScope === "org+event") trackSignUp("form_update");
+                  handleSuccessEventMode();
+                }}
                 onCancel={() => setFlowStep("summary")}
                 existingData={{
                   attendeeId: foundRegistration.attendee._id,

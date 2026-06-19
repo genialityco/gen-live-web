@@ -1,7 +1,7 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type React from "react";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useParams, useNavigate, useSearchParams, Link } from "react-router-dom";
 import {
   Container,
@@ -392,6 +392,9 @@ export default function EventAttendGcore() {
 
   const [playbackUrl, setPlaybackUrl] = useState<string | null>(null);
 
+  // Evita disparar el evento GA `video_start` más de una vez por carga de página
+  const videoStartTracked = useRef(false);
+
   const [joinState, setJoinState] = useState<
     "idle" | "pending" | "approved" | "rejected" | "kicked"
   >("idle");
@@ -656,6 +659,19 @@ export default function EventAttendGcore() {
       try {
         const { playbackUrl } = await getPlayback(eventSlugToUse);
         setPlaybackUrl(playbackUrl);
+
+        // GA4: el asistente empezó a ver el stream en vivo (una vez por carga)
+        if (playbackUrl && !videoStartTracked.current) {
+          videoStartTracked.current = true;
+          trackEvent("video_start", {
+            content_type: "live_stream",
+            item_id: event?._id,
+            event_slug: eventSlugToUse,
+            org_slug: slug,
+            event_status: status,
+            playback_type: playbackUrl.includes(".m3u8") ? "hls" : "embed",
+          });
+        }
       } catch (e: any) {
         console.warn("No se pudo cargar playback:", e?.message || e);
         setPlaybackUrl(null);
