@@ -244,8 +244,10 @@ export default function EventAdminReport({ event }: EventAdminReportProps) {
             <Text size="xs" c="dimmed" mt={4}>
               Tiempo total acumulado: {formatDuration(viewing.totalWatchTimeSeconds)}{" "}
               (en vivo {formatDuration(viewing.totalLiveWatchTimeSeconds)} · diferido{" "}
-              {formatDuration(viewing.totalReplayWatchTimeSeconds)}) ·{" "}
-              {viewing.currentConcurrentViewers} viendo ahora
+              {formatDuration(viewing.totalReplayWatchTimeSeconds)})
+              {(event.status === "live" || event.status === "replay") && (
+                <> · {viewing.currentConcurrentViewers} viendo ahora</>
+              )}
             </Text>
           </Card>
         </Grid.Col>
