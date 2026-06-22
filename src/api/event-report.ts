@@ -1,0 +1,66 @@
+// api/event-report.ts
+// Informe global por evento: unifica campañas de email + WhatsApp con el
+// engagement / tiempo de visualización de los asistentes (yuxtaposición).
+import { api } from "../core/api";
+
+export interface EmailCampaignTotals {
+  total: number;
+  sent: number;
+  bounced: number;
+  failed: number;
+  clicked: number;
+  totalClicks: number;
+}
+
+export interface WaCampaignTotals {
+  total: number;
+  sent: number;
+  delivered: number;
+  read: number;
+  failed: number;
+  optedOut: number;
+  clicked: number;
+  totalClicks: number;
+}
+
+export interface ReportCampaign {
+  id: string;
+  name: string;
+  status: string;
+  stats: Record<string, number>;
+}
+
+export interface EventReport {
+  eventId: string;
+  generatedAt: string;
+  email: {
+    campaignCount: number;
+    totals: EmailCampaignTotals;
+    campaigns: ReportCampaign[];
+  };
+  whatsapp: {
+    campaignCount: number;
+    totals: WaCampaignTotals;
+    campaigns: ReportCampaign[];
+  };
+  viewing: {
+    currentConcurrentViewers: number;
+    peakConcurrentViewers: number;
+    totalUniqueViewers: number;
+    uniqueViewers: number;
+    liveViewers: number;
+    replayViewers: number;
+    totalSessions: number;
+    totalWatchTimeSeconds: number;
+    totalLiveWatchTimeSeconds: number;
+    totalReplayWatchTimeSeconds: number;
+    avgWatchTimeSeconds: number;
+    avgLiveWatchTimeSeconds: number;
+    avgReplayWatchTimeSeconds: number;
+  };
+}
+
+export async function getEventReport(eventId: string): Promise<EventReport> {
+  const { data } = await api.get<EventReport>(`/events/${eventId}/report`);
+  return data;
+}
