@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Stack,
   Card,
@@ -33,8 +33,36 @@ export default function EventAdminMetrics({ event }: EventAdminMetricsProps) {
   
   const [error, setError] = useState<string | null>(null);
   const [recalculating, setRecalculating] = useState(false);
+  // "Espectadores ahora" autoritativo: calculado desde la presencia real en RTDB
+  // por el backend (cross-instancia, autocorregido). Refresca el valor de RTDB
+  // que podría congelarse si la instancia con el watcher se reinicia/escala.
+  const [authoritativeNow, setAuthoritativeNow] = useState<number | null>(null);
 
   const isLive = event.status === "live";
+
+  useEffect(() => {
+    if (!isLive) {
+      setAuthoritativeNow(null);
+      return;
+    }
+    let cancelled = false;
+    const fetchNow = async () => {
+      try {
+        const { data } = await api.get<{ currentConcurrentViewers: number }>(
+          `/events/${event._id}/concurrent-now`
+        );
+        if (!cancelled) setAuthoritativeNow(data.currentConcurrentViewers);
+      } catch {
+        // Si falla, se mantiene el valor de RTDB como fallback
+      }
+    };
+    fetchNow();
+    const interval = setInterval(fetchNow, 10000); // cada 10s
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [isLive, event._id]);
 
   const recalculateMetrics = async () => {
     setRecalculating(true);
@@ -125,7 +153,7 @@ export default function EventAdminMetrics({ event }: EventAdminMetricsProps) {
                       Espectadores Ahora
                     </Text>
                     <Text size="2.5rem" fw={700} c="blue">
-                      {metrics.currentConcurrentViewers}
+                      {authoritativeNow ?? metrics.currentConcurrentViewers}
                     </Text>
                     <Badge color="green" variant="dot">En vivo</Badge>
                   </Stack>
