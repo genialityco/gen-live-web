@@ -2,12 +2,15 @@
 // src/viewer/ViewerHlsPlayer.tsx
 import { useEffect, useRef, useState } from "react";
 import Hls from "hls.js";
+import { attachPlaybackTracking } from "../../utils/playback-tracking";
 
 type Props = {
   src: string;
   targetLatencySec?: number; // 2–4 recomendado
   maxBehindSec?: number; // si estás más atrás que esto, saltas al vivo
   showGoLiveButton?: boolean;
+  /** Notifica cuándo el video está realmente reproduciéndose (métricas reales). */
+  onPlayingChange?: (playing: boolean) => void;
 };
 
 function clamp(n: number, min: number, max: number) {
@@ -47,9 +50,14 @@ export function ViewerHlsPlayer({
   targetLatencySec = 3,
   maxBehindSec = 6,
   showGoLiveButton = true,
+  onPlayingChange,
 }: Props) {
   const ref = useRef<HTMLVideoElement | null>(null);
   const hlsRef = useRef<Hls | null>(null);
+  // Ref para que el effect (que no depende de la identidad del callback) use
+  // siempre la última versión sin re-suscribir todo al cambiar el callback.
+  const onPlayingChangeRef = useRef(onPlayingChange);
+  onPlayingChangeRef.current = onPlayingChange;
 
   const [behindLiveSec, setBehindLiveSec] = useState<number>(0);
   const [isRecovering, setIsRecovering] = useState(false);
@@ -64,6 +72,11 @@ export function ViewerHlsPlayer({
 
     video.addEventListener("seeking", onSeeking);
     video.addEventListener("seeked", onSeeked);
+
+    // Reporta reproducción real (común a ambas rutas: nativo y hls.js)
+    const detachPlayback = attachPlaybackTracking(video, (p) =>
+      onPlayingChangeRef.current?.(p),
+    );
 
     // ---- Safari / iOS nativo (sin hls.js) ----
     if (video.canPlayType("application/vnd.apple.mpegurl")) {
@@ -104,11 +117,15 @@ export function ViewerHlsPlayer({
         video.removeEventListener("loadedmetadata", onDurationChange);
         video.removeEventListener("seeking", onSeeking);
         video.removeEventListener("seeked", onSeeked);
+        detachPlayback();
       };
     }
 
     // ---- hls.js ----
-    if (!Hls.isSupported()) return;
+    if (!Hls.isSupported()) {
+      detachPlayback();
+      return;
+    }
 
     // Limpia previo si existía
     if (hlsRef.current) {
@@ -208,6 +225,7 @@ export function ViewerHlsPlayer({
       hls.off(Hls.Events.LEVEL_UPDATED, computeAndMaybeSnap);
       hls.off(Hls.Events.FRAG_BUFFERED, computeAndMaybeSnap);
       hls.off(Hls.Events.ERROR, onError);
+      detachPlayback();
       try {
         hls.destroy();
       } catch { /* empty */ }

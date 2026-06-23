@@ -232,14 +232,15 @@ export default function EventAdminReport({ event }: EventAdminReportProps) {
             </SimpleGrid>
             <Divider my="md" />
             <Text size="xs" c="dimmed">
-              <b>Espectadores únicos</b> = personas distintas que vieron en
-              cualquier momento; <b>vieron en vivo</b> / <b>en diferido</b> son
-              los subconjuntos según hayan estado durante el live o en el replay
-              (una misma persona puede estar en ambos). <b>Sesiones</b> cuenta
-              conexiones por dispositivo/pestaña, por lo que es mayor cuando hay
-              reconexiones o multidispositivo. El <b>tiempo medio total</b> suma
-              vivo + diferido; el <b>tiempo en diferido</b> se mide mientras el
-              evento está en estado replay.
+              Los tiempos miden <b>reproducción real</b> del video (solo mientras
+              se está reproduciendo): no cuentan la cuenta-regresiva, las pausas
+              ni pestañas abiertas de fondo. <b>Espectadores únicos</b> = personas
+              distintas que reprodujeron en algún momento; <b>vieron en vivo</b> /
+              <b>en diferido</b> son los subconjuntos que reprodujeron durante el
+              live o durante el replay (una misma persona puede estar en ambos).
+              <b>Sesiones</b> cuenta conexiones por dispositivo/pestaña, por lo que
+              es mayor cuando hay reconexiones o multidispositivo. Los promedios se
+              calculan sobre quienes realmente reprodujeron cada tramo.
             </Text>
             <Text size="xs" c="dimmed" mt={4}>
               Tiempo total acumulado: {formatDuration(viewing.totalWatchTimeSeconds)}{" "}

@@ -24,6 +24,7 @@
     "@mui/icons-material": "^7.3.6",
     "@mui/material": "^7.3.6",
     "@tabler/icons-react": "^3.35.0",
+    "@vimeo/player": "^2.30.4",
     "axios": "^1.12.2",
     "country-state-city": "^3.2.1",
     "dayjs": "^1.11.19",

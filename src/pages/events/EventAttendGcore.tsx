@@ -71,6 +71,7 @@ import {
 } from "@livekit/components-react";
 import { ViewerHlsPlayer } from "../viewer/ViewerHlsPlayer";
 import { VodHlsPlayer } from "../viewer/VodHlsPlayer";
+import { VimeoPlayer } from "../viewer/VimeoPlayer";
 import { Track } from "livekit-client";
 import { trackEvent } from "../../lib/utmTracking";
 
@@ -376,6 +377,7 @@ export default function EventAttendGcore() {
     resolved: realtimeEvent,
     status,
     loading: eventLoading,
+    reportPlayback,
   } = useEventRealtime(eventSlugToUse);
 
   const [timeLeft, setTimeLeft] = useState<string>("");
@@ -795,6 +797,34 @@ export default function EventAttendGcore() {
     mode !== "studio" &&
     joinState !== "pending";
 
+  // Render unificado del reproductor según el tipo de fuente, reportando
+  // reproducción real (playing) para las métricas. HLS .m3u8 → <video> nativo;
+  // Vimeo → SDK; otros embeds → iframe crudo (sin medición posible).
+  const isVimeoUrl = (url: string) => /vimeo\.com/i.test(url);
+  const renderPlayer = (url: string, pmode: "live" | "replay") => {
+    const onPlayingChange = (playing: boolean) => reportPlayback(playing, pmode);
+    if (url.includes(".m3u8")) {
+      return pmode === "live" ? (
+        <ViewerHlsPlayer src={url} onPlayingChange={onPlayingChange} />
+      ) : (
+        <VodHlsPlayer src={url} onPlayingChange={onPlayingChange} />
+      );
+    }
+    if (isVimeoUrl(url)) {
+      return <VimeoPlayer src={url} onPlayingChange={onPlayingChange} />;
+    }
+    // Embed desconocido (cross-origin): no se puede medir reproducción.
+    return (
+      <iframe
+        src={url}
+        style={{ width: "100%", height: "100%", border: 0 }}
+        title="Reproductor de video"
+        allow="autoplay; fullscreen; picture-in-picture"
+        allowFullScreen
+      />
+    );
+  };
+
   // GATE: perfil incompleto → exigir completar datos antes de ver el evento.
   // Se aplica sin importar la vía de entrada (incluye enlaces de campaña que
   // caen directo en /attend). No se monta el reproductor hasta completar.
@@ -939,16 +969,7 @@ export default function EventAttendGcore() {
                           </Stack>
                         </LiveKitRoom>
                       ) : playbackUrl ? (
-                        playbackUrl.includes(".m3u8") ? (
-                          <ViewerHlsPlayer src={playbackUrl} />
-                        ) : (
-                          <iframe
-                            src={playbackUrl}
-                            style={{ width: "100%", height: "100%", border: 0 }}
-                            allow="autoplay; fullscreen; picture-in-picture"
-                            allowFullScreen
-                          />
-                        )
+                        renderPlayer(playbackUrl, "live")
                       ) : (
                         <Center h="100%">
                           <Stack align="center" gap="xs">
@@ -963,18 +984,7 @@ export default function EventAttendGcore() {
                     "url" in finalEvent.stream &&
                     finalEvent.stream.url ? (
                     <Box style={{ position: "absolute", inset: 0 }}>
-                      {finalEvent.stream.url.includes(".m3u8") ? (
-                        <VodHlsPlayer src={finalEvent.stream.url} />
-                      ) : (
-                        <iframe
-                          src={finalEvent.stream.url}
-                          style={{ width: "100%", height: "100%", border: "none" }}
-                          title="Repetición del evento"
-                          frameBorder={0}
-                          allow="autoplay; fullscreen; picture-in-picture"
-                          allowFullScreen
-                        />
-                      )}
+                      {renderPlayer(finalEvent.stream.url, "replay")}
                     </Box>
                   ) : (
                     <Box style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "#111" }}>
@@ -1240,20 +1250,7 @@ export default function EventAttendGcore() {
                                 </Stack>
                               </LiveKitRoom>
                             ) : playbackUrl ? (
-                              playbackUrl.includes(".m3u8") ? (
-                                <ViewerHlsPlayer src={playbackUrl} />
-                              ) : (
-                                <iframe
-                                  src={playbackUrl}
-                                  style={{
-                                    width: "100%",
-                                    height: "100%",
-                                    border: 0,
-                                  }}
-                                  allow="autoplay; fullscreen; picture-in-picture"
-                                  allowFullScreen
-                                />
-                              )
+                              renderPlayer(playbackUrl, "live")
                             ) : (
                               <Center h="100%">
                                 <Stack align="center" gap="xs">
@@ -1268,24 +1265,7 @@ export default function EventAttendGcore() {
                           "url" in finalEvent.stream &&
                           finalEvent.stream.url ? (
                           <Box style={{ position: "absolute", inset: 0 }}>
-                            {/* Si es URL HLS (.m3u8), usar VodHlsPlayer */}
-                            {finalEvent.stream.url.includes(".m3u8") ? (
-                              <VodHlsPlayer src={finalEvent.stream.url} />
-                            ) : (
-                              /* Si es iframe embebido (YouTube, Vimeo, etc.) */
-                              <iframe
-                                src={finalEvent.stream.url}
-                                style={{
-                                  width: "100%",
-                                  height: "100%",
-                                  border: "none",
-                                }}
-                                title="Repetición del evento"
-                                frameBorder={0}
-                                allow="autoplay; fullscreen; picture-in-picture"
-                                allowFullScreen
-                              />
-                            )}
+                            {renderPlayer(finalEvent.stream.url, "replay")}
                           </Box>
                         ) : status === "upcoming" ? (
                           <Box

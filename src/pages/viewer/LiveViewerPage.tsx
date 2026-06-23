@@ -17,6 +17,7 @@ import {
 } from "@mantine/core";
 import { getPlayback } from "../../api/livekit-service";
 import { ViewerHlsPlayer } from "./ViewerHlsPlayer";
+import { VimeoPlayer } from "./VimeoPlayer";
 import { requestToJoin, subscribeJoinDecision } from "../../api/live-join-service";
 import { ControlBar, LiveKitRoom, RoomAudioRenderer } from "@livekit/components-react";
 import { LIVEKIT_WS_URL } from "../../core/livekitConfig";
@@ -25,7 +26,7 @@ export const LiveViewerPage: React.FC = () => {
   const { eventSlug } = useParams<{ eventSlug: string }>();
 
   // Registra presencia en RTDB para que las métricas del evento cuenten este viewer
-  useEventRealtime(eventSlug ?? "");
+  const { reportPlayback } = useEventRealtime(eventSlug ?? "");
 
   const [playbackUrl, setPlaybackUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -168,6 +169,12 @@ export const LiveViewerPage: React.FC = () => {
                 targetLatencySec={3}
                 maxBehindSec={6}
                 showGoLiveButton
+                onPlayingChange={(p) => reportPlayback(p, "live")}
+              />
+            ) : /vimeo\.com/i.test(playbackUrl) ? (
+              <VimeoPlayer
+                src={playbackUrl}
+                onPlayingChange={(p) => reportPlayback(p, "live")}
               />
             ) : (
               <iframe

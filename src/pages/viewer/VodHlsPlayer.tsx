@@ -2,27 +2,42 @@
 // Reproductor HLS para contenido VOD (Video On Demand) / Repeticiones
 import { useEffect, useRef, useState } from "react";
 import Hls from "hls.js";
+import { attachPlaybackTracking } from "../../utils/playback-tracking";
 
 type Props = {
   src: string;
   poster?: string;
   autoPlay?: boolean;
+  /** Notifica cuándo el video está realmente reproduciéndose (métricas reales). */
+  onPlayingChange?: (playing: boolean) => void;
 };
 
 /**
  * Reproductor HLS simple para VOD (repeticiones).
  * A diferencia de ViewerHlsPlayer, no tiene lógica de live-sync ni latencia.
  */
-export function VodHlsPlayer({ src, poster, autoPlay = true }: Props) {
+export function VodHlsPlayer({
+  src,
+  poster,
+  autoPlay = true,
+  onPlayingChange,
+}: Props) {
   const ref = useRef<HTMLVideoElement | null>(null);
   const hlsRef = useRef<Hls | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const onPlayingChangeRef = useRef(onPlayingChange);
+  onPlayingChangeRef.current = onPlayingChange;
 
   useEffect(() => {
     const video = ref.current;
     if (!video) return;
 
     setError(null);
+
+    // Reporta reproducción real (común a ambas rutas: nativo y hls.js)
+    const detachPlayback = attachPlaybackTracking(video, (p) =>
+      onPlayingChangeRef.current?.(p),
+    );
 
     // Safari / iOS nativo (sin hls.js)
     if (video.canPlayType("application/vnd.apple.mpegurl")) {
@@ -32,12 +47,14 @@ export function VodHlsPlayer({ src, poster, autoPlay = true }: Props) {
       }
 
       return () => {
+        detachPlayback();
         video.src = "";
       };
     }
 
     // hls.js para otros navegadores
     if (!Hls.isSupported()) {
+      detachPlayback();
       setError("Tu navegador no soporta reproducción de video HLS");
       return;
     }
@@ -103,6 +120,7 @@ export function VodHlsPlayer({ src, poster, autoPlay = true }: Props) {
     });
 
     return () => {
+      detachPlayback();
       try {
         hls.destroy();
       } catch {

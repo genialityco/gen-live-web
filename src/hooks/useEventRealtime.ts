@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../core/api";
 import {  ensureAnon, rtdb } from "../core/firebase";
 import {
@@ -10,6 +10,9 @@ import {
   onDisconnect,
   type DatabaseReference,
 } from "firebase/database";
+
+/** Estado de reproducción real reportado por el reproductor hacia la presencia. */
+export type PlaybackMode = "live" | "replay" | null;
 
 type ResolvedEvent = {
   eventId: string;
@@ -28,6 +31,13 @@ export function useEventRealtime(slug: string) {
   const [loading, setLoading] = useState(true);
   const presenceRef = useRef<DatabaseReference | null>(null);
   const unsubFns = useRef<(() => void)[]>([]);
+
+  // Estado de reproducción real (lo escribe el reproductor vía reportPlayback).
+  // El heartbeat de presencia lee este ref para incluir playing/pmode en cada write.
+  const playbackRef = useRef<{ playing: boolean; mode: PlaybackMode }>({
+    playing: false,
+    mode: null,
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -60,9 +70,16 @@ export function useEventRealtime(slug: string) {
       const pRef = r(rtdb, `/presence/${evId}/${uid}`);
       presenceRef.current = pRef;
 
-      // Función para escribir presencia
+      // Función para escribir presencia — incluye el estado de reproducción real
+      // (playing/pmode) para que el backend acumule tiempo de visualización solo
+      // mientras el video se reproduce de verdad, y lo atribuya a vivo/diferido.
       const writePresence = async () => {
-        await set(pRef, { on: true, ts: serverTimestamp() }).catch(() => {});
+        await set(pRef, {
+          on: true,
+          ts: serverTimestamp(),
+          playing: playbackRef.current.playing,
+          pmode: playbackRef.current.mode,
+        }).catch(() => {});
       };
 
       // online inicial
@@ -111,13 +128,32 @@ export function useEventRealtime(slug: string) {
     };
   }, [slug]);
 
+  // El reproductor llama esto en cada transición play/pause/ended. Actualiza el
+  // ref (que lee el heartbeat) y escribe presencia de inmediato para capturar la
+  // transición sin esperar al próximo heartbeat de 15s.
+  const reportPlayback = useCallback(
+    (playing: boolean, mode: PlaybackMode) => {
+      playbackRef.current = { playing, mode };
+      const pRef = presenceRef.current;
+      if (!pRef) return;
+      void set(pRef, {
+        on: true,
+        ts: serverTimestamp(),
+        playing,
+        pmode: mode,
+      }).catch(() => {});
+    },
+    []
+  );
+
   return useMemo(
     () => ({
       resolved,
       status,
       nowCount,
       loading,
+      reportPlayback,
     }),
-    [resolved, status, nowCount, loading]
+    [resolved, status, nowCount, loading, reportPlayback]
   );
 }
