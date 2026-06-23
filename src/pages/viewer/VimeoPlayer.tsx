@@ -22,8 +22,6 @@ export function VimeoPlayer({ src, onPlayingChange, title }: Props) {
     const iframe = iframeRef.current;
     if (!iframe) return;
 
-    // El SDK se engancha al iframe existente (su src ya es un player de Vimeo).
-    const player = new Player(iframe);
     const setPlaying = (p: boolean) => onPlayingChangeRef.current?.(p);
 
     const onPlay = () => setPlaying(true);
@@ -33,15 +31,27 @@ export function VimeoPlayer({ src, onPlayingChange, title }: Props) {
     const onBufferStart = () => setPlaying(false);
     const onBufferEnd = () => setPlaying(true);
 
-    player.on("play", onPlay);
-    player.on("playing", onPlay);
-    player.on("pause", onPause);
-    player.on("ended", onEnded);
-    player.on("bufferstart", onBufferStart);
-    player.on("bufferend", onBufferEnd);
+    // El SDK es SOLO para métricas: best-effort. Si falla (URL inválida,
+    // ad-blocker, fallo de red al cargar player.js), el <iframe> sigue
+    // reproduciendo normalmente; únicamente se pierde la medición. Nunca debe
+    // romper el visor.
+    let player: Player | null = null;
+    try {
+      // El SDK se engancha al iframe existente (su src ya es un player de Vimeo).
+      player = new Player(iframe);
+      player.on("play", onPlay);
+      player.on("playing", onPlay);
+      player.on("pause", onPause);
+      player.on("ended", onEnded);
+      player.on("bufferstart", onBufferStart);
+      player.on("bufferend", onBufferEnd);
+    } catch {
+      player = null;
+    }
 
     return () => {
       setPlaying(false);
+      if (!player) return;
       try {
         player.off("play", onPlay);
         player.off("playing", onPlay);
