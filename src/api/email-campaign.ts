@@ -49,6 +49,7 @@ export interface CampaignStats {
 
 export interface UtmValueStat {
   value: string;
+  sent: number; // destinatarios enviados con este valor de UTM
   clicks: number;
   uniqueClickers: number;
 }

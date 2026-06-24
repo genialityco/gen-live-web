@@ -30,6 +30,26 @@ export interface ReportCampaign {
   stats: Record<string, number>;
 }
 
+export interface RegistrationDistributionItem {
+  value: string;
+  label: string | null;
+  count: number;
+}
+
+export interface RegistrationDistribution {
+  key: "pais" | "perfil" | "especialidad" | "subespecialidad";
+  fieldId: string;
+  fieldLabel: string;
+  isCountry: boolean;
+  items: RegistrationDistributionItem[];
+  unknown: number;
+}
+
+export interface RegistrationsReport {
+  total: number;
+  distributions: RegistrationDistribution[];
+}
+
 export interface EventReport {
   eventId: string;
   generatedAt: string;
@@ -58,6 +78,7 @@ export interface EventReport {
     avgLiveWatchTimeSeconds: number;
     avgReplayWatchTimeSeconds: number;
   };
+  registrations?: RegistrationsReport;
 }
 
 export async function getEventReport(eventId: string): Promise<EventReport> {

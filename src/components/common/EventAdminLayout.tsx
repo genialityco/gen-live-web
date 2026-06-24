@@ -123,10 +123,10 @@ export default function EventAdminLayout({
       description: "Campañas de email y WhatsApp",
     },
     {
-      label: "Informe global",
+      label: "Informe general",
       icon: "🧾",
       href: `/org/${slug}/event/${eventSlug}/admin/report`,
-      description: "Campañas + engagement unificados",
+      description: "Resumen general y reporte detallado del evento",
     },
     {
       label: "Configuración",

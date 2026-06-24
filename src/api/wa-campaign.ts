@@ -79,6 +79,7 @@ export interface WaDelivery {
 
 export interface WaUtmValueStat {
   value: string;
+  sent: number; // destinatarios enviados con este valor de UTM
   clicks: number;
   uniqueClickers: number;
 }

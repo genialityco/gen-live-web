@@ -13,6 +13,7 @@ import {
   Center,
   Divider,
   SimpleGrid,
+  SegmentedControl,
 } from "@mantine/core";
 import {
   IconMail,
@@ -20,13 +21,35 @@ import {
   IconEye,
   IconRefresh,
   IconClock,
+  IconUsers,
 } from "@tabler/icons-react";
-import { getEventReport, type EventReport } from "../../api/event-report";
+import {
+  getEventReport,
+  type EventReport,
+  type RegistrationDistribution,
+} from "../../api/event-report";
 import type { EventItem } from "../../api/events";
+import { CountryBars, isoToFlag, countryName } from "../common/CountryBars";
 
 interface EventAdminReportProps {
   event: EventItem;
 }
+
+type ReportMode = "general" | "detallado";
+
+const DIST_TITLES: Record<RegistrationDistribution["key"], string> = {
+  pais: "Distribución por país",
+  perfil: "Distribución por perfil",
+  especialidad: "Distribución por especialidad",
+  subespecialidad: "Distribución por subespecialidad",
+};
+
+const DIST_COLORS: Record<RegistrationDistribution["key"], string> = {
+  pais: "grape",
+  perfil: "blue",
+  especialidad: "teal",
+  subespecialidad: "indigo",
+};
 
 function formatDuration(totalSeconds: number): string {
   if (!totalSeconds || totalSeconds < 0) return "0s";
@@ -55,6 +78,7 @@ export default function EventAdminReport({ event }: EventAdminReportProps) {
   const [report, setReport] = useState<EventReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [mode, setMode] = useState<ReportMode>("general");
 
   const load = async () => {
     setLoading(true);
@@ -81,7 +105,7 @@ export default function EventAdminReport({ event }: EventAdminReportProps) {
         <Stack align="center" gap="md">
           <Loader size="lg" />
           <Text size="sm" c="dimmed">
-            Generando informe global...
+            Generando informe...
           </Text>
         </Stack>
       </Center>
@@ -106,7 +130,8 @@ export default function EventAdminReport({ event }: EventAdminReportProps) {
     );
   }
 
-  const { email, whatsapp, viewing } = report;
+  const { email, whatsapp, viewing, registrations } = report;
+  const detailed = mode === "detallado";
 
   // Tasas derivadas (evita división por cero)
   const emailClickRate = email.totals.sent
@@ -123,19 +148,32 @@ export default function EventAdminReport({ event }: EventAdminReportProps) {
     <Stack gap="lg">
       <Group justify="space-between" align="center">
         <div>
-          <Title order={3}>Informe global del evento</Title>
+          <Title order={3}>
+            {detailed ? "Informe detallado del evento" : "Informe general del evento"}
+          </Title>
           <Text size="xs" c="dimmed">
             Generado {new Date(report.generatedAt).toLocaleString("es")}
           </Text>
         </div>
-        <Button
-          leftSection={<IconRefresh size={16} />}
-          onClick={load}
-          variant="light"
-          size="sm"
-        >
-          Actualizar
-        </Button>
+        <Group gap="sm">
+          <SegmentedControl
+            size="sm"
+            value={mode}
+            onChange={(v) => setMode(v as ReportMode)}
+            data={[
+              { label: "General", value: "general" },
+              { label: "Detallado", value: "detallado" },
+            ]}
+          />
+          <Button
+            leftSection={<IconRefresh size={16} />}
+            onClick={load}
+            variant="light"
+            size="sm"
+          >
+            Actualizar
+          </Button>
+        </Group>
       </Group>
 
       <Grid gutter="md">
@@ -190,77 +228,136 @@ export default function EventAdminReport({ event }: EventAdminReportProps) {
               <IconEye size={22} color="var(--mantine-color-grape-6)" />
               <Title order={4}>Engagement y visualización</Title>
             </Group>
+            {/* En el informe general se omiten sesiones, pico concurrente y tiempos
+                medios; quedan solo los espectadores. El detallado los incluye. */}
             <SimpleGrid cols={{ base: 2, sm: 3, md: 4 }} spacing="lg">
               <Stat label="Espectadores únicos" value={viewing.uniqueViewers} />
               <Stat label="Vieron en vivo" value={viewing.liveViewers} />
               <Stat label="Vieron en diferido" value={viewing.replayViewers} />
-              <Stat label="Pico concurrente" value={viewing.peakConcurrentViewers} />
-              <Stat label="Sesiones totales" value={viewing.totalSessions} />
-              <Stack gap={2}>
-                <Group gap={4} wrap="nowrap">
-                  <IconClock size={18} />
-                  <Text size="xl" fw={700}>
-                    {formatDuration(viewing.avgWatchTimeSeconds)}
-                  </Text>
-                </Group>
-                <Text size="xs" c="dimmed" tt="uppercase">
-                  Tiempo medio total / espectador
-                </Text>
-              </Stack>
-              <Stack gap={2}>
-                <Group gap={4} wrap="nowrap">
-                  <IconClock size={18} />
-                  <Text size="xl" fw={700}>
-                    {formatDuration(viewing.avgLiveWatchTimeSeconds)}
-                  </Text>
-                </Group>
-                <Text size="xs" c="dimmed" tt="uppercase">
-                  Tiempo medio en vivo
-                </Text>
-              </Stack>
-              <Stack gap={2}>
-                <Group gap={4} wrap="nowrap">
-                  <IconClock size={18} />
-                  <Text size="xl" fw={700}>
-                    {formatDuration(viewing.avgReplayWatchTimeSeconds)}
-                  </Text>
-                </Group>
-                <Text size="xs" c="dimmed" tt="uppercase">
-                  Tiempo medio en diferido
-                </Text>
-              </Stack>
+              {detailed && (
+                <>
+                  <Stat label="Pico concurrente" value={viewing.peakConcurrentViewers} />
+                  <Stat label="Sesiones totales" value={viewing.totalSessions} />
+                  <Stack gap={2}>
+                    <Group gap={4} wrap="nowrap">
+                      <IconClock size={18} />
+                      <Text size="xl" fw={700}>
+                        {formatDuration(viewing.avgWatchTimeSeconds)}
+                      </Text>
+                    </Group>
+                    <Text size="xs" c="dimmed" tt="uppercase">
+                      Tiempo medio total / espectador
+                    </Text>
+                  </Stack>
+                  <Stack gap={2}>
+                    <Group gap={4} wrap="nowrap">
+                      <IconClock size={18} />
+                      <Text size="xl" fw={700}>
+                        {formatDuration(viewing.avgLiveWatchTimeSeconds)}
+                      </Text>
+                    </Group>
+                    <Text size="xs" c="dimmed" tt="uppercase">
+                      Tiempo medio en vivo
+                    </Text>
+                  </Stack>
+                  <Stack gap={2}>
+                    <Group gap={4} wrap="nowrap">
+                      <IconClock size={18} />
+                      <Text size="xl" fw={700}>
+                        {formatDuration(viewing.avgReplayWatchTimeSeconds)}
+                      </Text>
+                    </Group>
+                    <Text size="xs" c="dimmed" tt="uppercase">
+                      Tiempo medio en diferido
+                    </Text>
+                  </Stack>
+                </>
+              )}
             </SimpleGrid>
             <Divider my="md" />
-            <Text size="xs" c="dimmed">
-              <b>Espectadores únicos</b> = personas distintas que se conectaron
-              (asistencia), reprodujeran o no. <b>Vieron en vivo</b> /{" "}
-              <b>en diferido</b> son quienes <b>reprodujeron de verdad</b> el
-              video durante el live o el replay (una misma persona puede estar en
-              ambos); pueden ser menos que los únicos, lo que revela cuántos
-              llegaron pero no llegaron a ver. Los <b>tiempos</b> miden{" "}
-              <b>reproducción real</b> (solo mientras el video se reproduce): no
-              cuentan la cuenta-regresiva, las pausas ni pestañas de fondo, y los
-              promedios se calculan sobre quienes reprodujeron cada tramo.{" "}
-              <b>Sesiones</b> cuenta conexiones por dispositivo/pestaña, mayor
-              cuando hay reconexiones o multidispositivo.
-            </Text>
-            <Text size="xs" c="dimmed" mt={4}>
-              Tiempo total acumulado: {formatDuration(viewing.totalWatchTimeSeconds)}{" "}
-              (en vivo {formatDuration(viewing.totalLiveWatchTimeSeconds)} · diferido{" "}
-              {formatDuration(viewing.totalReplayWatchTimeSeconds)})
-              {(event.status === "live" || event.status === "replay") && (
-                <> · {viewing.currentConcurrentViewers} viendo ahora</>
-              )}
-            </Text>
+            {detailed ? (
+              <>
+                <Text size="xs" c="dimmed">
+                  <b>Espectadores únicos</b> = personas distintas que se conectaron
+                  (asistencia), reprodujeran o no. <b>Vieron en vivo</b> /{" "}
+                  <b>en diferido</b> son quienes <b>reprodujeron de verdad</b> el
+                  video durante el live o el replay (una misma persona puede estar en
+                  ambos); pueden ser menos que los únicos, lo que revela cuántos
+                  llegaron pero no llegaron a ver. Los <b>tiempos</b> miden{" "}
+                  <b>reproducción real</b> (solo mientras el video se reproduce): no
+                  cuentan la cuenta-regresiva, las pausas ni pestañas de fondo, y los
+                  promedios se calculan sobre quienes reprodujeron cada tramo.{" "}
+                  <b>Sesiones</b> cuenta conexiones por dispositivo/pestaña, mayor
+                  cuando hay reconexiones o multidispositivo.
+                </Text>
+                <Text size="xs" c="dimmed" mt={4}>
+                  Tiempo total acumulado: {formatDuration(viewing.totalWatchTimeSeconds)}{" "}
+                  (en vivo {formatDuration(viewing.totalLiveWatchTimeSeconds)} · diferido{" "}
+                  {formatDuration(viewing.totalReplayWatchTimeSeconds)})
+                  {(event.status === "live" || event.status === "replay") && (
+                    <> · {viewing.currentConcurrentViewers} viendo ahora</>
+                  )}
+                </Text>
+              </>
+            ) : (
+              <Text size="xs" c="dimmed">
+                <b>Espectadores únicos</b> = personas distintas que se conectaron
+                (asistencia). <b>Vieron en vivo</b> / <b>en diferido</b> son quienes
+                reprodujeron de verdad el video. Cambia a <b>Detallado</b> para ver
+                sesiones, pico concurrente y tiempos de reproducción.
+              </Text>
+            )}
           </Card>
         </Grid.Col>
       </Grid>
 
-      <Text size="xs" c="dimmed">
-        Este informe yuxtapone el alcance de las campañas con la asistencia
-        real. No correlaciona qué canal trajo a cada espectador (atribución por
-        canal queda pendiente para una fase posterior).
-      </Text>
+      {/* ─── Distribución de registros (solo informe general) ─── */}
+      {!detailed && registrations && registrations.distributions.length > 0 && (
+        <>
+          <Divider />
+          <Group gap="xs" align="center">
+            <IconUsers size={22} color="var(--mantine-color-grape-6)" />
+            <div>
+              <Title order={4}>Distribución de registros</Title>
+              <Text size="xs" c="dimmed">
+                {registrations.total.toLocaleString()} personas registradas al evento,
+                según los datos del formulario de registro.
+              </Text>
+            </div>
+          </Group>
+          <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
+            {registrations.distributions.map((d) => (
+              <Card key={d.key} withBorder radius="md" p="sm">
+                <Text size="sm" fw={600}>
+                  {DIST_TITLES[d.key]}
+                </Text>
+                <Text size="xs" c="dimmed" mb="sm">
+                  {d.fieldLabel}
+                </Text>
+                <CountryBars
+                  color={DIST_COLORS[d.key]}
+                  unknownLabel="Sin especificar"
+                  unknown={d.unknown}
+                  rows={d.items.map((it) => ({
+                    key: it.value,
+                    flag: d.isCountry ? isoToFlag(it.value) : undefined,
+                    name: it.label ?? (d.isCountry ? countryName(it.value) : it.value),
+                    value: it.count,
+                  }))}
+                />
+              </Card>
+            ))}
+          </SimpleGrid>
+        </>
+      )}
+
+      {detailed && (
+        <Text size="xs" c="dimmed">
+          Este informe yuxtapone el alcance de las campañas con la asistencia
+          real. No correlaciona qué canal trajo a cada espectador (atribución por
+          canal queda pendiente para una fase posterior).
+        </Text>
+      )}
     </Stack>
   );
 }

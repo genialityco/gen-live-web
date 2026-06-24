@@ -14,7 +14,13 @@ import {
   type WaUtmParam, type WaCampaignAnalytics,
   type WaCountryReport, type WaGeoAnalytics,
 } from "../../../api/wa-campaign";
-import { CountryBars, isoToFlag, countryName } from "../../common/CountryBars";
+import {
+  CountryBars,
+  ConversionBars,
+  isoToFlag,
+  countryName,
+  type ComparisonRow,
+} from "../../common/CountryBars";
 
 interface Props {
   campaignId: string;
@@ -88,6 +94,7 @@ export default function WaCampaignDetail({ campaignId, onBack }: Props) {
   const [countryReport, setCountryReport] = useState<WaCountryReport | null>(null);
   const [geo, setGeo] = useState<WaGeoAnalytics | null>(null);
   const [backfilling, setBackfilling] = useState(false);
+  const [unifiedView, setUnifiedView] = useState(false);
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Preview de destinatarios (solo en draft)
@@ -229,6 +236,37 @@ export default function WaCampaignDetail({ campaignId, onBack }: Props) {
   const sentPercent = stats.total > 0 ? Math.round((stats.sent / stats.total) * 100) : 0;
   const readRate = stats.sent > 0 ? ((stats.read / stats.sent) * 100).toFixed(1) : "0";
 
+  // Comparativa por país: une enviados (país declarado del formulario) con
+  // clics (país por IP). Son dimensiones distintas, por eso la unión por código.
+  const countryComparison: ComparisonRow[] = (() => {
+    if (!countryReport && !geo) return [];
+    const map = new Map<string, ComparisonRow>();
+    for (const c of countryReport?.byCountry ?? []) {
+      map.set(c.value, {
+        key: c.value,
+        label: c.label ?? countryName(c.value),
+        flag: isoToFlag(c.value),
+        sent: c.count,
+        clicked: 0,
+      });
+    }
+    for (const c of geo?.byCountry ?? []) {
+      const existing = map.get(c.country);
+      if (existing) {
+        existing.clicked = c.uniqueClickers;
+      } else {
+        map.set(c.country, {
+          key: c.country,
+          label: countryName(c.country),
+          flag: isoToFlag(c.country),
+          sent: 0,
+          clicked: c.uniqueClickers,
+        });
+      }
+    }
+    return [...map.values()];
+  })();
+
   return (
     <Stack gap="md">
       {/* Header */}
@@ -328,50 +366,64 @@ export default function WaCampaignDetail({ campaignId, onBack }: Props) {
           </SimpleGrid>
 
           {Object.keys(analytics.byUtm).length > 0 && (
-            <SimpleGrid cols={{ base: 1, sm: 2 }}>
-              {Object.entries(analytics.byUtm).map(([utmKey, values]) => {
-                const maxUnique = values[0]?.uniqueClickers ?? 1;
-                return (
-                  <Card key={utmKey} withBorder radius="md" p="sm">
-                    <Text size="sm" fw={600} mb="xs" c="dimmed">
-                      {utmKey}
-                    </Text>
-                    <Stack gap={6}>
-                      {values.slice(0, 10).map(({ value, clicks, uniqueClickers }) => (
-                        <div key={value}>
-                          <Group justify="space-between" mb={2}>
-                            <Text size="xs" truncate maw={160}>{value}</Text>
-                            <Group gap={8}>
-                              <Tooltip label="Clickers únicos">
-                                <Text size="xs" fw={700} c="blue">
-                                  {uniqueClickers.toLocaleString()}
-                                </Text>
-                              </Tooltip>
-                              <Tooltip label="Total clics">
-                                <Text size="xs" c="dimmed">
-                                  ({clicks.toLocaleString()})
-                                </Text>
-                              </Tooltip>
-                            </Group>
-                          </Group>
-                          <Progress
-                            value={(uniqueClickers / maxUnique) * 100}
-                            size="sm"
-                            color="blue"
-                            radius="xl"
-                          />
-                        </div>
-                      ))}
-                      {values.length > 10 && (
-                        <Text size="xs" c="dimmed">
-                          +{values.length - 10} valores más
+            <Stack gap="sm">
+              <Group justify="space-between" align="center">
+                <Text size="sm" fw={600}>Distribución por UTM</Text>
+                <Button size="xs" variant="light" onClick={() => setUnifiedView((v) => !v)}>
+                  {unifiedView ? "Separar vistas" : "Unificar vistas"}
+                </Button>
+              </Group>
+              {Object.entries(analytics.byUtm).map(([utmKey, values]) => (
+                <Card key={utmKey} withBorder radius="md" p="sm">
+                  <Text size="sm" fw={600} mb="sm">
+                    Distribución {utmKey}
+                  </Text>
+                  {unifiedView ? (
+                    <ConversionBars
+                      sentLabel="Enviados"
+                      clickedLabel="Clickers únicos"
+                      rows={values.map((v) => ({
+                        key: v.value,
+                        label: v.value,
+                        sent: v.sent,
+                        clicked: v.uniqueClickers,
+                      }))}
+                    />
+                  ) : (
+                    <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="lg">
+                      <div>
+                        <Text size="xs" fw={700} c="grape" ta="center" mb={8}>
+                          Distribución de envío
                         </Text>
-                      )}
-                    </Stack>
-                  </Card>
-                );
-              })}
-            </SimpleGrid>
+                        <CountryBars
+                          color="grape"
+                          rows={values.map((v) => ({
+                            key: v.value,
+                            name: v.value,
+                            value: v.sent,
+                          }))}
+                        />
+                      </div>
+                      <div>
+                        <Text size="xs" fw={700} c="blue" ta="center" mb={8}>
+                          Distribución de clics
+                        </Text>
+                        <CountryBars
+                          color="blue"
+                          secondaryLabel="Total clics"
+                          rows={values.map((v) => ({
+                            key: v.value,
+                            name: v.value,
+                            value: v.uniqueClickers,
+                            secondary: v.clicks,
+                          }))}
+                        />
+                      </div>
+                    </SimpleGrid>
+                  )}
+                </Card>
+              ))}
+            </Stack>
           )}
 
           {analytics.totalClicks === 0 && (
@@ -383,71 +435,83 @@ export default function WaCampaignDetail({ campaignId, onBack }: Props) {
       )}
       {/* ──────────────────────────────────────────────────────────────────────── */}
 
-      {/* ── Países de registro (país declarado en el formulario) ──────────────── */}
-      {countryReport && countryReport.byCountry.length > 0 && (
+      {/* ── Distribución por país: envío (declarado) vs clics (IP) ─────────────── */}
+      {((countryReport && countryReport.byCountry.length > 0) ||
+        (geo && (geo.byCountry.length > 0 || geo.unknown.uniqueClickers > 0))) && (
         <>
           <Divider />
-          <Stack gap={2}>
-            <Title order={5}>Países de registro</Title>
-            <Text size="sm" c="dimmed">
-              Distribución de los destinatarios según el país declarado en el formulario
-              {countryReport.fieldLabel ? ` ("${countryReport.fieldLabel}")` : ""}.
-            </Text>
-          </Stack>
-          <Card withBorder radius="md" p="sm">
-            <CountryBars
-              color="grape"
-              unknownLabel="Sin país declarado"
-              unknown={countryReport.unknown}
-              rows={countryReport.byCountry.map((c) => ({
-                key: c.value,
-                flag: isoToFlag(c.value),
-                name: c.label ?? countryName(c.value),
-                value: c.count,
-              }))}
-            />
-          </Card>
-        </>
-      )}
-
-      {/* ── Países desde donde hicieron clic (geolocalización por IP) ──────────── */}
-      {geo && (geo.byCountry.length > 0 || geo.unknown.uniqueClickers > 0) && (
-        <>
-          <Divider />
-          <Group justify="space-between" align="flex-end">
-            <Stack gap={2}>
-              <Title order={5}>Países desde donde hicieron clic</Title>
-              <Text size="sm" c="dimmed">
-                Ubicación real (geolocalización por IP) desde donde se abrieron los enlaces.
-              </Text>
-            </Stack>
-            {geo.unknown.uniqueClickers > 0 && (
-              <Tooltip label="Re-resuelve el país de clics antiguos guardados sin geolocalización">
-                <Button
-                  size="xs"
-                  variant="light"
-                  color="teal"
-                  loading={backfilling}
-                  onClick={handleBackfillGeo}
-                >
-                  Geolocalizar clics sin país
-                </Button>
-              </Tooltip>
-            )}
+          <Group justify="space-between" align="center">
+            <Title order={5}>Distribución por país</Title>
+            <Group gap="xs">
+              {geo && geo.unknown.uniqueClickers > 0 && (
+                <Tooltip label="Re-resuelve el país de clics antiguos guardados sin geolocalización">
+                  <Button
+                    size="xs"
+                    variant="light"
+                    color="teal"
+                    loading={backfilling}
+                    onClick={handleBackfillGeo}
+                  >
+                    Geolocalizar clics sin país
+                  </Button>
+                </Tooltip>
+              )}
+              <Button size="xs" variant="light" onClick={() => setUnifiedView((v) => !v)}>
+                {unifiedView ? "Separar vistas" : "Unificar vistas"}
+              </Button>
+            </Group>
           </Group>
           <Card withBorder radius="md" p="sm">
-            <CountryBars
-              color="teal"
-              unknownLabel="Sin ubicación determinada"
-              unknown={geo.unknown.uniqueClickers}
-              rows={geo.byCountry.map((c) => ({
-                key: c.country,
-                flag: isoToFlag(c.country),
-                name: countryName(c.country),
-                value: c.uniqueClickers,
-                secondary: c.clicks,
-              }))}
-            />
+            {unifiedView ? (
+              <ConversionBars
+                sentLabel="Enviados (país declarado)"
+                clickedLabel="Clics (país por IP)"
+                rows={countryComparison}
+              />
+            ) : (
+              <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="lg">
+                <div>
+                  <Text size="xs" fw={700} c="grape" ta="center">
+                    Distribución de envío
+                  </Text>
+                  <Text size="xs" c="dimmed" ta="center" mb={8}>
+                    Por país declarado en el formulario
+                  </Text>
+                  <CountryBars
+                    color="grape"
+                    unknownLabel="Sin país declarado"
+                    unknown={countryReport?.unknown}
+                    rows={(countryReport?.byCountry ?? []).map((c) => ({
+                      key: c.value,
+                      flag: isoToFlag(c.value),
+                      name: c.label ?? countryName(c.value),
+                      value: c.count,
+                    }))}
+                  />
+                </div>
+                <div>
+                  <Text size="xs" fw={700} c="blue" ta="center">
+                    Distribución de clics
+                  </Text>
+                  <Text size="xs" c="dimmed" ta="center" mb={8}>
+                    Por país de la IP del clic
+                  </Text>
+                  <CountryBars
+                    color="blue"
+                    secondaryLabel="Total clics"
+                    unknownLabel="Sin ubicación determinada"
+                    unknown={geo?.unknown.uniqueClickers}
+                    rows={(geo?.byCountry ?? []).map((c) => ({
+                      key: c.country,
+                      flag: isoToFlag(c.country),
+                      name: countryName(c.country),
+                      value: c.uniqueClickers,
+                      secondary: c.clicks,
+                    }))}
+                  />
+                </div>
+              </SimpleGrid>
+            )}
           </Card>
         </>
       )}
