@@ -24,6 +24,12 @@ const OrganizationAdmin = lazy(
 );
 const EventAdmin = lazy(() => import("../pages/events/EventAdmin"));
 const EventLanding = lazy(() => import("../pages/events/EventLanding"));
+const PublicEventReport = lazy(
+  () => import("../pages/events/PublicEventReport")
+);
+const PublicEventMetrics = lazy(
+  () => import("../pages/events/PublicEventMetrics")
+);
 // const EventAttend = lazy(() => import("../pages/events/EventAttend"));
 
 export const routes = [
@@ -76,6 +82,18 @@ export const routes = [
   {
     path: "/org/:slug/event/:eventSlug/live",
     element: <LiveViewerPage />,
+  },
+  {
+    // Informe público y compartible del evento (sin login). Solo expone este
+    // informe; no da acceso a ninguna otra sección del admin.
+    path: "/org/:slug/event/:eventSlug/report",
+    element: <PublicEventReport />,
+  },
+  {
+    // Métricas públicas y compartibles del evento (sin login). Solo expone estas
+    // métricas; no da acceso a ninguna otra sección del admin.
+    path: "/org/:slug/event/:eventSlug/metrics",
+    element: <PublicEventMetrics />,
   },
   {
     path: "/admin-auth",

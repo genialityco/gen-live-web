@@ -2,6 +2,7 @@
 // Informe global por evento: unifica campañas de email + WhatsApp con el
 // engagement / tiempo de visualización de los asistentes (yuxtaposición).
 import { api } from "../core/api";
+import type { EventTimelines } from "./events";
 
 export interface EmailCampaignTotals {
   total: number;
@@ -33,7 +34,8 @@ export interface ReportCampaign {
 export interface RegistrationDistributionItem {
   value: string;
   label: string | null;
-  count: number;
+  count: number; // registrados con esta opción
+  viewers: number; // espectadores únicos (asistieron) con esta opción
 }
 
 export interface RegistrationDistribution {
@@ -42,11 +44,13 @@ export interface RegistrationDistribution {
   fieldLabel: string;
   isCountry: boolean;
   items: RegistrationDistributionItem[];
-  unknown: number;
+  unknown: number; // registrados sin valor en este campo
+  unknownViewers: number; // espectadores únicos sin valor en este campo
 }
 
 export interface RegistrationsReport {
   total: number;
+  viewersTotal: number; // registrados que asistieron (espectadores únicos)
   distributions: RegistrationDistribution[];
 }
 
@@ -83,5 +87,60 @@ export interface EventReport {
 
 export async function getEventReport(eventId: string): Promise<EventReport> {
   const { data } = await api.get<EventReport>(`/events/${eventId}/report`);
+  return data;
+}
+
+// ─── Informe público (sin autenticación, por slug del evento) ────────────────
+export interface PublicEventReportMeta {
+  title: string;
+  status: string;
+  schedule?: { startsAt?: string; endsAt?: string } | null;
+  branding?: {
+    header?: { backgroundImageUrl?: string };
+    coverImageUrl?: string;
+  } | null;
+}
+
+export interface PublicEventReportOrg {
+  name: string | null;
+  branding?: { logoUrl?: string | null } | null;
+}
+
+export interface PublicEventReportResponse {
+  event: PublicEventReportMeta;
+  org: PublicEventReportOrg;
+  report: EventReport;
+}
+
+export async function getPublicEventReport(
+  slug: string
+): Promise<PublicEventReportResponse> {
+  const { data } = await api.get<PublicEventReportResponse>(
+    `/events/public/${encodeURIComponent(slug)}/report`
+  );
+  return data;
+}
+
+// ─── Métricas públicas (sin autenticación, por slug del evento) ──────────────
+export interface PublicMetricsSummary {
+  currentConcurrentViewers: number;
+  peakConcurrentViewers: number;
+  totalUniqueViewers: number;
+  lastUpdate: number;
+}
+
+export interface PublicEventMetricsResponse {
+  event: PublicEventReportMeta;
+  org: PublicEventReportOrg;
+  metrics: PublicMetricsSummary;
+  timelines: EventTimelines;
+}
+
+export async function getPublicEventMetrics(
+  slug: string
+): Promise<PublicEventMetricsResponse> {
+  const { data } = await api.get<PublicEventMetricsResponse>(
+    `/events/public/${encodeURIComponent(slug)}/metrics`
+  );
   return data;
 }

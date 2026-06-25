@@ -322,6 +322,29 @@ export async function deleteEvent(eventId: string): Promise<void> {
   await api.delete(`/events/${eventId}`);
 }
 
+// ─── Series temporales para la pestaña de Métricas ───────────────────────────
+// Buckets por minuto (en UTC); el frontend reagrupa a semana/día/hora/minuto.
+export interface TimelineBucket {
+  t: string; // ISO del minuto (UTC)
+  c: number; // conteo en ese minuto
+}
+
+export interface EventTimelines {
+  registeredTotal: number;
+  connectionsTotal: number;
+  registrations: TimelineBucket[]; // momentos de inscripción (registeredAt)
+  connections: TimelineBucket[]; // momentos de conexión (ViewingSession.startedAt)
+}
+
+export async function getEventTimelines(
+  eventId: string
+): Promise<EventTimelines> {
+  const { data } = await api.get<EventTimelines>(
+    `/events/${eventId}/timelines`
+  );
+  return data;
+}
+
 // Actualizar branding del evento
 export async function updateEventBranding(
   eventId: string,

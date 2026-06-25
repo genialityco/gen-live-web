@@ -83,11 +83,11 @@ export default function EventAdmin() {
     }
 
     if (path.endsWith("/metrics")) {
-      return <EventAdminMetrics event={event} />;
+      return <EventAdminMetrics event={event} org={org} />;
     }
 
     if (path.endsWith("/report")) {
-      return <EventAdminReport event={event} />;
+      return <EventAdminReport event={event} org={org} />;
     }
 
     if (path.endsWith("/attendees")) {

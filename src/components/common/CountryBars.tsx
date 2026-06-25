@@ -102,11 +102,18 @@ export function ConversionBars({
   sentLabel = "Enviados",
   clickedLabel = "Clics",
   limit = 15,
+  printAll = false,
 }: {
   rows: ComparisonRow[];
   sentLabel?: string;
   clickedLabel?: string;
   limit?: number;
+  /**
+   * Si es true, las filas que exceden `limit` se renderizan igualmente pero
+   * ocultas en pantalla (clase `bar-print-row`) para que aparezcan al imprimir
+   * el PDF. Requiere que la página defina la regla CSS de impresión.
+   */
+  printAll?: boolean;
 }) {
   const sorted = [...rows].sort((a, b) => b.sent - a.sent || b.clicked - a.clicked);
   if (sorted.length === 0) {
@@ -116,59 +123,85 @@ export function ConversionBars({
       </Text>
     );
   }
-  const max = Math.max(1, ...sorted.map((r) => Math.max(r.sent, r.clicked)));
+  // reduce en vez de Math.max(...spread): con miles de filas el spread de un
+  // array grande desborda la pila ("Maximum call stack size exceeded").
+  const max = sorted.reduce(
+    (m, r) => Math.max(m, r.sent, r.clicked),
+    1,
+  );
+
+  const renderRow = (r: ComparisonRow) => {
+    const conv = r.sent > 0 ? (r.clicked / r.sent) * 100 : null;
+    return (
+      <div key={r.key}>
+        <Group justify="space-between" mb={3} wrap="nowrap">
+          <Text size="xs" truncate maw={180}>
+            {r.flag && (
+              <Text span mr={6}>
+                {r.flag}
+              </Text>
+            )}
+            {r.label}
+          </Text>
+          <Group gap={8} wrap="nowrap">
+            <Tooltip label={sentLabel}>
+              <Text size="xs" fw={700} c="grape">
+                {r.sent.toLocaleString()}
+              </Text>
+            </Tooltip>
+            <Text size="xs" c="dimmed">
+              →
+            </Text>
+            <Tooltip label={clickedLabel}>
+              <Text size="xs" fw={700} c="blue">
+                {r.clicked.toLocaleString()}
+              </Text>
+            </Tooltip>
+            <Badge
+              size="xs"
+              variant="light"
+              color={conv == null ? "gray" : conv >= 1 ? "teal" : "yellow"}
+            >
+              {conv == null ? "—" : `${conv.toFixed(0)}%`}
+            </Badge>
+          </Group>
+        </Group>
+        <Stack gap={2}>
+          <Tooltip label={`${sentLabel}: ${r.sent.toLocaleString()}`} position="right">
+            <Progress value={(r.sent / max) * 100} size="sm" color="grape" radius="xl" />
+          </Tooltip>
+          <Tooltip label={`${clickedLabel}: ${r.clicked.toLocaleString()}`} position="right">
+            <Progress value={(r.clicked / max) * 100} size="sm" color="blue" radius="xl" />
+          </Tooltip>
+        </Stack>
+      </div>
+    );
+  };
+
+  // Tope de filas renderizadas en el PDF: evita inyectar miles de nodos ocultos
+  // (y un PDF inmanejable) cuando un campo tiene altísima cardinalidad.
+  const PRINT_MAX_ROWS = 250;
+  const visible = sorted.slice(0, limit);
+  const overflow = printAll ? sorted.slice(limit, PRINT_MAX_ROWS) : [];
+  // Filas que no se muestran en ningún lado (ni pantalla ni PDF).
+  const moreCount = sorted.length - limit - overflow.length;
   return (
     <Stack gap={10}>
-      {sorted.slice(0, limit).map((r) => {
-        const conv = r.sent > 0 ? (r.clicked / r.sent) * 100 : null;
-        return (
-          <div key={r.key}>
-            <Group justify="space-between" mb={3} wrap="nowrap">
-              <Text size="xs" truncate maw={180}>
-                {r.flag && (
-                  <Text span mr={6}>
-                    {r.flag}
-                  </Text>
-                )}
-                {r.label}
-              </Text>
-              <Group gap={8} wrap="nowrap">
-                <Tooltip label={sentLabel}>
-                  <Text size="xs" fw={700} c="grape">
-                    {r.sent.toLocaleString()}
-                  </Text>
-                </Tooltip>
-                <Text size="xs" c="dimmed">
-                  →
-                </Text>
-                <Tooltip label={clickedLabel}>
-                  <Text size="xs" fw={700} c="blue">
-                    {r.clicked.toLocaleString()}
-                  </Text>
-                </Tooltip>
-                <Badge
-                  size="xs"
-                  variant="light"
-                  color={conv == null ? "gray" : conv >= 1 ? "teal" : "yellow"}
-                >
-                  {conv == null ? "—" : `${conv.toFixed(0)}%`}
-                </Badge>
-              </Group>
-            </Group>
-            <Stack gap={2}>
-              <Tooltip label={`${sentLabel}: ${r.sent.toLocaleString()}`} position="right">
-                <Progress value={(r.sent / max) * 100} size="sm" color="grape" radius="xl" />
-              </Tooltip>
-              <Tooltip label={`${clickedLabel}: ${r.clicked.toLocaleString()}`} position="right">
-                <Progress value={(r.clicked / max) * 100} size="sm" color="blue" radius="xl" />
-              </Tooltip>
-            </Stack>
-          </div>
-        );
-      })}
-      {sorted.length > limit && (
+      {visible.map(renderRow)}
+      {overflow.map((r) => (
+        <div key={r.key} className="bar-print-row">
+          {renderRow(r)}
+        </div>
+      ))}
+      {moreCount > 0 && (
         <Text size="xs" c="dimmed">
-          +{sorted.length - limit} más
+          +{moreCount} más
+        </Text>
+      )}
+      {/* En pantalla, avisa que hay filas extra que sí saldrán en el PDF. */}
+      {printAll && overflow.length > 0 && (
+        <Text size="xs" c="dimmed" className="no-print">
+          ({overflow.length} más en el PDF)
         </Text>
       )}
     </Stack>
