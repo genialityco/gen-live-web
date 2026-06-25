@@ -17,16 +17,33 @@ type Props = {
   title?: string;
 };
 
-/** Asegura los parámetros de autoplay/inline en la URL embed de Vimeo. */
-function ensureAutoplayParams(src: string): string {
+/**
+ * iOS (iPhone/iPad) es el navegador más estricto: el autoplay SOLO funciona en
+ * silencio y debe gestionarlo el propio player de Vimeo (muted=1 en la URL); un
+ * play() programático desde el iframe padre no cuenta como gesto de usuario.
+ * iPadOS se reporta como "MacIntel" con pantalla táctil.
+ */
+function isIosLike(): boolean {
+  if (typeof navigator === "undefined") return false;
+  const ua = navigator.userAgent || "";
+  const iOS = /iP(hone|od|ad)/.test(ua);
+  const iPadOS =
+    navigator.platform === "MacIntel" &&
+    (navigator as any).maxTouchPoints > 1;
+  return iOS || iPadOS;
+}
+
+/** Asegura los parámetros de autoplay/inline (y muted en iOS) en la URL embed. */
+function ensureAutoplayParams(src: string, forceMuted: boolean): string {
   try {
     const u = new URL(src);
     u.searchParams.set("autoplay", "1");
     u.searchParams.set("playsinline", "1");
+    if (forceMuted) u.searchParams.set("muted", "1");
     return u.toString();
   } catch {
     const sep = src.includes("?") ? "&" : "?";
-    return `${src}${sep}autoplay=1&playsinline=1`;
+    return `${src}${sep}autoplay=1&playsinline=1${forceMuted ? "&muted=1" : ""}`;
   }
 }
 
@@ -40,7 +57,13 @@ export function VimeoPlayer({ src, onPlayingChange, title }: Props) {
   // botón para activarlo. Se oculta cuando el usuario ya tiene sonido.
   const [mutedAutoplay, setMutedAutoplay] = useState(false);
 
-  const embedSrc = useMemo(() => ensureAutoplayParams(src), [src]);
+  // En iOS forzamos el arranque en silencio vía URL (única vía permitida);
+  // en el resto intentamos con sonido y caemos a silencio si se bloquea.
+  const forceMuted = useMemo(() => isIosLike(), []);
+  const embedSrc = useMemo(
+    () => ensureAutoplayParams(src, forceMuted),
+    [src, forceMuted],
+  );
 
   useEffect(() => {
     const iframe = iframeRef.current;
@@ -81,15 +104,23 @@ export function VimeoPlayer({ src, onPlayingChange, title }: Props) {
       player.on("bufferend", onBufferEnd);
       player.on("volumechange", onVolumeChange);
 
-      // Arranque automático: primero con sonido; si el navegador lo bloquea
-      // (típico en móvil), reintenta en silencio y muestra el botón de sonido.
-      player.play().catch(() => {
-        player
-          ?.setMuted(true)
-          .then(() => player!.play())
-          .then(() => setMutedAutoplay(true))
-          .catch(() => {});
-      });
+      // Arranque automático.
+      if (forceMuted) {
+        // iOS: ya arranca en silencio por la URL (muted=1). Aseguramos el play
+        // y mostramos el botón de sonido para que el usuario lo active al tocar.
+        setMutedAutoplay(true);
+        player.play().catch(() => {});
+      } else {
+        // Resto: primero con sonido; si el navegador lo bloquea, reintenta en
+        // silencio y muestra el botón de sonido.
+        player.play().catch(() => {
+          player
+            ?.setMuted(true)
+            .then(() => player!.play())
+            .then(() => setMutedAutoplay(true))
+            .catch(() => {});
+        });
+      }
     } catch {
       player = null;
     }
@@ -112,7 +143,7 @@ export function VimeoPlayer({ src, onPlayingChange, title }: Props) {
         /* empty */
       }
     };
-  }, [embedSrc]);
+  }, [embedSrc, forceMuted]);
 
   const enableSound = () => {
     const p = playerRef.current;
