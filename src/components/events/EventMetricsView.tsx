@@ -14,7 +14,6 @@ import {
 import {
   IconUsers,
   IconEye,
-  IconTrendingUp,
   IconPlugConnected,
   IconUserPlus,
   IconLink,
@@ -114,7 +113,7 @@ export default function EventMetricsView({
 
           <Grid>
             {isLive && (
-              <Grid.Col span={{ base: 12, sm: 6, md: 3 }}>
+              <Grid.Col span={{ base: 12, sm: 6, md: 4 }}>
                 <Paper p="xl" withBorder style={{ height: "100%", background: "var(--mantine-color-blue-0)" }}>
                   <Stack gap="xs" align="center">
                     <IconEye size={48} color="var(--mantine-color-blue-6)" />
@@ -132,7 +131,7 @@ export default function EventMetricsView({
               </Grid.Col>
             )}
 
-            <Grid.Col span={{ base: 12, sm: 6, md: isLive ? 3 : 4 }}>
+            <Grid.Col span={{ base: 12, sm: 6, md: isLive ? 4 : 6 }}>
               <Paper p="xl" withBorder style={{ height: "100%", background: "var(--mantine-color-grape-0)" }}>
                 <Stack gap="xs" align="center">
                   <IconUserPlus size={48} color="var(--mantine-color-grape-6)" />
@@ -149,24 +148,7 @@ export default function EventMetricsView({
               </Paper>
             </Grid.Col>
 
-            <Grid.Col span={{ base: 12, sm: 6, md: isLive ? 3 : 4 }}>
-              <Paper p="xl" withBorder style={{ height: "100%", background: "var(--mantine-color-orange-0)" }}>
-                <Stack gap="xs" align="center">
-                  <IconTrendingUp size={48} color="var(--mantine-color-orange-6)" />
-                  <Text size="xs" c="dimmed" ta="center" fw={500}>
-                    Pico Máximo
-                  </Text>
-                  <Text size="2.5rem" fw={700} c="orange">
-                    {metrics.peakConcurrentViewers}
-                  </Text>
-                  <Text size="xs" c="dimmed">
-                    Mayor concurrencia
-                  </Text>
-                </Stack>
-              </Paper>
-            </Grid.Col>
-
-            <Grid.Col span={{ base: 12, sm: 6, md: isLive ? 3 : 4 }}>
+            <Grid.Col span={{ base: 12, sm: 6, md: isLive ? 4 : 6 }}>
               <Paper p="xl" withBorder style={{ height: "100%", background: "var(--mantine-color-teal-0)" }}>
                 <Stack gap="xs" align="center">
                   <IconUsers size={48} color="var(--mantine-color-teal-6)" />
@@ -221,10 +203,6 @@ export default function EventMetricsView({
           <Text size="sm">
             • <strong>Espectadores Ahora:</strong> Usuarios viendo el evento en
             este momento (actualización en tiempo real)
-          </Text>
-          <Text size="sm">
-            • <strong>Pico Máximo:</strong> Mayor cantidad de espectadores
-            concurrentes alcanzado durante el live
           </Text>
           <Text size="sm">
             • <strong>Total de Asistentes:</strong> Todos los usuarios únicos que
