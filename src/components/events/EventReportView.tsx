@@ -1,4 +1,4 @@
-import { type ReactNode } from "react";
+import { type ReactNode, useEffect, useRef } from "react";
 import {
   Stack,
   Card,
@@ -139,11 +139,17 @@ const PRINT_CSS = `
      ocupe menos ancho y no se extienda en tantas páginas. */
   html { font-size: 12px !important; }
 
-  body * { visibility: hidden !important; }
-  .event-report, .event-report * { visibility: visible !important; }
+  /* AISLAMIENTO DE IMPRESIÓN (sin position:absolute).
+     El absolute rompía la paginación multipágina (contenido solapado/cortado).
+     En su lugar, un efecto JS marca (en beforeprint) los hermanos fuera de la
+     ruta del informe con [data-print-hidden] y colapsa los contenedores
+     ancestros con [data-print-contents]. Así el informe queda en FLUJO NORMAL
+     (el navegador pagina bien) y sin espacio en blanco arriba. */
+  [data-print-hidden] { display: none !important; }
+  [data-print-contents] {
+    display: contents !important;
+  }
   .event-report {
-    position: absolute !important;
-    left: 0; top: 0; width: 100%;
     box-sizing: border-box;
     /* El relleno reemplaza al margen de @page (que ponemos en 0) para que el
        navegador no dibuje su encabezado/pie con el título y la URL. */
@@ -164,6 +170,15 @@ const PRINT_CSS = `
     box-shadow: none !important;
     border-color: #dee2e6 !important;
   }
+  /* Las tarjetas que pueden ser más altas que una página NO deben forzar
+     break-inside:avoid: si no caben, el navegador las desborda y el contenido
+     se solapa/corta entre páginas (bug visible en el texto explicativo). Se
+     dejan fragmentar y se protegen sus bloques internos para cortes limpios. */
+  .event-report .report-card-breakable { break-inside: auto !important; }
+  .event-report .report-card-breakable .mantine-SimpleGrid-root {
+    break-inside: avoid;
+  }
+  .event-report .report-legend { break-inside: avoid; }
   .report-print-header { break-after: avoid; break-inside: avoid; }
   .report-section { break-inside: avoid; }
 
@@ -189,6 +204,68 @@ export default function EventReportView({
 }: EventReportViewProps) {
   const { email, whatsapp, viewing, registrations } = report;
   const detailed = mode === "detallado";
+
+  // Aislamiento de impresión en FLUJO NORMAL (sin position:absolute, que rompía
+  // la paginación y solapaba el contenido entre páginas). Antes de imprimir,
+  // ocultamos los hermanos fuera de la ruta del informe y colapsamos sus
+  // contenedores ancestros (display:contents); lo revertimos al terminar.
+  const printCleanupRef = useRef<(() => void) | null>(null);
+  useEffect(() => {
+    const applyPrintIsolation = () => {
+      if (printCleanupRef.current) return; // ya aplicado (idempotente)
+      const report = document.querySelector<HTMLElement>(".event-report");
+      if (!report) return;
+
+      const hidden: HTMLElement[] = [];
+      const collapsed: HTMLElement[] = [];
+
+      let child: HTMLElement = report;
+      let parent = report.parentElement;
+      while (parent) {
+        // Ocultar los hermanos que no forman parte de la ruta al informe
+        for (const sib of Array.from(parent.children)) {
+          if (sib !== child && sib instanceof HTMLElement) {
+            sib.setAttribute("data-print-hidden", "");
+            hidden.push(sib);
+          }
+        }
+        // No colapsar <body>: es la caja de página. Los demás ancestros sí.
+        if (parent === document.body) break;
+        parent.setAttribute("data-print-contents", "");
+        collapsed.push(parent);
+        child = parent;
+        parent = parent.parentElement;
+      }
+
+      printCleanupRef.current = () => {
+        hidden.forEach((el) => el.removeAttribute("data-print-hidden"));
+        collapsed.forEach((el) => el.removeAttribute("data-print-contents"));
+      };
+    };
+
+    const revertPrintIsolation = () => {
+      printCleanupRef.current?.();
+      printCleanupRef.current = null;
+    };
+
+    window.addEventListener("beforeprint", applyPrintIsolation);
+    window.addEventListener("afterprint", revertPrintIsolation);
+
+    // Respaldo para navegadores que no disparan before/afterprint de forma fiable
+    const mql = window.matchMedia("print");
+    const onMediaChange = (e: MediaQueryListEvent) => {
+      if (e.matches) applyPrintIsolation();
+      else revertPrintIsolation();
+    };
+    mql.addEventListener?.("change", onMediaChange);
+
+    return () => {
+      window.removeEventListener("beforeprint", applyPrintIsolation);
+      window.removeEventListener("afterprint", revertPrintIsolation);
+      mql.removeEventListener?.("change", onMediaChange);
+      revertPrintIsolation();
+    };
+  }, []);
 
   // Tasas derivadas (evita división por cero)
   const emailClickRate = email.totals.sent
@@ -369,7 +446,7 @@ export default function EventReportView({
 
         {/* ─── Engagement / visualización ─── */}
         <Grid.Col span={12}>
-          <Card withBorder radius="md">
+          <Card withBorder radius="md" className="report-card-breakable">
             <Group gap="xs" mb="md">
               <IconEye size={22} color="var(--mantine-color-grape-6)" />
               <Title order={4}>Engagement y visualización</Title>
@@ -449,7 +526,7 @@ export default function EventReportView({
 
             <Divider my="md" />
             {detailed ? (
-              <>
+              <div className="report-legend">
                 <Text size="xs" c="dimmed">
                   <b>Espectadores únicos</b> = personas distintas que se conectaron
                   (asistencia), reprodujeran o no. <b>Vieron en vivo</b> /{" "}
@@ -471,9 +548,9 @@ export default function EventReportView({
                     <> · {viewing.currentConcurrentViewers} viendo ahora</>
                   )}
                 </Text>
-              </>
+              </div>
             ) : (
-              <Text size="xs" c="dimmed">
+              <Text size="xs" c="dimmed" className="report-legend">
                 <b>Espectadores únicos</b> = personas distintas que se conectaron
                 (asistencia). <b>Vieron en vivo</b> / <b>en diferido</b> son quienes
                 reprodujeron de verdad el video. Cambia a <b>Detallado</b> para ver
