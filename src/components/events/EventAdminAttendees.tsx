@@ -72,10 +72,14 @@ interface LiveAttendee {
   status: "registered" | "attended" | "cancelled";
   registeredAt: string;
   checkedIn: boolean;
+  lastLoginAt?: string;
+  firebaseUID?: string;
   viewingStats?: {
     totalSessions: number;
-    totalWatchTimeSeconds: number;
-    liveWatchTimeSeconds: number;
+    totalWatchTimeSeconds?: number;
+    liveWatchTimeSeconds?: number;
+    // Tiempo de reproducción real en diferido (solo replay-attendees)
+    replayWatchTimeSeconds?: number;
     lastHeartbeat?: string;
   };
 }
@@ -100,6 +104,9 @@ export default function EventAdminAttendees({
   const [liveAttendeesStats, setLiveAttendeesStats] = useState<{
     total: number;
   } | null>(null);
+
+  // Diferidos (estuvieron presentes en el diferido; puede solaparse con asistentes)
+  const [deferredUsers, setDeferredUsers] = useState<LiveAttendee[]>([]);
 
   // Paginación
   const [registeredPage, setRegisteredPage] = useState(1);
@@ -137,30 +144,6 @@ export default function EventAdminAttendees({
     if (!eventEndMs) return "Sin fecha de finalización";
     return new Date(eventEndMs).toLocaleString("es-ES");
   }, [eventEndMs]);
-
-  // Set de asistentes (liveAttendees) para excluirlos de diferidos
-  const asistentesKeySet = useMemo(() => {
-    const keys = liveAttendees
-      .map((la) => getAttendeeKey(getAttendeeObj(la.attendeeId)))
-      .filter(Boolean) as string[];
-    return new Set(keys);
-  }, [liveAttendees]);
-
-  // Diferidos: eventUsers cuyo lastLoginAt > fin del evento
-  const deferredUsers = useMemo(() => {
-    if (!eventEndMs) return [];
-
-    return eventUsers.filter((eu) => {
-      const attendee = getAttendeeObj(eu.attendeeId);
-      const key = attendee ? getAttendeeKey(attendee) : null;
-
-      // si fue asistente en vivo, no lo contamos como diferido
-      if (key && asistentesKeySet.has(key)) return false;
-
-      const loginMs = eu.lastLoginAt ? new Date(eu.lastLoginAt).getTime() : NaN;
-      return !Number.isNaN(loginMs) && loginMs > eventEndMs;
-    });
-  }, [eventEndMs, eventUsers, asistentesKeySet]);
 
   // Obtener campos identificadores
   const getIdentifierFields = () => {
@@ -294,7 +277,7 @@ export default function EventAdminAttendees({
 
           const lastLoginStr = ""; // LiveAttendee no trae lastLoginAt
           const liveMinutes = eu.viewingStats
-            ? Math.floor(eu.viewingStats.liveWatchTimeSeconds / 60)
+            ? Math.floor((eu.viewingStats.liveWatchTimeSeconds ?? 0) / 60)
             : 0;
 
           const lastHeartbeatStr = eu.viewingStats?.lastHeartbeat
@@ -315,6 +298,50 @@ export default function EventAdminAttendees({
         });
       };
 
+      const buildRowsForReplayAttendees = (
+        users: LiveAttendee[]
+      ): (string | number)[][] => {
+        return users.map((eu) => {
+          const attendee = getAttendeeObj(eu.attendeeId);
+
+          const email = (attendee as any)?.email ?? "-";
+
+          const rowFields = allFields.map((field) =>
+            attendee
+              ? formatFieldValue(
+                  field.id,
+                  (attendee as any).registrationData?.[field.id]
+                )
+              : "-"
+          );
+
+          const registeredAtStr = eu.registeredAt
+            ? new Date(eu.registeredAt).toLocaleString("es-ES")
+            : "";
+
+          // Tiempo de reproducción real en diferido
+          const replayMinutes = eu.viewingStats
+            ? Math.floor((eu.viewingStats.replayWatchTimeSeconds ?? 0) / 60)
+            : 0;
+
+          const lastHeartbeatStr = eu.viewingStats?.lastHeartbeat
+            ? new Date(eu.viewingStats.lastHeartbeat).toLocaleString("es-ES")
+            : "Nunca";
+
+          return [
+            "Diferido",
+            email,
+            ...rowFields,
+            registeredAtStr,
+            "", // Último acceso: no aplica (se usa última actividad)
+            eu.checkedIn ? "Sí" : "No",
+            "", // Firebase UID no viene aquí
+            replayMinutes,
+            lastHeartbeatStr,
+          ];
+        });
+      };
+
       const inscritosSheetData: (string | number)[][] = [
         commonHeader,
         ...buildRowsForEventUsers(inscritos, "Inscrito"),
@@ -327,7 +354,7 @@ export default function EventAdminAttendees({
 
       const diferidosSheetData: (string | number)[][] = [
         commonHeader,
-        ...buildRowsForEventUsers(diferidos, "Diferido"),
+        ...buildRowsForReplayAttendees(diferidos),
       ];
 
       const wb = XLSX.utils.book_new();
@@ -367,18 +394,23 @@ export default function EventAdminAttendees({
       const orgResponse = await api.get(`/orgs/${org._id}`);
       const orgSlug = orgResponse.data.domainSlug;
 
-      const [eventUsersResponse, liveAttendeesResponse, formResponse] =
-        await Promise.all([
-          api
-            .get(`/event-users/event/${event._id}`)
-            .catch(() => ({ data: [] })),
-          api
-            .get(`/event-users/event/${event._id}/live-attendees`)
-            .catch(() => ({ data: [] })),
-          api
-            .get(`/orgs/slug/${orgSlug}/registration-form`)
-            .catch(() => ({ data: null })),
-        ]);
+      const [
+        eventUsersResponse,
+        liveAttendeesResponse,
+        replayAttendeesResponse,
+        formResponse,
+      ] = await Promise.all([
+        api.get(`/event-users/event/${event._id}`).catch(() => ({ data: [] })),
+        api
+          .get(`/event-users/event/${event._id}/live-attendees`)
+          .catch(() => ({ data: [] })),
+        api
+          .get(`/event-users/event/${event._id}/replay-attendees`)
+          .catch(() => ({ data: [] })),
+        api
+          .get(`/orgs/slug/${orgSlug}/registration-form`)
+          .catch(() => ({ data: null })),
+      ]);
 
       // ---------- INSCRITOS (EventUsers) ----------
       const validEventUsersRaw = eventUsersResponse.data.filter(
@@ -422,11 +454,37 @@ export default function EventAdminAttendees({
         }
       );
 
+      // ---------- REPLAY ATTENDEES (diferidos) ----------
+      // No se excluye a los asistentes en vivo: una persona puede aparecer en
+      // ambas listas si también volvió al diferido.
+      const validReplayAttendeesRaw = replayAttendeesResponse.data.filter(
+        (eu: LiveAttendee) =>
+          typeof eu.attendeeId === "object" && eu.attendeeId !== null
+      );
+
+      const seenReplay = new Set<string>();
+      const validReplayAttendees = validReplayAttendeesRaw.filter(
+        (eu: LiveAttendee) => {
+          const attendee = getAttendeeObj(eu.attendeeId);
+          if (!attendee) return false;
+
+          const key = getAttendeeKey(attendee) || null;
+          if (!key) return true;
+
+          if (seenReplay.has(key)) return false;
+
+          seenReplay.add(key);
+          return true;
+        }
+      );
+
       setEventUsers(validEventUsers);
       setEventUsersStats({ total: validEventUsers.length });
 
       setLiveAttendees(validLiveAttendees);
       setLiveAttendeesStats({ total: validLiveAttendees.length });
+
+      setDeferredUsers(validReplayAttendees);
 
       setRegistrationForm(formResponse.data);
 
@@ -741,7 +799,7 @@ export default function EventAdminAttendees({
 
                     const liveMinutes = eventUser.viewingStats
                       ? Math.floor(
-                          eventUser.viewingStats.liveWatchTimeSeconds / 60
+                          (eventUser.viewingStats.liveWatchTimeSeconds ?? 0) / 60
                         )
                       : 0;
 
@@ -856,8 +914,10 @@ export default function EventAdminAttendees({
             <Alert variant="light" color="blue">
               <Text>No hay diferidos detectados.</Text>
               <Text size="sm" c="dimmed" mt="xs">
-                Se consideran diferidos quienes ingresaron después del fin del
-                evento (endedAt / schedule.endsAt), usando lastLoginAt.
+                Se consideran diferidos quienes estuvieron presentes después del
+                fin del evento (endedAt / schedule.endsAt). Puede solaparse con
+                asistentes en vivo. El tiempo mostrado es la reproducción real en
+                diferido.
               </Text>
             </Alert>
           ) : (
@@ -868,8 +928,8 @@ export default function EventAdminAttendees({
                     {getIdentifierFields().map((field) => (
                       <Table.Th key={field.id}>{field.label}</Table.Th>
                     ))}
-                    <Table.Th>Tipo</Table.Th>
-                    <Table.Th>Último acceso</Table.Th>
+                    <Table.Th>Tiempo en diferido</Table.Th>
+                    <Table.Th>Última actividad</Table.Th>
                     <Table.Th>Acciones</Table.Th>
                   </Table.Tr>
                 </Table.Thead>
@@ -878,17 +938,23 @@ export default function EventAdminAttendees({
                   {deferredPaginated.map((eventUser) => {
                     const attendee = getAttendeeObj(eventUser.attendeeId);
 
-                    const lastLogin = eventUser.lastLoginAt
-                      ? new Date(eventUser.lastLoginAt).toLocaleString(
-                          "es-ES",
-                          {
-                            day: "2-digit",
-                            month: "2-digit",
-                            year: "2-digit",
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          }
+                    const replayMinutes = eventUser.viewingStats
+                      ? Math.floor(
+                          (eventUser.viewingStats.replayWatchTimeSeconds ?? 0) /
+                            60
                         )
+                      : 0;
+
+                    const lastActivity = eventUser.viewingStats?.lastHeartbeat
+                      ? new Date(
+                          eventUser.viewingStats.lastHeartbeat
+                        ).toLocaleString("es-ES", {
+                          day: "2-digit",
+                          month: "2-digit",
+                          year: "2-digit",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })
                       : "Nunca";
 
                     return (
@@ -907,14 +973,14 @@ export default function EventAdminAttendees({
                         ))}
 
                         <Table.Td>
-                          <Badge variant="light" size="sm">
-                            Diferido
+                          <Badge variant="light" size="sm" color="indigo">
+                            {replayMinutes} min
                           </Badge>
                         </Table.Td>
 
                         <Table.Td>
                           <Text size="xs" c="dimmed">
-                            {lastLogin}
+                            {lastActivity}
                           </Text>
                         </Table.Td>
 
