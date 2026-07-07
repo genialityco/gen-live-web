@@ -79,7 +79,13 @@ export default function EventAdmin() {
     const path = location.pathname;
 
     if (path.endsWith("/control")) {
-      return <EventAdminControl event={event} onEventUpdate={setEvent} />;
+      return (
+        <EventAdminControl
+          event={event}
+          orgSlug={org.domainSlug}
+          onEventUpdate={setEvent}
+        />
+      );
     }
 
     if (path.endsWith("/metrics")) {

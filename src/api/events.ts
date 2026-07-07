@@ -103,6 +103,13 @@ export async function updateEventStream(
   return data;
 }
 
+export async function setEmergencyMode(eventId: string, active: boolean) {
+  const { data } = await api.patch(`/events/${eventId}/emergency-mode`, {
+    active,
+  });
+  return data;
+}
+
 // Registro de usuarios a eventos (sin autenticación)
 export interface RegisterToEventData {
   email: string; // Campo obligatorio del sistema

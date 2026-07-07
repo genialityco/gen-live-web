@@ -45,6 +45,7 @@ import {
 } from "../../api/events";
 import { useAuth } from "../../auth/AuthProvider";
 import { useEventRealtime } from "../../hooks/useEventRealtime";
+import { useEventEmergency } from "../../hooks/useEventEmergency";
 import { needsProfileUpdate } from "../../utils/registration-completeness";
 import { AdvancedRegistrationForm } from "../../components/auth/AdvancedRegistrationForm";
 import UserSession from "../../components/auth/UserSession";
@@ -372,13 +373,22 @@ export default function EventAttendGcore() {
   const [checkingRegistration, setCheckingRegistration] =
     useState<boolean>(true);
 
+  // Modo emergencia (fallback ante Mongo lento/caído): escucha RTDB directo,
+  // sin tocar Mongo. Cuando está activo, sustituye a las fuentes normales
+  // (status/playbackUrl/finalEvent/branding) de forma transparente para el
+  // asistente — mismo componente, sin banner ni redirección.
+  const emergency = useEventEmergency(slug, eventSlug);
+  const emergencyReady = emergency.active && !!emergency.data;
+
   const eventSlugToUse = eventSlug || "";
   const {
     resolved: realtimeEvent,
-    status,
+    status: rawStatus,
     loading: eventLoading,
     reportPlayback,
   } = useEventRealtime(eventSlugToUse);
+
+  const status = emergencyReady ? emergency.data!.status : rawStatus;
 
   const [timeLeft, setTimeLeft] = useState<string>("");
 
@@ -388,11 +398,30 @@ export default function EventAttendGcore() {
 
   const isOwner = !!(user && org && org.ownerUid === user.uid);
 
-  // Branding: evento tiene prioridad sobre org; se recalcula cuando event carga
-  const brand = resolveBrandingColors(org, event);
+  // Branding: evento tiene prioridad sobre org; se recalcula cuando event carga.
+  // En modo emergencia sale del cache RTDB (orgBranding/eventBranding), no de Mongo.
+  const brand = emergencyReady
+    ? resolveBrandingColors(
+        { branding: emergency.data!.orgBranding } as unknown as Org,
+        { branding: emergency.data!.eventBranding } as unknown as EventItem,
+      )
+    : resolveBrandingColors(org, event);
   const theme = useMemo(() => makeTheme(brand), [brand]);
 
-  const [playbackUrl, setPlaybackUrl] = useState<string | null>(null);
+  // Header/chat en modo emergencia: sin `org` (no se carga desde Mongo), se
+  // reconstruye lo mínimo desde el cache para que el header luzca igual.
+  const headerOrg = emergencyReady
+    ? ({
+        name: emergency.data!.title,
+        branding: emergency.data!.orgBranding,
+      } as unknown as Org)
+    : org;
+  const effectiveEventId = emergencyReady ? emergency.data!.eventId : event?._id;
+
+  const [rawPlaybackUrl, setPlaybackUrl] = useState<string | null>(null);
+  const playbackUrl = emergencyReady
+    ? emergency.data!.playbackHlsUrl
+    : rawPlaybackUrl;
 
   // Evita disparar el evento GA `video_start` más de una vez por carga de página
   const videoStartTracked = useRef(false);
@@ -409,6 +438,13 @@ export default function EventAttendGcore() {
 
   // 1) Cargar datos de organización y evento
   useEffect(() => {
+    if (emergency.active) {
+      // Modo emergencia: no tocar Mongo. status/playback/branding salen del
+      // cache de RTDB (ver arriba).
+      setLoading(false);
+      return;
+    }
+
     const loadData = async () => {
       if (!slug || !eventSlug) {
         setError("Parámetros de URL inválidos");
@@ -443,10 +479,17 @@ export default function EventAttendGcore() {
     };
 
     void loadData();
-  }, [slug, eventSlug]);
+  }, [slug, eventSlug, emergency.active]);
 
   // 2) Verificar registro cuando tenemos evento y (potencialmente) usuario
   useEffect(() => {
+    if (emergency.active) {
+      // Sin Mongo no se puede verificar registro — el modo emergencia se
+      // muestra a cualquiera (transmisión + chat, sin gate de registro).
+      setCheckingRegistration(false);
+      return;
+    }
+
     const checkRegistration = async () => {
       if (!event) return;
 
@@ -519,10 +562,11 @@ export default function EventAttendGcore() {
     };
 
     void checkRegistration();
-  }, [event, user]);
+  }, [event, user, emergency.active]);
 
   // 3) Redirigir a la landing si NO está registrado (y no es owner)
   useEffect(() => {
+    if (emergency.active) return; // modo emergencia: sin gate de registro
     if (!slug || !eventSlug) return;
 
     if (!checkingRegistration && !loading && !eventLoading) {
@@ -542,9 +586,18 @@ export default function EventAttendGcore() {
     slug,
     eventSlug,
     navigate,
+    emergency.active,
   ]);
 
-  const finalEvent = realtimeEvent || event;
+  const finalEvent = emergencyReady
+    ? ({
+        title: emergency.data!.title,
+        stream: {
+          url: emergency.data!.streamUrl ?? undefined,
+          provider: emergency.data!.streamProvider ?? undefined,
+        },
+      } as unknown as EventItem)
+    : realtimeEvent || event;
 
   // ¿Faltan datos obligatorios por completar antes de poder ver el evento?
   // Mismo criterio (visibilidad efectiva) que el formulario, para no exigir
@@ -623,6 +676,7 @@ export default function EventAttendGcore() {
 
   // Tracking asistencia
   useEffect(() => {
+    if (emergency.active) return;
     if (!event || !attendeeId || !isRegistered || needsUpdate) return;
 
     const syncTracking = async () => {
@@ -637,10 +691,11 @@ export default function EventAttendGcore() {
     };
 
     void syncTracking();
-  }, [event?._id, attendeeId, isRegistered, status, needsUpdate]);
+  }, [event?._id, attendeeId, isRegistered, status, needsUpdate, emergency.active]);
 
   useEffect(() => {
     const run = async () => {
+      if (emergency.active) return; // playback viene del cache de RTDB
       if (!eventSlugToUse) return;
 
       // No iniciar la reproducción mientras el usuario debe completar su perfil
@@ -681,9 +736,10 @@ export default function EventAttendGcore() {
     };
 
     void run();
-  }, [eventSlugToUse, status, needsUpdate]);
+  }, [eventSlugToUse, status, needsUpdate, emergency.active]);
 
   useEffect(() => {
+    if (emergency.active) return; // "unirme al estudio" fuera de alcance en emergencia
     if (!eventSlugToUse) return;
     if (status !== "live") return;
 
@@ -718,7 +774,7 @@ export default function EventAttendGcore() {
     }
 
     return () => unsub?.();
-  }, [eventSlugToUse, status]);
+  }, [eventSlugToUse, status, emergency.active]);
 
   const handleJoinRequest = async () => {
     if (!eventSlugToUse) return;
@@ -748,6 +804,7 @@ export default function EventAttendGcore() {
 
   // Poll frame config every 2s
   useEffect(() => {
+    if (emergency.active) return;
     if (!eventSlugToUse) return;
 
     let alive = true;
@@ -774,13 +831,14 @@ export default function EventAttendGcore() {
       alive = false;
       clearInterval(interval);
     };
-  }, [eventSlugToUse]);
+  }, [eventSlugToUse, emergency.active]);
 
   // ----------------------------------------------------------
   // Render con MantineProvider + branding
   // ----------------------------------------------------------
-  const contentLoading =
-    loading || eventLoading || checkingRegistration || (!finalEvent && !error);
+  const contentLoading = emergency.active
+    ? !emergency.data
+    : loading || eventLoading || checkingRegistration || (!finalEvent && !error);
 
   const effectiveChatName =
     sessionName ||
@@ -790,8 +848,10 @@ export default function EventAttendGcore() {
 
   const scale = 0.8;
 
-  const joinMessage = status === "live" ? getJoinMessage(joinState) : "";
+  const joinMessage =
+    !emergency.active && status === "live" ? getJoinMessage(joinState) : "";
   const canRequestJoin =
+    !emergency.active &&
     status === "live" &&
     (isRegistered || isOwner) &&
     mode !== "studio" &&
@@ -885,12 +945,12 @@ export default function EventAttendGcore() {
       >
         {/* HEADER con branding */}
         <EventAttendHeader
-          org={org}
+          org={headerOrg}
           slug={slug}
           eventSlug={eventSlug}
           isOwner={isOwner}
-          orgId={org?._id}
-          eventId={event?._id}
+          orgId={emergencyReady ? undefined : org?._id}
+          eventId={effectiveEventId}
         />
 
         {/* ESTADO CARGANDO */}
@@ -906,7 +966,7 @@ export default function EventAttendGcore() {
         )}
 
         {/* ERROR / NO EVENTO */}
-        {!contentLoading && (error || !org || !finalEvent) && (
+        {!contentLoading && !emergency.active && (error || !org || !finalEvent) && (
           <Container size="sm" py="xl">
             <Card radius="lg" withBorder>
               <Stack align="center" gap="md">
@@ -943,7 +1003,9 @@ export default function EventAttendGcore() {
         )}
 
         {/* CONTENIDO PRINCIPAL */}
-        {!contentLoading && !error && org && finalEvent && (
+        {!contentLoading &&
+          finalEvent &&
+          (emergency.active || (!error && org)) && (
           mobileStream ? (
             /* ── Twitch / Kick-style mobile layout ── */
             <Box style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", overflow: "hidden" }}>
@@ -1018,7 +1080,7 @@ export default function EventAttendGcore() {
                   >
                     {getStatusText(status)}
                   </Badge>
-                  {status === "live" && mode !== "studio" && (
+                  {!emergency.active && status === "live" && mode !== "studio" && (
                     <ActionIcon
                       size="sm"
                       variant={joinState === "pending" ? "filled" : "light"}
@@ -1057,7 +1119,7 @@ export default function EventAttendGcore() {
               </Box>
 
               {/* Chat — ocupa el espacio restante */}
-              {event?._id ? (
+              {effectiveEventId ? (
                 <Box
                   style={{
                     flex: 1,
@@ -1083,9 +1145,9 @@ export default function EventAttendGcore() {
                         key="chat-mobile"
                         src={`https://chat-geniality.netlify.app?${new URLSearchParams({
                           nombre: effectiveChatName,
-                          chatid: event._id,
+                          chatid: effectiveEventId,
                           iduser: "",
-                          eventid: event._id,
+                          eventid: effectiveEventId,
                           view: "chat",
                           message_highlighted: "",
                         }).toString()}`}
@@ -1101,9 +1163,9 @@ export default function EventAttendGcore() {
                         key="questions-mobile"
                         src={`https://chat-geniality.netlify.app?${new URLSearchParams({
                           nombre: effectiveChatName,
-                          chatid: event._id,
+                          chatid: effectiveEventId,
                           iduser: "",
-                          eventid: event._id,
+                          eventid: effectiveEventId,
                           view: "questions",
                           message_highlighted: "",
                         }).toString()}`}
@@ -1373,7 +1435,7 @@ export default function EventAttendGcore() {
                   </Card>
 
                   {/* Botón sutil para solicitar unirse al estudio */}
-                  {status === "live" && mode !== "studio" && (
+                  {!emergency.active && status === "live" && mode !== "studio" && (
                     <Group justify="center" mt="xs">
                       <Button
                         variant="subtle"
@@ -1421,7 +1483,7 @@ export default function EventAttendGcore() {
                           )}
                         </Group>
 
-                        {event?._id ? (
+                        {effectiveEventId ? (
                           <Tabs defaultValue="chat" keepMounted={false}>
                             <Tabs.List grow>
                               <Tabs.Tab value="chat">Chat</Tabs.Tab>
@@ -1444,9 +1506,9 @@ export default function EventAttendGcore() {
                                   src={`https://chat-geniality.netlify.app?${new URLSearchParams(
                                     {
                                       nombre: effectiveChatName,
-                                      chatid: event._id,
+                                      chatid: effectiveEventId,
                                       iduser: "",
-                                      eventid: event._id,
+                                      eventid: effectiveEventId,
                                       view: "chat",
                                       message_highlighted: "",
                                     },
@@ -1483,9 +1545,9 @@ export default function EventAttendGcore() {
                                   src={`https://chat-geniality.netlify.app?${new URLSearchParams(
                                     {
                                       nombre: effectiveChatName,
-                                      chatid: event._id,
+                                      chatid: effectiveEventId,
                                       iduser: "",
-                                      eventid: event._id,
+                                      eventid: effectiveEventId,
                                       view: "questions",
                                       message_highlighted: "",
                                     },
@@ -1568,8 +1630,9 @@ export default function EventAttendGcore() {
           </Box>
         )} */}
 
-        {/* Live Poll Viewer - Drawer de encuestas en tiempo real */}
-        {slug && eventSlug && event?._id && (
+        {/* Live Poll Viewer - Drawer de encuestas en tiempo real (fuera de
+            alcance en modo emergencia: depende de registro/Mongo) */}
+        {!emergency.active && slug && eventSlug && event?._id && (
           <LivePollViewer
             orgSlug={slug}
             eventSlug={eventSlug}

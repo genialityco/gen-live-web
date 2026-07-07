@@ -14,23 +14,58 @@ import {
   Badge,
   Center,
   Select,
+  Switch,
 } from "@mantine/core";
 import { IconPlayerPlay, IconRefresh, IconVideo } from "@tabler/icons-react";
 import { notifications } from "@mantine/notifications";
-import { type EventItem, setEventStatus, updateEventStream } from "../../api/events";
+import {
+  type EventItem,
+  setEventStatus,
+  updateEventStream,
+  setEmergencyMode,
+} from "../../api/events";
 import { getMuxReplayByAsset, listMuxAssets, type MuxAsset } from "../../api/livekit-service";
 import EventStreamForm from "./EventStreamForm";
 import { VodHlsPlayer } from "../../pages/viewer/VodHlsPlayer";
+import { useEventEmergency } from "../../hooks/useEventEmergency";
 
 interface EventAdminControlProps {
   event: EventItem;
+  orgSlug: string;
   onEventUpdate: (event: EventItem) => void;
 }
 
 export default function EventAdminControl({
   event,
+  orgSlug,
   onEventUpdate,
 }: EventAdminControlProps) {
+  const emergency = useEventEmergency(orgSlug, event.slug);
+  const [emergencyToggling, setEmergencyToggling] = useState(false);
+
+  const handleToggleEmergency = async (active: boolean) => {
+    setEmergencyToggling(true);
+    try {
+      await setEmergencyMode(event._id, active);
+      notifications.show({
+        title: active ? "Modo emergencia activado" : "Modo emergencia desactivado",
+        message: active
+          ? "Los asistentes ahora ven solo transmisión + chat, sin depender de Mongo."
+          : "Los asistentes volvieron al flujo normal.",
+        color: active ? "orange" : "green",
+      });
+    } catch (err) {
+      console.error("Error toggling emergency mode:", err);
+      notifications.show({
+        title: "Error",
+        message: "No se pudo cambiar el modo emergencia. Intenta de nuevo.",
+        color: "red",
+      });
+    } finally {
+      setEmergencyToggling(false);
+    }
+  };
+
   const [streamOpen, setStreamOpen] = useState(false);
   const [statusLoading, setStatusLoading] = useState(false);
   const [statusError, setStatusError] = useState<string | null>(null);
@@ -470,6 +505,42 @@ export default function EventAdminControl({
                 </Alert>
               )}
             </Stack>
+
+            {/* Modo emergencia: fallback ante Mongo lento/caído */}
+            <Card withBorder radius="lg" p="lg">
+              <Stack gap="sm">
+                <Group justify="space-between" align="center">
+                  <div>
+                    <Title order={3}>🆘 Modo emergencia</Title>
+                    <Text size="xs" c="dimmed">
+                      Reduce la página de asistencia a solo transmisión + chat,
+                      sin depender de Mongo. Invisible para el asistente.
+                    </Text>
+                  </div>
+                  <Switch
+                    checked={emergency.active}
+                    onChange={(e) =>
+                      void handleToggleEmergency(e.currentTarget.checked)
+                    }
+                    disabled={emergencyToggling}
+                    color="orange"
+                  />
+                </Group>
+
+                {emergency.active && (
+                  <Alert variant="light" color="orange">
+                    <Text size="sm" fw={500}>
+                      🆘 Modo emergencia activo
+                    </Text>
+                    <Text size="xs" mt={4}>
+                      Los asistentes están viendo la versión reducida
+                      (transmisión + chat en caché). Actívalo solo si Mongo
+                      está lento o caído.
+                    </Text>
+                  </Alert>
+                )}
+              </Stack>
+            </Card>
 
             {/* Configuración de transmisión */}
             <Card withBorder radius="lg" p="lg">
