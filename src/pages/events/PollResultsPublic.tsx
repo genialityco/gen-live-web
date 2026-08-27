@@ -13,11 +13,17 @@ import {
   Badge,
   Progress,
 } from "@mantine/core";
-import { IconAlertCircle } from "@tabler/icons-react";
+import { IconAlertCircle, IconClock } from "@tabler/icons-react";
 import { getPublicPollResults, type PublicPollResults } from "../../api/polls";
 import PublicEventHeader from "../../components/events/PublicEventHeader";
 
 const POLL_INTERVAL_MS = 10_000;
+
+const STATUS_INFO: Record<string, { label: string; color: string }> = {
+  draft: { label: "Aún no publicada", color: "gray" },
+  published: { label: "En vivo", color: "green" },
+  closed: { label: "Cerrada", color: "red" },
+};
 
 /**
  * Página PÚBLICA de resultados de una encuesta (compartible por enlace, sin
@@ -104,6 +110,7 @@ export default function PollResultsPublic() {
   }
 
   const { poll } = data;
+  const statusInfo = STATUS_INFO[poll.status] ?? { label: poll.status, color: "gray" };
 
   return (
     <Container size="md" py="xl">
@@ -117,9 +124,14 @@ export default function PollResultsPublic() {
       <Card withBorder radius="lg" p="lg" mb="lg">
         <Group justify="space-between" align="start">
           <Box>
-            <Text size="xs" c="dimmed" tt="uppercase" fw={600}>
-              Resultados de la encuesta
-            </Text>
+            <Group gap="xs" mb={4}>
+              <Text size="xs" c="dimmed" tt="uppercase" fw={600}>
+                Resultados de la encuesta
+              </Text>
+              <Badge size="sm" variant="light" color={statusInfo.color}>
+                {statusInfo.label}
+              </Badge>
+            </Group>
             <Text size="xl" fw={700}>
               {poll.title}
             </Text>
@@ -129,6 +141,14 @@ export default function PollResultsPublic() {
           </Badge>
         </Group>
       </Card>
+
+      {poll.status === "draft" && (
+        <Alert color="gray" variant="light" icon={<IconClock />} mb="md">
+          Esta encuesta todavía no se ha publicado. Esta página se actualiza
+          automáticamente y comenzará a mostrar resultados en vivo en cuanto
+          el organizador la publique.
+        </Alert>
+      )}
 
       <Stack gap="md">
         {poll.questions.map((question) => (

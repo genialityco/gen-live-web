@@ -473,34 +473,32 @@ export default function EventAdminPolls() {
                     <IconChartBar size={18} />
                   </ActionIcon>
 
-                  {(poll.status === "published" || poll.status === "closed") && (
-                    <CopyButton
-                      value={`${window.location.origin}/org/${slug}/event/${eventSlug}/poll/${poll._id}/results`}
-                      timeout={2000}
-                    >
-                      {({ copied, copy }) => (
-                        <MantineTooltip
-                          label={
-                            copied
-                              ? "¡Enlace copiado!"
-                              : poll.showStatistics
-                                ? "Copiar enlace público de resultados"
-                                : "Copiar enlace público (actívalo con 'mostrar estadísticas' para que sea visible)"
-                          }
-                          withArrow
+                  <CopyButton
+                    value={`${window.location.origin}/org/${slug}/event/${eventSlug}/poll/${poll._id}/results`}
+                    timeout={2000}
+                  >
+                    {({ copied, copy }) => (
+                      <MantineTooltip
+                        label={
+                          copied
+                            ? "¡Enlace copiado!"
+                            : poll.showStatistics
+                              ? "Copiar enlace público de resultados (funciona antes, durante y después de publicarla)"
+                              : "Copiar enlace público (actívalo con 'mostrar estadísticas' para que sea visible)"
+                        }
+                        withArrow
+                      >
+                        <ActionIcon
+                          variant="light"
+                          color={copied ? "teal" : "grape"}
+                          size="lg"
+                          onClick={copy}
                         >
-                          <ActionIcon
-                            variant="light"
-                            color={copied ? "teal" : "grape"}
-                            size="lg"
-                            onClick={copy}
-                          >
-                            {copied ? <IconCheck size={18} /> : <IconLink size={18} />}
-                          </ActionIcon>
-                        </MantineTooltip>
-                      )}
-                    </CopyButton>
-                  )}
+                          {copied ? <IconCheck size={18} /> : <IconLink size={18} />}
+                        </ActionIcon>
+                      </MantineTooltip>
+                    )}
+                  </CopyButton>
                 </Group>
               </Group>
             </Card>
