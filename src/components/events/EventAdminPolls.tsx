@@ -19,6 +19,8 @@ import {
   Center,
   Box,
   Divider,
+  CopyButton,
+  Tooltip as MantineTooltip,
   rem,
 } from "@mantine/core";
 import {
@@ -30,6 +32,8 @@ import {
   IconChartBar,
   IconPlayerPlay,
   IconPlayerStop,
+  IconLink,
+  IconCheck,
 } from "@tabler/icons-react";
 import {
   getEventPolls,
@@ -429,9 +433,32 @@ export default function EventAdminPolls() {
                         color="orange"
                         size="lg"
                         onClick={() => handleUnpublish(poll)}
-                        title="Despublicar"
+                        title="Cerrar encuesta"
                       >
                         <IconPlayerStop size={18} />
+                      </ActionIcon>
+                    </>
+                  )}
+
+                  {poll.status === "closed" && (
+                    <>
+                      <ActionIcon
+                        variant="light"
+                        color="green"
+                        size="lg"
+                        onClick={() => handlePublish(poll)}
+                        title="Reabrir encuesta"
+                      >
+                        <IconPlayerPlay size={18} />
+                      </ActionIcon>
+                      <ActionIcon
+                        variant="light"
+                        color="red"
+                        size="lg"
+                        onClick={() => handleDeletePoll(poll)}
+                        title="Eliminar"
+                      >
+                        <IconTrash size={18} />
                       </ActionIcon>
                     </>
                   )}
@@ -445,6 +472,35 @@ export default function EventAdminPolls() {
                   >
                     <IconChartBar size={18} />
                   </ActionIcon>
+
+                  {(poll.status === "published" || poll.status === "closed") && (
+                    <CopyButton
+                      value={`${window.location.origin}/org/${slug}/event/${eventSlug}/poll/${poll._id}/results`}
+                      timeout={2000}
+                    >
+                      {({ copied, copy }) => (
+                        <MantineTooltip
+                          label={
+                            copied
+                              ? "¡Enlace copiado!"
+                              : poll.showStatistics
+                                ? "Copiar enlace público de resultados"
+                                : "Copiar enlace público (actívalo con 'mostrar estadísticas' para que sea visible)"
+                          }
+                          withArrow
+                        >
+                          <ActionIcon
+                            variant="light"
+                            color={copied ? "teal" : "grape"}
+                            size="lg"
+                            onClick={copy}
+                          >
+                            {copied ? <IconCheck size={18} /> : <IconLink size={18} />}
+                          </ActionIcon>
+                        </MantineTooltip>
+                      )}
+                    </CopyButton>
+                  )}
                 </Group>
               </Group>
             </Card>

@@ -239,6 +239,37 @@ export const submitPollResponse = async (
   return response.data;
 };
 
+export interface PublicPollResults {
+  event: {
+    title: string;
+    status: string;
+    schedule?: { startsAt?: string; endsAt?: string } | null;
+    branding?: {
+      header?: { backgroundImageUrl?: string };
+      coverImageUrl?: string;
+    } | null;
+  };
+  org: {
+    name: string | null;
+    branding?: { logoUrl?: string | null } | null;
+  };
+  poll: PollStatistics;
+}
+
+/**
+ * Obtener los resultados públicos de una encuesta (sin autenticación).
+ * Solo devuelve datos si el admin activó "mostrar estadísticas".
+ */
+export const getPublicPollResults = async (
+  eventSlug: string,
+  pollId: string
+): Promise<PublicPollResults> => {
+  const response = await api.get(
+    `/events/${eventSlug}/polls/${pollId}/public-results`
+  );
+  return response.data;
+};
+
 /**
  * Eliminar una encuesta
  */

@@ -30,6 +30,9 @@ const PublicEventReport = lazy(
 const PublicEventMetrics = lazy(
   () => import("../pages/events/PublicEventMetrics")
 );
+const PollResultsPublic = lazy(
+  () => import("../pages/events/PollResultsPublic")
+);
 // const EventAttend = lazy(() => import("../pages/events/EventAttend"));
 
 export const routes = [
@@ -94,6 +97,12 @@ export const routes = [
     // métricas; no da acceso a ninguna otra sección del admin.
     path: "/org/:slug/event/:eventSlug/metrics",
     element: <PublicEventMetrics />,
+  },
+  {
+    // Resultados públicos y compartibles de una encuesta (sin login). Solo
+    // responde si el admin activó "mostrar estadísticas" en esa encuesta.
+    path: "/org/:slug/event/:eventSlug/poll/:pollId/results",
+    element: <PollResultsPublic />,
   },
   {
     path: "/admin-auth",
