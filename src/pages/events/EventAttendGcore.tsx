@@ -372,6 +372,8 @@ export default function EventAttendGcore() {
   );
   const [certificateLink, setCertificateLink] =
     useState<CertificateLinkResult | null>(null);
+  const [certificateChecking, setCertificateChecking] = useState(false);
+  const [certificateRetryCount, setCertificateRetryCount] = useState(0);
 
   const [isRegistered, setIsRegistered] = useState<boolean>(false);
   const [checkingRegistration, setCheckingRegistration] =
@@ -587,6 +589,7 @@ export default function EventAttendGcore() {
     }
 
     let cancelled = false;
+    setCertificateChecking(true);
     getCertificateLink(event._id, attendeeId)
       .then((result) => {
         if (!cancelled) setCertificateLink(result);
@@ -594,12 +597,22 @@ export default function EventAttendGcore() {
       .catch((err) => {
         console.error("Error checking certificate link:", err);
         if (!cancelled) setCertificateLink(null);
+      })
+      .finally(() => {
+        if (!cancelled) setCertificateChecking(false);
       });
 
     return () => {
       cancelled = true;
     };
-  }, [event?._id, event?.certificatesConfig?.enabled, attendeeId, status, emergency.active]);
+  }, [
+    event?._id,
+    event?.certificatesConfig?.enabled,
+    attendeeId,
+    status,
+    emergency.active,
+    certificateRetryCount,
+  ]);
 
   // 3) Redirigir a la landing si NO está registrado (y no es owner)
   useEffect(() => {
@@ -1669,12 +1682,19 @@ export default function EventAttendGcore() {
 
         {/* Certificado de asistencia: solo si el admin habilitó la sección
             para este evento y ya terminó (ended/replay). El backend decide
-            si además cumple el requisito de asistencia en vivo. */}
+            si además cumple el requisito de asistencia en vivo.
+            reason "not_synced" se muestra explícitamente (en vez de ocultar
+            la sección) porque cubre a los asistentes que se registraron
+            antes de que existiera el registro automático en la plataforma
+            de certificados: el self-heal de getCertificateLink puede no
+            haber terminado (o haber fallado) al momento de la visita. */}
         {!emergency.active &&
           event?.certificatesConfig?.enabled &&
           (status === "ended" || status === "replay") &&
-          (certificateLink?.allowed ||
-            certificateLink?.reason === "did_not_attend_live") && (
+          certificateLink &&
+          (certificateLink.allowed ||
+            certificateLink.reason === "did_not_attend_live" ||
+            certificateLink.reason === "not_synced") && (
             <Container size="sm" px="md" py="lg">
               <Card withBorder radius="lg" p="lg">
                 <Group justify="space-between" align="center" wrap="wrap">
@@ -1683,7 +1703,9 @@ export default function EventAttendGcore() {
                     <Text size="sm" c="dimmed" mt={4}>
                       {certificateLink.allowed
                         ? "Ya puedes descargar tu certificado de este evento."
-                        : "Tu certificado estará disponible si asististe en vivo al evento."}
+                        : certificateLink.reason === "not_synced"
+                          ? "Estamos preparando tu certificado. Intenta de nuevo en unos minutos."
+                          : "Tu certificado estará disponible si asististe en vivo al evento."}
                     </Text>
                   </div>
                   {certificateLink.allowed && certificateLink.url && (
@@ -1696,6 +1718,18 @@ export default function EventAttendGcore() {
                       Descargar certificado
                     </Button>
                   )}
+                  {!certificateLink.allowed &&
+                    certificateLink.reason === "not_synced" && (
+                      <Button
+                        variant="light"
+                        loading={certificateChecking}
+                        onClick={() =>
+                          setCertificateRetryCount((count) => count + 1)
+                        }
+                      >
+                        Reintentar
+                      </Button>
+                    )}
                 </Group>
               </Card>
             </Container>
