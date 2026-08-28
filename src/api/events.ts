@@ -150,7 +150,7 @@ export interface CertificateLinkResult {
     | "disabled"
     | "not_registered"
     | "not_synced"
-    | "did_not_attend_live";
+    | "did_not_watch";
 }
 
 export async function getCertificateLink(

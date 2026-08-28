@@ -1680,8 +1680,9 @@ export default function EventAttendGcore() {
         {/* Certificado de asistencia: visible en cualquier estado de la
             transmisión (upcoming/live/ended/replay) mientras el admin haya
             habilitado la sección para este evento; el backend es quien
-            decide si ya cumple el requisito de asistencia en vivo, sin
-            depender de la transición manual ended → replay.
+            decide si ya cumple el requisito de reproducción real (en vivo
+            o en diferido), sin depender de la transición manual
+            ended → replay.
             reason "not_synced" se muestra explícitamente (en vez de ocultar
             la sección) porque cubre a los asistentes que se registraron
             antes de que existiera el registro automático en la plataforma
@@ -1691,7 +1692,7 @@ export default function EventAttendGcore() {
           event?.certificatesConfig?.enabled &&
           certificateLink &&
           (certificateLink.allowed ||
-            certificateLink.reason === "did_not_attend_live" ||
+            certificateLink.reason === "did_not_watch" ||
             certificateLink.reason === "not_synced") && (
             <Container size="sm" px="md" py="lg">
               <Card withBorder radius="lg" p="lg">
@@ -1703,7 +1704,7 @@ export default function EventAttendGcore() {
                         ? "Ya puedes descargar tu certificado de este evento."
                         : certificateLink.reason === "not_synced"
                           ? "Estamos preparando tu certificado. Intenta de nuevo en unos minutos."
-                          : "Tu certificado estará disponible si asististe en vivo al evento."}
+                          : "Tu certificado estará disponible cuando veas el evento, en vivo o en diferido."}
                     </Text>
                   </div>
                   {certificateLink.allowed && certificateLink.url && (
