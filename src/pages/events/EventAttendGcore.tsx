@@ -570,20 +570,17 @@ export default function EventAttendGcore() {
     void checkRegistration();
   }, [event, user, emergency.active]);
 
-  // 2b) Certificado de asistencia: se consulta desde que el evento está en
-  // vivo (no solo ended/replay) para que el self-heal de sincronización con
-  // gen-certificados (dentro de getCertificateLink) inserte al asistente en
-  // caliente, sin esperar a que termine. La sección de descarga sigue
-  // ocultándose hasta ended/replay (ver el render condicionado más abajo);
-  // acá solo se dispara el fetch/self-heal.
+  // 2b) Certificado de asistencia: se consulta en cualquier estado del
+  // evento (incluido "upcoming", aunque ahí nunca habrá asistencia todavía)
+  // para que el self-heal de sincronización con gen-certificados (dentro de
+  // getCertificateLink) inserte al asistente en caliente, sin depender de
+  // que el admin haga la transición manual a ended/replay. El backend es
+  // quien decide si ya cumplió el requisito de asistencia en vivo (ver
+  // render condicionado más abajo).
   useEffect(() => {
     if (emergency.active) return;
     if (!event?._id || !attendeeId) return;
     if (!event.certificatesConfig?.enabled) {
-      setCertificateLink(null);
-      return;
-    }
-    if (status !== "live" && status !== "ended" && status !== "replay") {
       setCertificateLink(null);
       return;
     }
@@ -1680,9 +1677,11 @@ export default function EventAttendGcore() {
           </Box>
         )} */}
 
-        {/* Certificado de asistencia: solo si el admin habilitó la sección
-            para este evento y ya terminó (ended/replay). El backend decide
-            si además cumple el requisito de asistencia en vivo.
+        {/* Certificado de asistencia: visible en cualquier estado de la
+            transmisión (upcoming/live/ended/replay) mientras el admin haya
+            habilitado la sección para este evento; el backend es quien
+            decide si ya cumple el requisito de asistencia en vivo, sin
+            depender de la transición manual ended → replay.
             reason "not_synced" se muestra explícitamente (en vez de ocultar
             la sección) porque cubre a los asistentes que se registraron
             antes de que existiera el registro automático en la plataforma
@@ -1690,7 +1689,6 @@ export default function EventAttendGcore() {
             haber terminado (o haber fallado) al momento de la visita. */}
         {!emergency.active &&
           event?.certificatesConfig?.enabled &&
-          (status === "ended" || status === "replay") &&
           certificateLink &&
           (certificateLink.allowed ||
             certificateLink.reason === "did_not_attend_live" ||
