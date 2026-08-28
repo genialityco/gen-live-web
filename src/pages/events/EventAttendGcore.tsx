@@ -1695,7 +1695,35 @@ export default function EventAttendGcore() {
             certificateLink.reason === "did_not_watch" ||
             certificateLink.reason === "not_synced") && (
             <Container size="sm" px="md" py="lg">
-              <Card withBorder radius="lg" p="lg">
+              {/* Pulso animado que resalta la tarjeta cuando el certificado
+                  ya está listo para descargar (nada que animar si aún no
+                  hay nada que hacer: not_synced/did_not_watch quedan quietos). */}
+              {certificateLink.allowed && (
+                <style>{`
+                  @keyframes certificateGlowPulse {
+                    0%, 100% {
+                      box-shadow: 0 0 0 0 color-mix(in srgb, var(--mantine-color-brand-6) 45%, transparent);
+                    }
+                    50% {
+                      box-shadow: 0 0 0 10px color-mix(in srgb, var(--mantine-color-brand-6) 0%, transparent);
+                    }
+                  }
+                  .certificate-glow-pulse {
+                    animation: certificateGlowPulse 2.2s ease-in-out infinite;
+                  }
+                  @media (prefers-reduced-motion: reduce) {
+                    .certificate-glow-pulse {
+                      animation: none;
+                    }
+                  }
+                `}</style>
+              )}
+              <Card
+                withBorder
+                radius="lg"
+                p="lg"
+                className={certificateLink.allowed ? "certificate-glow-pulse" : undefined}
+              >
                 <Group justify="space-between" align="center" wrap="wrap">
                   <div>
                     <Title order={4}>🎓 Certificado de asistencia</Title>
