@@ -127,6 +127,22 @@ export async function updateEventCertificatesConfig(
   return data;
 }
 
+export interface CertificatesBackfillResult {
+  total: number;
+  synced: number;
+  failed: number;
+  error?: string;
+}
+
+export async function backfillEventCertificates(
+  eventId: string
+): Promise<CertificatesBackfillResult> {
+  const { data } = await api.post(
+    `/events/${eventId}/certificates-config/backfill`
+  );
+  return data;
+}
+
 export interface CertificateLinkResult {
   allowed: boolean;
   url?: string;

@@ -568,9 +568,12 @@ export default function EventAttendGcore() {
     void checkRegistration();
   }, [event, user, emergency.active]);
 
-  // 2b) Certificado de asistencia: solo se consulta cuando el evento ya
-  // terminó y el toggle de certificados está habilitado. El backend aplica
-  // el gate real (asistió en vivo); acá solo se pinta lo que responda.
+  // 2b) Certificado de asistencia: se consulta desde que el evento está en
+  // vivo (no solo ended/replay) para que el self-heal de sincronización con
+  // gen-certificados (dentro de getCertificateLink) inserte al asistente en
+  // caliente, sin esperar a que termine. La sección de descarga sigue
+  // ocultándose hasta ended/replay (ver el render condicionado más abajo);
+  // acá solo se dispara el fetch/self-heal.
   useEffect(() => {
     if (emergency.active) return;
     if (!event?._id || !attendeeId) return;
@@ -578,7 +581,7 @@ export default function EventAttendGcore() {
       setCertificateLink(null);
       return;
     }
-    if (status !== "ended" && status !== "replay") {
+    if (status !== "live" && status !== "ended" && status !== "replay") {
       setCertificateLink(null);
       return;
     }

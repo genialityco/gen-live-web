@@ -24,6 +24,7 @@ import {
   updateEventStream,
   setEmergencyMode,
   updateEventCertificatesConfig,
+  backfillEventCertificates,
 } from "../../api/events";
 import { getMuxReplayByAsset, listMuxAssets, type MuxAsset } from "../../api/livekit-service";
 import EventStreamForm from "./EventStreamForm";
@@ -90,6 +91,41 @@ export default function EventAdminControl({
       });
     } finally {
       setCertificatesToggling(false);
+    }
+  };
+
+  const [certificatesBackfilling, setCertificatesBackfilling] = useState(false);
+
+  const handleBackfillCertificates = async () => {
+    setCertificatesBackfilling(true);
+    try {
+      const result = await backfillEventCertificates(event._id);
+      if (result.error) {
+        notifications.show({
+          title: "Error",
+          message: result.error,
+          color: "red",
+        });
+        return;
+      }
+      notifications.show({
+        title: "Sincronización de certificados completa",
+        message:
+          result.total === 0
+            ? "No había asistentes pendientes por sincronizar."
+            : `${result.synced} de ${result.total} asistentes sincronizados` +
+              (result.failed > 0 ? `, ${result.failed} con error.` : "."),
+        color: result.failed > 0 ? "yellow" : "green",
+      });
+    } catch (err) {
+      console.error("Error backfilling certificates:", err);
+      notifications.show({
+        title: "Error",
+        message: "No se pudo sincronizar a los asistentes con certificados. Intenta de nuevo.",
+        color: "red",
+      });
+    } finally {
+      setCertificatesBackfilling(false);
     }
   };
 
@@ -591,6 +627,22 @@ export default function EventAdminControl({
                     color="teal"
                   />
                 </Group>
+                {event.certificatesConfig?.enabled &&
+                  (event.status === "live" ||
+                    event.status === "ended" ||
+                    event.status === "replay") && (
+                    <Group justify="flex-end">
+                      <Button
+                        variant="light"
+                        size="xs"
+                        leftSection={<IconRefresh size={14} />}
+                        loading={certificatesBackfilling}
+                        onClick={() => void handleBackfillCertificates()}
+                      >
+                        Sincronizar asistentes con certificados
+                      </Button>
+                    </Group>
+                  )}
               </Stack>
             </Card>
 
