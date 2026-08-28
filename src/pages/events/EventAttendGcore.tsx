@@ -41,7 +41,9 @@ import {
   checkIfRegistered,
   checkIfRegisteredByUID,
   associateFirebaseUID,
+  getCertificateLink,
   type EventItem,
+  type CertificateLinkResult,
 } from "../../api/events";
 import { useAuth } from "../../auth/AuthProvider";
 import { useEventRealtime } from "../../hooks/useEventRealtime";
@@ -368,6 +370,8 @@ export default function EventAttendGcore() {
   const [attendeeData, setAttendeeData] = useState<Record<string, any> | null>(
     null,
   );
+  const [certificateLink, setCertificateLink] =
+    useState<CertificateLinkResult | null>(null);
 
   const [isRegistered, setIsRegistered] = useState<boolean>(false);
   const [checkingRegistration, setCheckingRegistration] =
@@ -563,6 +567,36 @@ export default function EventAttendGcore() {
 
     void checkRegistration();
   }, [event, user, emergency.active]);
+
+  // 2b) Certificado de asistencia: solo se consulta cuando el evento ya
+  // terminó y el toggle de certificados está habilitado. El backend aplica
+  // el gate real (asistió en vivo); acá solo se pinta lo que responda.
+  useEffect(() => {
+    if (emergency.active) return;
+    if (!event?._id || !attendeeId) return;
+    if (!event.certificatesConfig?.enabled) {
+      setCertificateLink(null);
+      return;
+    }
+    if (status !== "ended" && status !== "replay") {
+      setCertificateLink(null);
+      return;
+    }
+
+    let cancelled = false;
+    getCertificateLink(event._id, attendeeId)
+      .then((result) => {
+        if (!cancelled) setCertificateLink(result);
+      })
+      .catch((err) => {
+        console.error("Error checking certificate link:", err);
+        if (!cancelled) setCertificateLink(null);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [event?._id, event?.certificatesConfig?.enabled, attendeeId, status, emergency.active]);
 
   // 3) Redirigir a la landing si NO está registrado (y no es owner)
   useEffect(() => {
@@ -1629,6 +1663,40 @@ export default function EventAttendGcore() {
             </Container>
           </Box>
         )} */}
+
+        {/* Certificado de asistencia: solo si el admin habilitó la sección
+            para este evento y ya terminó (ended/replay). El backend decide
+            si además cumple el requisito de asistencia en vivo. */}
+        {!emergency.active &&
+          event?.certificatesConfig?.enabled &&
+          (status === "ended" || status === "replay") &&
+          (certificateLink?.allowed ||
+            certificateLink?.reason === "did_not_attend_live") && (
+            <Container size="sm" px="md" py="lg">
+              <Card withBorder radius="lg" p="lg">
+                <Group justify="space-between" align="center" wrap="wrap">
+                  <div>
+                    <Title order={4}>🎓 Certificado de asistencia</Title>
+                    <Text size="sm" c="dimmed" mt={4}>
+                      {certificateLink.allowed
+                        ? "Ya puedes descargar tu certificado de este evento."
+                        : "Tu certificado estará disponible si asististe en vivo al evento."}
+                    </Text>
+                  </div>
+                  {certificateLink.allowed && certificateLink.url && (
+                    <Button
+                      component="a"
+                      href={certificateLink.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      Descargar certificado
+                    </Button>
+                  )}
+                </Group>
+              </Card>
+            </Container>
+          )}
 
         {/* Live Poll Viewer - Drawer de encuestas en tiempo real (fuera de
             alcance en modo emergencia: depende de registro/Mongo) */}

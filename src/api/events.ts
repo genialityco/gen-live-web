@@ -37,6 +37,12 @@ export interface EventBrandingConfig {
   coverImageMobileUrl?: string;
 }
 
+export interface EventCertificatesConfig {
+  enabled: boolean;
+  certOrganizationId?: string;
+  certEventId?: string;
+}
+
 export type EventItem = {
   _id: string;
   orgId: string;
@@ -47,6 +53,7 @@ export type EventItem = {
   schedule?: { startsAt?: string; endsAt?: string };
   stream?: { url?: string; provider?: string };
   branding?: EventBrandingConfig; // Campo de branding del evento
+  certificatesConfig?: EventCertificatesConfig; // Toggle de certificados de asistencia
   hidden?: boolean;
   createdAt?: string;
   startDate?: string; // Para compatibilidad
@@ -106,6 +113,36 @@ export async function updateEventStream(
 export async function setEmergencyMode(eventId: string, active: boolean) {
   const { data } = await api.patch(`/events/${eventId}/emergency-mode`, {
     active,
+  });
+  return data;
+}
+
+export async function updateEventCertificatesConfig(
+  eventId: string,
+  enabled: boolean
+) {
+  const { data } = await api.patch(`/events/${eventId}/certificates-config`, {
+    enabled,
+  });
+  return data;
+}
+
+export interface CertificateLinkResult {
+  allowed: boolean;
+  url?: string;
+  reason?:
+    | "disabled"
+    | "not_registered"
+    | "not_synced"
+    | "did_not_attend_live";
+}
+
+export async function getCertificateLink(
+  eventId: string,
+  attendeeId: string
+): Promise<CertificateLinkResult> {
+  const { data } = await api.get(`/events/${eventId}/certificate-link`, {
+    params: { attendeeId },
   });
   return data;
 }

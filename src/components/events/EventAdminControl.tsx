@@ -23,6 +23,7 @@ import {
   setEventStatus,
   updateEventStream,
   setEmergencyMode,
+  updateEventCertificatesConfig,
 } from "../../api/events";
 import { getMuxReplayByAsset, listMuxAssets, type MuxAsset } from "../../api/livekit-service";
 import EventStreamForm from "./EventStreamForm";
@@ -63,6 +64,32 @@ export default function EventAdminControl({
       });
     } finally {
       setEmergencyToggling(false);
+    }
+  };
+
+  const [certificatesToggling, setCertificatesToggling] = useState(false);
+
+  const handleToggleCertificates = async (enabled: boolean) => {
+    setCertificatesToggling(true);
+    try {
+      const updated = await updateEventCertificatesConfig(event._id, enabled);
+      onEventUpdate(updated);
+      notifications.show({
+        title: enabled ? "Certificados habilitados" : "Certificados deshabilitados",
+        message: enabled
+          ? "Los asistentes que asistieron en vivo podrán descargar su certificado."
+          : "Se ocultó la sección de certificado para los asistentes.",
+        color: enabled ? "green" : "gray",
+      });
+    } catch (err) {
+      console.error("Error toggling certificates config:", err);
+      notifications.show({
+        title: "Error",
+        message: "No se pudo cambiar la configuración de certificados. Intenta de nuevo.",
+        color: "red",
+      });
+    } finally {
+      setCertificatesToggling(false);
     }
   };
 
@@ -539,6 +566,31 @@ export default function EventAdminControl({
                     </Text>
                   </Alert>
                 )}
+              </Stack>
+            </Card>
+
+            {/* Certificados de asistencia */}
+            <Card withBorder radius="lg" p="lg">
+              <Stack gap="sm">
+                <Group justify="space-between" align="center">
+                  <div>
+                    <Title order={3}>🎓 Certificados de asistencia</Title>
+                    <Text size="xs" c="dimmed">
+                      Muestra en la página del asistente una sección para
+                      descargar su certificado. Solo podrán descargarlo
+                      quienes asistieron en vivo al evento (reproducción real
+                      del stream).
+                    </Text>
+                  </div>
+                  <Switch
+                    checked={!!event.certificatesConfig?.enabled}
+                    onChange={(e) =>
+                      void handleToggleCertificates(e.currentTarget.checked)
+                    }
+                    disabled={certificatesToggling}
+                    color="teal"
+                  />
+                </Group>
               </Stack>
             </Card>
 
