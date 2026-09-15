@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../core/api";
 import {  ensureAnon, rtdb } from "../core/firebase";
+import type { EventStream } from "../api/events";
 import {
   onValue,
   ref as r,
@@ -21,7 +22,8 @@ type ResolvedEvent = {
   status: "upcoming" | "live" | "ended" | "replay";
   orgId: string;
   schedule?: any;
-  stream?: { provider?: string | null };
+  stream?: { url?: string; provider?: string | null };
+  streams?: EventStream[];
 };
 
 export function useEventRealtime(slug: string) {
@@ -43,66 +45,72 @@ export function useEventRealtime(slug: string) {
     let cancelled = false;
     (async () => {
       setLoading(true);
-      // 1) Asegurar sesión anónima
-      const uid = await ensureAnon();
-      if (cancelled) return;
-
-      // 2) Resolver slug
-      const { data } = await api.get<ResolvedEvent>(`/public/events/${slug}`);
-      if (cancelled) return;
-      setResolved(data);
-
-      const evId = data.eventId;
-
-      // 3) Listeners RTDB
-      const statusRef = r(rtdb, `/events/${evId}/status`);
-      const nowRef = r(rtdb, `/events/${evId}/nowCount`);
-
-      const unsubStatus = onValue(statusRef, (s) => {
-        setStatus((s.val() ?? "upcoming") as any);
-      });
-      const unsubNow = onValue(nowRef, (s) => {
-        setNowCount(Number(s.val() ?? 0));
-      });
-      unsubFns.current.push(unsubStatus, unsubNow);
-
-      // 4) Presencia — set + onDisconnect.remove
-      const pRef = r(rtdb, `/presence/${evId}/${uid}`);
-      presenceRef.current = pRef;
-
-      // Función para escribir presencia — incluye el estado de reproducción real
-      // (playing/pmode) para que el backend acumule tiempo de visualización solo
-      // mientras el video se reproduce de verdad, y lo atribuya a vivo/diferido.
-      const writePresence = async () => {
-        await set(pRef, {
-          on: true,
-          ts: serverTimestamp(),
-          playing: playbackRef.current.playing,
-          pmode: playbackRef.current.mode,
-        }).catch(() => {});
-      };
-
-      // online inicial
-      await writePresence();
-      
-      // Remover al desconectar
       try {
-        await onDisconnect(pRef).remove();
-      } catch {
-        // Algunos entornos bloquean onDisconnect, se ignora
-      }
+        // 1) Asegurar sesión anónima
+        const uid = await ensureAnon();
+        if (cancelled) return;
 
-      // Actualizar presencia cada 15 segundos para mantenerla activa
-      const heartbeatInterval = setInterval(() => {
-        if (!cancelled) {
-          writePresence();
+        // 2) Resolver slug
+        const { data } = await api.get<ResolvedEvent>(`/public/events/${slug}`);
+        if (cancelled) return;
+        setResolved(data);
+
+        const evId = data.eventId;
+
+        // 3) Listeners RTDB
+        const statusRef = r(rtdb, `/events/${evId}/status`);
+        const nowRef = r(rtdb, `/events/${evId}/nowCount`);
+
+        const unsubStatus = onValue(statusRef, (s) => {
+          setStatus((s.val() ?? "upcoming") as any);
+        });
+        const unsubNow = onValue(nowRef, (s) => {
+          setNowCount(Number(s.val() ?? 0));
+        });
+        unsubFns.current.push(unsubStatus, unsubNow);
+
+        // 4) Presencia — set + onDisconnect.remove
+        const pRef = r(rtdb, `/presence/${evId}/${uid}`);
+        presenceRef.current = pRef;
+
+        // Función para escribir presencia — incluye el estado de reproducción real
+        // (playing/pmode) para que el backend acumule tiempo de visualización solo
+        // mientras el video se reproduce de verdad, y lo atribuya a vivo/diferido.
+        const writePresence = async () => {
+          await set(pRef, {
+            on: true,
+            ts: serverTimestamp(),
+            playing: playbackRef.current.playing,
+            pmode: playbackRef.current.mode,
+          }).catch(() => {});
+        };
+
+        // online inicial
+        await writePresence();
+
+        // Remover al desconectar
+        try {
+          await onDisconnect(pRef).remove();
+        } catch {
+          // Algunos entornos bloquean onDisconnect, se ignora
         }
-      }, 15000); // 15 segundos (más tiempo real)
 
-      setLoading(false);
+        // Actualizar presencia cada 15 segundos para mantenerla activa
+        const heartbeatInterval = setInterval(() => {
+          if (!cancelled) {
+            writePresence();
+          }
+        }, 15000); // 15 segundos (más tiempo real)
 
-      // Agregar limpieza del interval
-      unsubFns.current.push(() => clearInterval(heartbeatInterval));
+        // Agregar limpieza del interval
+        unsubFns.current.push(() => clearInterval(heartbeatInterval));
+      } catch (err) {
+        // Sin este catch, cualquier fallo de red/auth dejaba `loading` en true
+        // para siempre (spinner de "Verificando acceso" que nunca avanza).
+        console.error("useEventRealtime: error inicializando evento en tiempo real:", err);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
     })();
 
     return () => {

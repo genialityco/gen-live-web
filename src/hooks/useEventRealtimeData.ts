@@ -3,6 +3,7 @@ import { useEffect, useState, useMemo } from "react";
 import { ref as r, onValue } from "firebase/database";
 import { rtdb } from "../core/firebase";
 import { api } from "../core/api";
+import type { EventStream } from "../api/events";
 
 type ResolvedEvent = {
   eventId: string;
@@ -11,7 +12,8 @@ type ResolvedEvent = {
   status: "upcoming" | "live" | "ended" | "replay";
   orgId: string;
   schedule?: any;
-  stream?: { provider?: string | null };
+  stream?: { url?: string; provider?: string | null };
+  streams?: EventStream[];
 };
 
 /**

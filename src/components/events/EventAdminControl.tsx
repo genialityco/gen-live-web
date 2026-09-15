@@ -21,14 +21,15 @@ import { notifications } from "@mantine/notifications";
 import {
   type EventItem,
   setEventStatus,
-  updateEventStream,
+  updateEventStreams,
   setEmergencyMode,
   updateEventCertificatesConfig,
   backfillEventCertificates,
 } from "../../api/events";
 import { getMuxReplayByAsset, listMuxAssets, type MuxAsset } from "../../api/livekit-service";
 import EventStreamForm from "./EventStreamForm";
-import { VodHlsPlayer } from "../../pages/viewer/VodHlsPlayer";
+import { StreamPlayer } from "./StreamPlayer";
+import { resolveStreams } from "./streamUtils";
 import { useEventEmergency } from "../../hooks/useEventEmergency";
 
 interface EventAdminControlProps {
@@ -222,11 +223,13 @@ export default function EventAdminControl({
       const result = await getMuxReplayByAsset(event.slug, selectedAssetId);
 
       if (result.status === "ready" && result.replayUrl) {
-        // Actualizar la URL del stream
-        await updateEventStream(event._id, {
-          provider: "mux",
-          url: result.replayUrl,
-        });
+        // Reemplazar (o agregar) la fuente "mux" dentro del arreglo de streams
+        const currentStreams = resolveStreams(event.streams, event.stream);
+        const nextStreams = [
+          ...currentStreams.filter((s) => s.provider !== "mux"),
+          { provider: "mux", url: result.replayUrl },
+        ];
+        await updateEventStreams(event._id, nextStreams);
 
         // Cambiar estado a "replay"
         await setEventStatus(event._id, "replay");
@@ -234,7 +237,7 @@ export default function EventAdminControl({
         // Actualizar el evento local
         const updatedEvent = {
           ...event,
-          stream: { url: result.replayUrl, provider: "mux" },
+          streams: nextStreams,
           status: "replay" as const,
         };
         onEventUpdate(updatedEvent);
@@ -342,7 +345,8 @@ export default function EventAdminControl({
     }
   };
 
-  const hasStream = !!event.stream?.url;
+  const streamList = resolveStreams(event.streams, event.stream);
+  const hasStream = streamList.length > 0;
 
   // -------- Vista previa del evento para asistentes ----------
   const renderAudiencePreview = () => (
@@ -382,31 +386,16 @@ export default function EventAdminControl({
             }}
           >
             {/* LIVE / REPLAY con stream */}
-            {["live", "replay"].includes(localStatus) && hasStream && event.stream?.url && (
-              <Box style={{ position: "absolute", inset: 0 }}>
-                {/* Si es URL HLS (.m3u8), usar VodHlsPlayer */}
-                {event.stream.url.includes(".m3u8") ? (
-                  <VodHlsPlayer src={event.stream.url} autoPlay={false} />
-                ) : (
-                  /* Si es iframe embebido (YouTube, Vimeo, etc.) */
-                  <iframe
-                    src={event.stream.url}
-                    style={{
-                      width: "100%",
-                      height: "100%",
-                      border: "none",
-                    }}
-                    title={
-                      localStatus === "live"
-                        ? "Preview transmisión en vivo"
-                        : "Preview repetición"
-                    }
-                    frameBorder={0}
-                    allow="autoplay; fullscreen; picture-in-picture"
-                    allowFullScreen
-                  />
-                )}
-              </Box>
+            {["live", "replay"].includes(localStatus) && hasStream && (
+              <StreamPlayer
+                streams={event.streams}
+                legacyStream={event.stream}
+                title={
+                  localStatus === "live"
+                    ? "Preview transmisión en vivo"
+                    : "Preview repetición"
+                }
+              />
             )}
 
             {/* LIVE / REPLAY sin stream configurado */}
@@ -661,21 +650,22 @@ export default function EventAdminControl({
                   </Button>
                 </Group>
 
-                {event.stream?.url ? (
+                {streamList.length > 0 ? (
                   <Alert variant="light" color="green">
                     <Text size="sm" fw={500}>
-                      ✅ Stream configurado
+                      ✅ Stream configurado ({streamList.length}{" "}
+                      {streamList.length === 1 ? "fuente" : "fuentes"})
                     </Text>
-                    <Text size="xs" mt={4}>
-                      URL:{" "}
-                      <a
-                        href={event.stream.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        {event.stream.url}
-                      </a>
-                    </Text>
+                    <Stack gap={4} mt={4}>
+                      {streamList.map((s, i) => (
+                        <Text size="xs" key={i}>
+                          {s.provider}:{" "}
+                          <a href={s.url} target="_blank" rel="noopener noreferrer">
+                            {s.url}
+                          </a>
+                        </Text>
+                      ))}
+                    </Stack>
                   </Alert>
                 ) : (
                   <Alert variant="light" color="blue">
@@ -851,9 +841,10 @@ export default function EventAdminControl({
       >
         <EventStreamForm
           eventId={event._id}
-          initialUrl={event.stream?.url}
-          onSaved={() => {
+          initialStreams={streamList}
+          onSaved={(updated) => {
             setStreamOpen(false);
+            if (updated) onEventUpdate(updated);
           }}
         />
       </Modal>

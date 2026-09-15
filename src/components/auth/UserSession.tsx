@@ -151,6 +151,7 @@ export default function UserSession({
     const eventSlugToUse = eventSlug || eventId;
     const base = `/org/${slug}/access`;
     const url = eventSlugToUse ? `${base}?eventSlug=${eventSlugToUse}` : base;
+    console.log("Redirigiendo a acceso centralizado:", url);
 
     navigate(url);
   };

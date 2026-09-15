@@ -10,6 +10,8 @@ type Props = {
   autoPlay?: boolean;
   /** Notifica cuándo el video está realmente reproduciéndose (métricas reales). */
   onPlayingChange?: (playing: boolean) => void;
+  /** Notifica un fallo fatal de carga (permite hacer fallback a otra fuente). */
+  onError?: () => void;
 };
 
 /**
@@ -21,6 +23,7 @@ export function VodHlsPlayer({
   poster,
   autoPlay = true,
   onPlayingChange,
+  onError,
 }: Props) {
   const ref = useRef<HTMLVideoElement | null>(null);
   const hlsRef = useRef<Hls | null>(null);
@@ -46,8 +49,15 @@ export function VodHlsPlayer({
         video.play().catch(() => {});
       }
 
+      const handleNativeError = () => {
+        setError("Error al cargar el video");
+        onError?.();
+      };
+      video.addEventListener("error", handleNativeError);
+
       return () => {
         detachPlayback();
+        video.removeEventListener("error", handleNativeError);
         video.src = "";
       };
     }
@@ -56,6 +66,7 @@ export function VodHlsPlayer({
     if (!Hls.isSupported()) {
       detachPlayback();
       setError("Tu navegador no soporta reproducción de video HLS");
+      onError?.();
       return;
     }
 
@@ -117,6 +128,7 @@ export function VodHlsPlayer({
 
       // Error fatal desconocido
       setError("Error al cargar el video");
+      onError?.();
     });
 
     return () => {
@@ -128,7 +140,7 @@ export function VodHlsPlayer({
       }
       hlsRef.current = null;
     };
-  }, [src, autoPlay]);
+  }, [src, autoPlay, onError]);
 
   if (error) {
     return (

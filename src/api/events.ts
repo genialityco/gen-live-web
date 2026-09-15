@@ -43,6 +43,12 @@ export interface EventCertificatesConfig {
   certEventId?: string;
 }
 
+export type EventStream = {
+  provider: string;
+  url: string;
+  meta?: Record<string, any>;
+};
+
 export type EventItem = {
   _id: string;
   orgId: string;
@@ -52,6 +58,7 @@ export type EventItem = {
   status: "upcoming" | "live" | "ended" | "replay";
   schedule?: { startsAt?: string; endsAt?: string };
   stream?: { url?: string; provider?: string };
+  streams?: EventStream[];
   branding?: EventBrandingConfig; // Campo de branding del evento
   certificatesConfig?: EventCertificatesConfig; // Toggle de certificados de asistencia
   hidden?: boolean;
@@ -108,6 +115,14 @@ export async function updateEventStream(
 ) {
   const { data } = await api.patch(`/events/${eventId}/stream`, payload);
   return data;
+}
+
+export async function updateEventStreams(
+  eventId: string,
+  streams: EventStream[]
+) {
+  const { data } = await api.patch(`/events/${eventId}/streams`, { streams });
+  return data as EventItem;
 }
 
 export async function setEmergencyMode(eventId: string, active: boolean) {
