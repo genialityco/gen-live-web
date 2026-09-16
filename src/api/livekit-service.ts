@@ -15,7 +15,14 @@ export interface LiveConfig {
   rtmpStreamKey?: string; // vendrá '****' o vacío
   srtIngestUrl?: string; // '****' o vacío
   playbackHlsUrl?: string;
-  layout?: "grid" | "speaker" | "presentation" | "pip" | "side_by_side" | "solo";
+  layout?:
+    | "grid"
+    | "speaker"
+    | "presentation"
+    | "pip"
+    | "pip_center"
+    | "side_by_side"
+    | "solo";
   maxParticipants?: number;
   status?: string;
   activeEgressId?: string;

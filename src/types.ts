@@ -76,5 +76,6 @@ export type LayoutMode =
   | "speaker"
   | "presentation"
   | "pip"
+  | "pip_center"
   | "side_by_side"
   | "solo";

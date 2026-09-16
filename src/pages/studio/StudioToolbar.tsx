@@ -55,6 +55,16 @@ function IconPip() {
   );
 }
 
+function IconPipCenter() {
+  return (
+    <svg width="38" height="26" viewBox="0 0 38 26" fill="none">
+      <rect x="1" y="1" width="36" height="24" rx="2" fill="currentColor" opacity="0.45" />
+      <rect x="9" y="12" width="10" height="11" rx="1.5" fill="currentColor" opacity="0.9" />
+      <rect x="20" y="12" width="10" height="11" rx="1.5" fill="currentColor" opacity="0.9" />
+    </svg>
+  );
+}
+
 function IconSideBySide() {
   return (
     <svg width="38" height="26" viewBox="0 0 38 26" fill="none">
@@ -101,6 +111,12 @@ const LAYOUTS: Array<{
     label: "PiP",
     desc: "Vista principal con miniaturas superpuestas en la esquina",
     Icon: IconPip,
+  },
+  {
+    value: "pip_center",
+    label: "PiP grande",
+    desc: "Vista principal con miniaturas más grandes, superpuestas abajo y centradas",
+    Icon: IconPipCenter,
   },
   {
     value: "side_by_side",

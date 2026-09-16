@@ -18,6 +18,8 @@ import {
   IconUserPlus,
   IconLink,
   IconCheck,
+  IconDeviceTv,
+  IconRewindForward10,
 } from "@tabler/icons-react";
 import type { EventTimelines } from "../../api/events";
 import TimelineChart from "./TimelineChart";
@@ -26,6 +28,10 @@ export interface MetricsSummary {
   currentConcurrentViewers: number;
   peakConcurrentViewers: number;
   totalUniqueViewers: number;
+  /** Espectadores únicos que reprodujeron de verdad el video en vivo. */
+  liveViewers?: number;
+  /** Espectadores únicos que reprodujeron de verdad la repetición (diferido). */
+  replayViewers?: number;
   lastUpdate?: number;
 }
 
@@ -113,7 +119,7 @@ export default function EventMetricsView({
 
           <Grid>
             {isLive && (
-              <Grid.Col span={{ base: 12, sm: 6, md: 4 }}>
+              <Grid.Col span={{ base: 12, sm: 6, lg: 4 }}>
                 <Paper p="xl" withBorder style={{ height: "100%", background: "var(--mantine-color-blue-0)" }}>
                   <Stack gap="xs" align="center">
                     <IconEye size={48} color="var(--mantine-color-blue-6)" />
@@ -131,24 +137,58 @@ export default function EventMetricsView({
               </Grid.Col>
             )}
 
-            <Grid.Col span={{ base: 12, sm: 6, md: isLive ? 4 : 6 }}>
+            <Grid.Col span={{ base: 12, sm: 6, lg: 4 }}>
               <Paper p="xl" withBorder style={{ height: "100%", background: "var(--mantine-color-grape-0)" }}>
                 <Stack gap="xs" align="center">
                   <IconUserPlus size={48} color="var(--mantine-color-grape-6)" />
                   <Text size="xs" c="dimmed" ta="center" fw={500}>
-                    Registrados
+                    Registrados / Inscritos
                   </Text>
                   <Text size="2.5rem" fw={700} c="grape">
                     {timelines?.registeredTotal ?? "—"}
                   </Text>
                   <Text size="xs" c="dimmed">
-                    Inscritos al evento
+                    Personas inscritas al evento
                   </Text>
                 </Stack>
               </Paper>
             </Grid.Col>
 
-            <Grid.Col span={{ base: 12, sm: 6, md: isLive ? 4 : 6 }}>
+            <Grid.Col span={{ base: 12, sm: 6, lg: 4 }}>
+              <Paper p="xl" withBorder style={{ height: "100%", background: "var(--mantine-color-red-0)" }}>
+                <Stack gap="xs" align="center">
+                  <IconDeviceTv size={48} color="var(--mantine-color-red-6)" />
+                  <Text size="xs" c="dimmed" ta="center" fw={500}>
+                    Asistentes en Vivo
+                  </Text>
+                  <Text size="2.5rem" fw={700} c="red">
+                    {metrics.liveViewers ?? "—"}
+                  </Text>
+                  <Text size="xs" c="dimmed">
+                    Reprodujeron la transmisión en vivo
+                  </Text>
+                </Stack>
+              </Paper>
+            </Grid.Col>
+
+            <Grid.Col span={{ base: 12, sm: 6, lg: 4 }}>
+              <Paper p="xl" withBorder style={{ height: "100%", background: "var(--mantine-color-indigo-0)" }}>
+                <Stack gap="xs" align="center">
+                  <IconRewindForward10 size={48} color="var(--mantine-color-indigo-6)" />
+                  <Text size="xs" c="dimmed" ta="center" fw={500}>
+                    Diferidos
+                  </Text>
+                  <Text size="2.5rem" fw={700} c="indigo">
+                    {metrics.replayViewers ?? "—"}
+                  </Text>
+                  <Text size="xs" c="dimmed">
+                    Reprodujeron la repetición
+                  </Text>
+                </Stack>
+              </Paper>
+            </Grid.Col>
+
+            <Grid.Col span={{ base: 12, sm: 6, lg: 4 }}>
               <Paper p="xl" withBorder style={{ height: "100%", background: "var(--mantine-color-teal-0)" }}>
                 <Stack gap="xs" align="center">
                   <IconUsers size={48} color="var(--mantine-color-teal-6)" />
@@ -159,7 +199,7 @@ export default function EventMetricsView({
                     {metrics.totalUniqueViewers}
                   </Text>
                   <Text size="xs" c="dimmed">
-                    Únicos durante el live
+                    Personas únicas conectadas (vivo + diferido)
                   </Text>
                 </Stack>
               </Paper>
@@ -205,8 +245,20 @@ export default function EventMetricsView({
             este momento (actualización en tiempo real)
           </Text>
           <Text size="sm">
+            • <strong>Registrados / Inscritos:</strong> Personas que completaron
+            el registro al evento, en vivo o en diferido.
+          </Text>
+          <Text size="sm">
+            • <strong>Asistentes en Vivo:</strong> Espectadores únicos que
+            reprodujeron de verdad la transmisión en vivo.
+          </Text>
+          <Text size="sm">
+            • <strong>Diferidos:</strong> Espectadores únicos que reprodujeron
+            de verdad la repetición (grabación) del evento.
+          </Text>
+          <Text size="sm">
             • <strong>Total de Asistentes:</strong> Todos los usuarios únicos que
-            estuvieron durante el evento live
+            reprodujeron el evento, en vivo o en diferido.
           </Text>
           <Text size="sm" c="dimmed" mt="xs">
             📌 Los usuarios con múltiples dispositivos se cuentan como 1 solo

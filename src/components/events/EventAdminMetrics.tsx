@@ -7,6 +7,7 @@ import {
   type EventItem,
   type EventTimelines,
 } from "../../api/events";
+import { getEventWatchStats, type EventWatchStats } from "../../api/event-report";
 import type { Org } from "../../api/orgs";
 import EventMetricsView from "./EventMetricsView";
 
@@ -23,6 +24,7 @@ export default function EventAdminMetrics({ event, org }: EventAdminMetricsProps
   // que podría congelarse si la instancia con el watcher se reinicia/escala.
   const [authoritativeNow, setAuthoritativeNow] = useState<number | null>(null);
   const [timelines, setTimelines] = useState<EventTimelines | null>(null);
+  const [watchStats, setWatchStats] = useState<EventWatchStats | null>(null);
 
   const isLive = event.status === "live";
 
@@ -34,6 +36,19 @@ export default function EventAdminMetrics({ event, org }: EventAdminMetricsProps
         if (!cancelled) setTimelines(data);
       })
       .catch((err) => console.error("Error loading event timelines:", err));
+    return () => {
+      cancelled = true;
+    };
+  }, [event._id]);
+
+  // Desglose de asistencia real en vivo/diferido.
+  useEffect(() => {
+    let cancelled = false;
+    getEventWatchStats(event._id)
+      .then((data) => {
+        if (!cancelled) setWatchStats(data);
+      })
+      .catch((err) => console.error("Error loading event watch stats:", err));
     return () => {
       cancelled = true;
     };
@@ -100,6 +115,8 @@ export default function EventAdminMetrics({ event, org }: EventAdminMetricsProps
           authoritativeNow ?? metrics.currentConcurrentViewers,
         peakConcurrentViewers: metrics.peakConcurrentViewers,
         totalUniqueViewers: metrics.totalUniqueViewers,
+        liveViewers: watchStats?.liveViewers,
+        replayViewers: watchStats?.replayViewers,
         lastUpdate: metrics.lastUpdate,
       }}
       timelines={timelines}

@@ -915,7 +915,7 @@ export default function EventAdminAttendees({
               <Text>No hay diferidos detectados.</Text>
               <Text size="sm" c="dimmed" mt="xs">
                 Se consideran diferidos quienes reprodujeron de verdad el evento
-                en diferido (mismo criterio que "Vieron en diferido" del informe).
+                en diferido (mismo criterio que "Vistas en diferido" del informe).
                 Puede solaparse con asistentes en vivo. El tiempo mostrado es la
                 reproducción real en diferido.
               </Text>
