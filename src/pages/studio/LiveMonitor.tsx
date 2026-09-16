@@ -806,9 +806,11 @@ export function LiveMonitor({
                         .filter((t) => t !== focus)
                         .map((t) => (
                           <Box
-                            key={t.participant?.identity}
+                            key={`${t.participant?.identity}-${t.source}`}
                             style={{
+                              width: "100%",
                               padding: 6,
+                              boxSizing: "border-box",
                               flexShrink: 0,
                             }}
                           >

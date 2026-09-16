@@ -17,7 +17,17 @@ export function CleanTile({ trackRef, nameTagSize = "md", accentColor, nameTagSt
   const isScreenShare = trackRef.source === Track.Source.ScreenShare;
 
   return (
-    <Box style={{ position: "relative", width: "100%", height: "100%" }}>
+    <Box
+      style={{
+        position: "relative",
+        width: "100%",
+        height: "100%",
+        // Contexto de container query: permite que NameTag escale la letra
+        // en proporción al tamaño real de ESTE tile (chico en un grid denso,
+        // grande cuando está solo en foco), no a un tamaño fijo en px.
+        containerType: "inline-size",
+      }}
+    >
       <TrackRefContext.Provider value={trackRef}>
         <VideoTrack />
       </TrackRefContext.Provider>

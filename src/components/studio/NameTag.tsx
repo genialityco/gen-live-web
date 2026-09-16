@@ -45,8 +45,26 @@ const POSITION_STYLES: Record<
 };
 
 /**
+ * Ancho de tile "de referencia" (px) usado para calibrar los valores en px
+ * que configura el host (fontSize, paddingX/Y). A ese ancho, el resultado
+ * es idéntico al valor configurado; por debajo o por encima escala en
+ * proporción al ancho real del tile gracias a unidades de container query
+ * (cqw), que CleanTile habilita con `containerType: inline-size`.
+ */
+const TILE_REFERENCE_WIDTH = 640;
+
+/** Convierte un valor en px "de referencia" a un tamaño que escala con el
+ * ancho real del tile, con piso y techo para que nunca sea ilegible ni
+ * absurdamente grande. */
+function proportional(px: number, min: number, max: number): string {
+  const cqw = (px / TILE_REFERENCE_WIDTH) * 100;
+  return `clamp(${min}px, ${cqw}cqw, ${max}px)`;
+}
+
+/**
  * Resuelve el estilo CSS de un recuadro.
- * `scale` permite reducir fuentes y padding proporcionalmente para tiles pequeños.
+ * `scale` ajusta el valor de referencia (p. ej. tiles "sm" parten de un
+ * fontSize configurado menor) antes de hacerlo proporcional al tile real.
  */
 function resolveBoxStyle(
   box: TileBoxStyle | undefined,
@@ -62,21 +80,21 @@ function resolveBoxStyle(
   scale = 1,
   fontFamily?: string,
 ): React.CSSProperties {
-  const fontSize = Math.max(8, Math.round((box?.fontSize ?? defaults.fontSize) * scale));
-  const paddingX = Math.max(3, Math.round((box?.paddingX ?? defaults.paddingX) * scale));
-  const paddingY = Math.max(2, Math.round((box?.paddingY ?? defaults.paddingY) * scale));
+  const fontSize = (box?.fontSize ?? defaults.fontSize) * scale;
+  const paddingX = (box?.paddingX ?? defaults.paddingX) * scale;
+  const paddingY = (box?.paddingY ?? defaults.paddingY) * scale;
 
   return {
     background: box?.bgColor ?? defaults.bgColor,
     color: box?.textColor ?? defaults.textColor,
-    fontSize: fontSize + "px",
+    fontSize: proportional(fontSize, 8, 56),
     fontWeight: box?.fontWeight ?? defaults.fontWeight,
     fontFamily: box?.fontFamily ?? fontFamily ?? undefined,
     borderRadius: (box?.borderRadius ?? defaults.borderRadius) + "px",
-    paddingTop: paddingY + "px",
-    paddingBottom: paddingY + "px",
-    paddingLeft: paddingX + "px",
-    paddingRight: paddingX + "px",
+    paddingTop: proportional(paddingY, 2, 20),
+    paddingBottom: proportional(paddingY, 2, 20),
+    paddingLeft: proportional(paddingX, 3, 28),
+    paddingRight: proportional(paddingX, 3, 28),
     border:
       (box?.borderWidth ?? 0) > 0
         ? `${box!.borderWidth}px solid ${box?.borderColor ?? "rgba(255,255,255,0.3)"}`
@@ -235,7 +253,10 @@ export function NameTag({
       />
       <Box
         style={{
-          padding: isSmall ? "3px 7px" : "5px 11px",
+          paddingTop: proportional(isSmall ? 3 : 5, 2, 20),
+          paddingBottom: proportional(isSmall ? 3 : 5, 2, 20),
+          paddingLeft: proportional(isSmall ? 7 : 11, 3, 28),
+          paddingRight: proportional(isSmall ? 7 : 11, 3, 28),
           backdropFilter: !bgColor ? "blur(12px)" : undefined,
           background: resolvedBg,
           borderTop: !bgColor ? "1px solid rgba(255,255,255,0.10)" : "none",
@@ -244,10 +265,10 @@ export function NameTag({
         }}
       >
         <Text
-          size={isSmall ? "xs" : "sm"}
           fw={700}
           style={{
             color: resolvedText,
+            fontSize: proportional(isSmall ? 12 : 14, 8, 56),
             lineHeight: 1.2,
             textOverflow: "ellipsis",
             overflow: "hidden",
@@ -260,9 +281,9 @@ export function NameTag({
         </Text>
         {subtitle && (
           <Text
-            size="xs"
             style={{
               color: resolvedSubtitleText,
+              fontSize: proportional(isSmall ? 9 : 12, 7, 40),
               lineHeight: 1.2,
               textOverflow: "ellipsis",
               overflow: "hidden",
@@ -270,7 +291,6 @@ export function NameTag({
               fontWeight: 500,
               letterSpacing: "0.02em",
               marginTop: 1,
-              fontSize: isSmall ? "9px" : undefined,
               fontFamily: fontFamily || undefined,
             }}
           >
