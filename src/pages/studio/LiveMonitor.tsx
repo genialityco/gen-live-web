@@ -105,11 +105,15 @@ function PdfTile({
   slide,
   mimeType,
   slides,
+  fit = "contain",
 }: {
   url: string;
   slide: number;
   mimeType?: string;
   slides?: string[];
+  /** "cover" recorta y llena todo el recuadro (usado como fondo a pantalla
+   * completa); "contain" (default) muestra la diapositiva completa sin recortar. */
+  fit?: "contain" | "cover";
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [w, setW] = useState(800);
@@ -129,7 +133,7 @@ function PdfTile({
           </Document>
         </div>
       ) : (
-        <img src={slides?.[slide] ?? url} alt={`Slide ${slide + 1}`} style={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }} />
+        <img src={slides?.[slide] ?? url} alt={`Slide ${slide + 1}`} style={{ width: "100%", height: "100%", objectFit: fit, display: "block" }} />
       )}
     </div>
   );
@@ -235,7 +239,7 @@ export function LiveMonitor({
   // Solo los que están en "escena" para el programa
   // Ahora filtra por track individual (cámara o screen share por separado)
   const stageTracks = useMemo(() => {
-    return tracks.filter((t) => {
+    const filtered = tracks.filter((t) => {
       const uid = t.participant?.identity;
       if (!uid) return false;
 
@@ -244,6 +248,21 @@ export function LiveMonitor({
 
       // Solo mostrar si la key específica está en escena
       return !!stage.onStage[stageKey];
+    });
+
+    // Orden determinista (igual para host y speakers): el orden nativo que
+    // entrega LiveKit para las pistas puede variar según el cliente que
+    // observa la sala, así que se ordena por nombre para que todos vean el
+    // mismo mosaico (mismo criterio que la lista de Participantes).
+    return [...filtered].sort((a, b) => {
+      const nameA = (a.participant?.name || a.participant?.identity || "").toLowerCase();
+      const nameB = (b.participant?.name || b.participant?.identity || "").toLowerCase();
+      if (nameA !== nameB) return nameA.localeCompare(nameB);
+      // Mismo participante: cámara antes que su propia pantalla compartida
+      if (a.source !== b.source) {
+        return a.source === Track.Source.ScreenShare ? 1 : -1;
+      }
+      return 0;
     });
   }, [tracks, stage.onStage]);
 
@@ -943,6 +962,87 @@ export function LiveMonitor({
                     <Text c="dimmed">Nadie en escena</Text>
                   </Center>
                 );
+
+              case "pip_center": {
+                // Igual a "pip" (vista principal + miniaturas superpuestas),
+                // pero las miniaturas van abajo, centradas y más grandes.
+                const mainTrack = showPdfAsTile ? null : focus;
+                const thumbnailTracks = showPdfAsTile
+                  ? stageTracks
+                  : stageTracks.filter((t) => t !== focus);
+
+                if (!showPdfAsTile && !mainTrack) {
+                  return (
+                    <Center h="100%">
+                      <Text c="dimmed">Nadie en escena</Text>
+                    </Center>
+                  );
+                }
+
+                return (
+                  <Box style={{ width: "100%", height: "100%", position: "relative" }}>
+                    {/* Contenido principal a pantalla completa */}
+                    <Box style={{ position: "absolute", inset: 0 }}>
+                      {showPdfAsTile ? (
+                        <PdfTile
+                          url={visualUrl}
+                          slide={presentationSlide}
+                          mimeType={presentationMimeType}
+                          slides={presentationSlides}
+                        />
+                      ) : (
+                        mainTrack && (
+                          <CleanTile
+                            trackRef={mainTrack as TrackReference}
+                            nameTagStyle={nameTags[mainTrack.participant?.identity ?? ""]}
+                            tileAppearance={tileAppearance}
+                          />
+                        )
+                      )}
+                    </Box>
+
+                    {/* Miniaturas superpuestas, abajo y centradas */}
+                    {thumbnailTracks.length > 0 && (
+                      <Box
+                        style={{
+                          position: "absolute",
+                          left: 0,
+                          right: 0,
+                          bottom: 24,
+                          display: "flex",
+                          alignItems: "flex-end",
+                          justifyContent: "center",
+                          gap: 12,
+                          flexWrap: "wrap",
+                          padding: "0 16px",
+                        }}
+                      >
+                        {thumbnailTracks.map((t) => (
+                          <Box
+                            key={`${t.participant?.identity}-${t.source}`}
+                            style={{
+                              height: 200,
+                              aspectRatio: "16/9",
+                              flexShrink: 0,
+                              background: "#222",
+                              borderRadius: 10,
+                              overflow: "hidden",
+                              position: "relative",
+                              boxShadow: "0 6px 20px rgba(0,0,0,0.6)",
+                            }}
+                          >
+                            <CleanTile
+                              trackRef={t as TrackReference}
+                              nameTagStyle={nameTags[t.participant?.identity ?? ""]}
+                              tileAppearance={tileAppearance}
+                            />
+                          </Box>
+                        ))}
+                      </Box>
+                    )}
+                  </Box>
+                );
+              }
 
               case "side_by_side": {
                 // PDF + primer participante lado a lado
