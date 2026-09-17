@@ -5,7 +5,7 @@ import { Container, Paper, Title, Text } from "@mantine/core";
 import { StudioView } from "./StudioView";
 
 export const StudioPage: React.FC = () => {
-  const { eventSlug } = useParams<{ eventSlug: string }>();
+  const { slug, eventSlug } = useParams<{ slug: string; eventSlug: string }>();
 
   if (!eventSlug) {
     return (
@@ -24,5 +24,5 @@ export const StudioPage: React.FC = () => {
     );
   }
 
-  return <StudioView eventSlug={eventSlug} role="host" />;
+  return <StudioView eventSlug={eventSlug} orgSlug={slug} role="host" />;
 };

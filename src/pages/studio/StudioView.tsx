@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 // src/StudioView.tsx
 import React, { useEffect, useState, useRef } from "react";
+import { Link } from "react-router-dom";
 import {
   ensureRoom,
   getLivekitToken,
@@ -17,9 +18,7 @@ import {
   ControlBar,
   useLocalParticipant,
   LayoutContextProvider,
-  useRemoteParticipants,
 } from "@livekit/components-react";
-import { Track } from "livekit-client";
 
 import "@livekit/components-styles";
 import "./studio-livekit.css";
@@ -51,11 +50,13 @@ import {
   IconMessageCircle,
   IconX,
   IconSettings,
+  IconArrowLeft,
 } from "@tabler/icons-react";
 
 import { LIVEKIT_WS_URL } from "../../core/livekitConfig";
 import { ParticipantsPanel } from "./ParticipantsPanel";
 import { LiveMonitor } from "./LiveMonitor";
+import { FilteredRoomAudio } from "./FilteredRoomAudio";
 import { useStage } from "../../hooks/useStage";
 import {
   setOnStage,
@@ -85,6 +86,9 @@ interface StudioViewProps {
   displayName?: string;
   identity?: string;
   token?: string; // Token pre-generado (opcional)
+  /** Slug de la organización; si se provee (y role === "host"), muestra un
+   * acceso directo de vuelta a "Control del evento". */
+  orgSlug?: string;
 }
 
 function normalizeStatus(s: any): string {
@@ -104,70 +108,6 @@ function isTerminalEgressStatus(status: string) {
     "aborted",
     "stopped",
   ].includes(status);
-}
-
-/**
- * Componente que solo reproduce audio de participantes que están on-stage
- */
-function FilteredRoomAudio(props: { onStageMap: Record<string, boolean> }) {
-  const remoteParticipants = useRemoteParticipants();
-
-  return (
-    <>
-      {remoteParticipants.map((participant) => {
-        const isOnStage = props.onStageMap[participant.identity] ?? false;
-        if (!isOnStage) return null;
-
-        return (
-          <ParticipantAudio
-            key={participant.identity}
-            participant={participant}
-          />
-        );
-      })}
-    </>
-  );
-}
-
-/**
- * Renderiza el audio de un participante individual
- * Incluye tanto el micrófono como el audio de pantalla compartida
- */
-function ParticipantAudio(props: { participant: any }) {
-  const microphoneTrack = props.participant.getTrackPublication(
-    Track.Source.Microphone,
-  )?.audioTrack;
-  const screenShareAudioTrack = props.participant.getTrackPublication(
-    Track.Source.ScreenShareAudio,
-  )?.audioTrack;
-
-  // Reproducir audio del micrófono
-  useEffect(() => {
-    if (!microphoneTrack) return;
-
-    const audioElement = microphoneTrack.attach();
-    document.body.appendChild(audioElement);
-
-    return () => {
-      microphoneTrack.detach(audioElement);
-      audioElement.remove();
-    };
-  }, [microphoneTrack]);
-
-  // Reproducir audio de la pantalla compartida
-  useEffect(() => {
-    if (!screenShareAudioTrack) return;
-
-    const audioElement = screenShareAudioTrack.attach();
-    document.body.appendChild(audioElement);
-
-    return () => {
-      screenShareAudioTrack.detach(audioElement);
-      audioElement.remove();
-    };
-  }, [screenShareAudioTrack]);
-
-  return null;
 }
 
 function StudioRoomUI(props: {
@@ -227,6 +167,7 @@ export const StudioView: React.FC<StudioViewProps> = ({
   displayName: initialDisplayName,
   identity,
   token: preGeneratedToken,
+  orgSlug,
 }) => {
   const [token, setToken] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -772,6 +713,18 @@ export const StudioView: React.FC<StudioViewProps> = ({
               }}
             >
               <Group gap="xs">
+                {role === "host" && orgSlug && (
+                  <Button
+                    component={Link}
+                    to={`/org/${orgSlug}/event/${eventSlug}/admin/control`}
+                    variant="subtle"
+                    color="gray"
+                    size="xs"
+                    leftSection={<IconArrowLeft size={14} />}
+                  >
+                    Control del evento
+                  </Button>
+                )}
                 {displayName && (
                   <Group gap="xs">
                     <Badge color={role === "host" ? "blue" : "green"} variant="dot">
@@ -941,9 +894,12 @@ export const StudioView: React.FC<StudioViewProps> = ({
                       <Paper p="sm" withBorder radius="md">
                         <DeviceSelectorPanel />
                       </Paper>
-                      <Paper p="sm" withBorder radius="md">
-                        <VirtualBackgroundControl eventSlug={eventSlug} disabled={isBusy} />
-                      </Paper>
+                      {/* Fondo virtual: solo host (producción del live), no speakers */}
+                      {role === "host" && (
+                        <Paper p="sm" withBorder radius="md">
+                          <VirtualBackgroundControl eventSlug={eventSlug} disabled={isBusy} />
+                        </Paper>
+                      )}
                     </Stack>
                   </ScrollArea>
                 )}
@@ -1103,22 +1059,25 @@ export const StudioView: React.FC<StudioViewProps> = ({
                           <Text size="xs" fw={600} c="dimmed" tt="uppercase">
                             Dispositivos y cámara
                           </Text>
-                          <Button
-                            size="xs"
-                            variant="subtle"
-                            color="gray"
-                            onClick={toggleVbg}
-                            rightSection={<Text size="xs">{vbgOpen ? "▲" : "▼"}</Text>}
-                          >
-                            Fondo virtual
-                          </Button>
+                          {/* Fondo virtual: solo host (producción del live), no speakers */}
+                          {role === "host" && (
+                            <Button
+                              size="xs"
+                              variant="subtle"
+                              color="gray"
+                              onClick={toggleVbg}
+                              rightSection={<Text size="xs">{vbgOpen ? "▲" : "▼"}</Text>}
+                            >
+                              Fondo virtual
+                            </Button>
+                          )}
                         </Group>
                         <Box style={{ display: "flex", justifyContent: "center" }}>
                           <ControlBar variation="minimal" />
                         </Box>
                         <Divider />
                         <DeviceSelectorPanel />
-                        <Collapse in={vbgOpen}>
+                        <Collapse in={role === "host" && vbgOpen}>
                           <Divider mb="sm" />
                           <VirtualBackgroundControl eventSlug={eventSlug} disabled={isBusy} />
                         </Collapse>

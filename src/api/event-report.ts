@@ -90,6 +90,29 @@ export async function getEventReport(eventId: string): Promise<EventReport> {
   return data;
 }
 
+// ─── Desglose de asistencia real (vivo/diferido), sin campañas de email/WA ──
+export interface EventWatchStats {
+  uniqueViewers: number;
+  liveViewers: number;
+  replayViewers: number;
+  totalSessions: number;
+  totalWatchTimeSeconds: number;
+  totalLiveWatchTimeSeconds: number;
+  totalReplayWatchTimeSeconds: number;
+  avgWatchTimeSeconds: number;
+  avgLiveWatchTimeSeconds: number;
+  avgReplayWatchTimeSeconds: number;
+}
+
+export async function getEventWatchStats(
+  eventId: string
+): Promise<EventWatchStats> {
+  const { data } = await api.get<EventWatchStats>(
+    `/events/${eventId}/watch-stats`
+  );
+  return data;
+}
+
 // ─── Informe público (sin autenticación, por slug del evento) ────────────────
 export interface PublicEventReportMeta {
   title: string;
@@ -126,6 +149,8 @@ export interface PublicMetricsSummary {
   currentConcurrentViewers: number;
   peakConcurrentViewers: number;
   totalUniqueViewers: number;
+  liveViewers?: number;
+  replayViewers?: number;
   lastUpdate: number;
 }
 

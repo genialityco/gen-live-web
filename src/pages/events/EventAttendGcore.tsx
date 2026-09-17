@@ -21,6 +21,7 @@ import {
   MantineProvider,
   Tabs,
   Alert,
+  SegmentedControl,
   // Divider,
   ThemeIcon,
   rem,
@@ -75,8 +76,21 @@ import {
 import { ViewerHlsPlayer } from "../viewer/ViewerHlsPlayer";
 import { VodHlsPlayer } from "../viewer/VodHlsPlayer";
 import { VimeoPlayer } from "../viewer/VimeoPlayer";
+import { resolveStreams } from "../../components/events/streamUtils";
 import { Track } from "livekit-client";
 import { trackEvent } from "../../lib/utmTracking";
+
+const STREAM_PROVIDER_LABELS: Record<string, string> = {
+  vimeo: "Vimeo",
+  bunny: "Bunny",
+  cloudflare: "Cloudflare",
+  mux: "Mux",
+  youtube: "YouTube",
+};
+
+function streamProviderLabel(provider: string) {
+  return STREAM_PROVIDER_LABELS[provider.toLowerCase()] ?? provider;
+}
 
 function SpeakerPreview() {
   const tracks = useTracks(
@@ -908,17 +922,23 @@ export default function EventAttendGcore() {
   // reproducción real (playing) para las métricas. HLS .m3u8 → <video> nativo;
   // Vimeo → SDK; otros embeds → iframe crudo (sin medición posible).
   const isVimeoUrl = (url: string) => /vimeo\.com/i.test(url);
-  const renderPlayer = (url: string, pmode: "live" | "replay") => {
+  const renderPlayer = (
+    url: string,
+    pmode: "live" | "replay",
+    onError?: () => void,
+  ) => {
     const onPlayingChange = (playing: boolean) => reportPlayback(playing, pmode);
     if (url.includes(".m3u8")) {
       return pmode === "live" ? (
         <ViewerHlsPlayer src={url} onPlayingChange={onPlayingChange} />
       ) : (
-        <VodHlsPlayer src={url} onPlayingChange={onPlayingChange} />
+        <VodHlsPlayer src={url} onPlayingChange={onPlayingChange} onError={onError} />
       );
     }
     if (isVimeoUrl(url)) {
-      return <VimeoPlayer src={url} onPlayingChange={onPlayingChange} />;
+      return (
+        <VimeoPlayer src={url} onPlayingChange={onPlayingChange} onError={onError} />
+      );
     }
     // Embed desconocido (cross-origin): no se puede medir reproducción.
     return (
@@ -928,7 +948,83 @@ export default function EventAttendGcore() {
         title="Reproductor de video"
         allow="autoplay; fullscreen; picture-in-picture"
         allowFullScreen
+        onError={onError}
       />
+    );
+  };
+
+  // Repetición con múltiples fuentes (vimeo/bunny/etc.): selector cuando hay
+  // más de una, con fallback automático a la siguiente si la activa falla.
+  // Solo aplica a la repetición: en vivo la fuente sigue siendo `playbackUrl`.
+  const replayStreamList = resolveStreams(finalEvent?.streams, finalEvent?.stream);
+  const replayListKey = replayStreamList
+    .map((s) => `${s.provider}:${s.url}`)
+    .join("|");
+  const [replayManualProvider, setReplayManualProvider] = useState<string | null>(
+    null,
+  );
+  const [replayFailed, setReplayFailed] = useState<Set<string>>(new Set());
+  const [replayTrackedKey, setReplayTrackedKey] = useState(replayListKey);
+  if (replayTrackedKey !== replayListKey) {
+    setReplayTrackedKey(replayListKey);
+    setReplayManualProvider(null);
+    setReplayFailed(new Set());
+  }
+  const replayAvailable = replayStreamList.filter((s) => !replayFailed.has(s.provider));
+  const replayActive =
+    (replayManualProvider &&
+      replayStreamList.find(
+        (s) => s.provider === replayManualProvider && !replayFailed.has(s.provider),
+      )) ||
+    replayAvailable[0] ||
+    replayStreamList[0];
+  const replayAllFailed =
+    replayStreamList.length > 0 && replayFailed.size >= replayStreamList.length;
+  const markReplayFailed = (provider: string) => {
+    setReplayFailed((prev) => {
+      if (prev.has(provider)) return prev;
+      const next = new Set(prev);
+      next.add(provider);
+      return next;
+    });
+  };
+  const renderReplayBlock = () => {
+    if (!replayActive) return null;
+    return (
+      <>
+        {replayStreamList.length > 1 && (
+          <Box style={{ position: "absolute", top: 8, right: 8, zIndex: 2 }}>
+            <SegmentedControl
+              size="xs"
+              value={replayActive.provider}
+              onChange={(value) => {
+                setReplayFailed((prev) => {
+                  if (!prev.has(value)) return prev;
+                  const next = new Set(prev);
+                  next.delete(value);
+                  return next;
+                });
+                setReplayManualProvider(value);
+              }}
+              data={replayStreamList.map((s) => ({
+                label: streamProviderLabel(s.provider),
+                value: s.provider,
+              }))}
+            />
+          </Box>
+        )}
+        {replayAllFailed ? (
+          <Center h="100%" style={{ background: "#111" }}>
+            <Text c="dimmed" size="sm">
+              No se pudo cargar ninguna fuente de video
+            </Text>
+          </Center>
+        ) : (
+          renderPlayer(replayActive.url, "replay", () =>
+            markReplayFailed(replayActive.provider),
+          )
+        )}
+      </>
     );
   };
 
@@ -1088,12 +1184,9 @@ export default function EventAttendGcore() {
                         </Center>
                       )}
                     </Box>
-                  ) : status === "replay" &&
-                    finalEvent.stream &&
-                    "url" in finalEvent.stream &&
-                    finalEvent.stream.url ? (
+                  ) : status === "replay" && replayStreamList.length > 0 ? (
                     <Box style={{ position: "absolute", inset: 0 }}>
-                      {renderPlayer(finalEvent.stream.url, "replay")}
+                      {renderReplayBlock()}
                     </Box>
                   ) : (
                     <Box style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "#111" }}>
@@ -1369,12 +1462,9 @@ export default function EventAttendGcore() {
                               </Center>
                             )}
                           </Box>
-                        ) : status === "replay" &&
-                          finalEvent.stream &&
-                          "url" in finalEvent.stream &&
-                          finalEvent.stream.url ? (
+                        ) : status === "replay" && replayStreamList.length > 0 ? (
                           <Box style={{ position: "absolute", inset: 0 }}>
-                            {renderPlayer(finalEvent.stream.url, "replay")}
+                            {renderReplayBlock()}
                           </Box>
                         ) : status === "upcoming" ? (
                           <Box

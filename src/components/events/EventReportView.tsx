@@ -336,6 +336,14 @@ export default function EventReportView({
         <Text fz={9} c="dimmed" mt={2}>
           Generado {new Date(report.generatedAt).toLocaleString("es")}
         </Text>
+        {shareUrl && (
+          <Text fz={9} c="dimmed" mt={2}>
+            Enlace público: {shareUrl}
+          </Text>
+        )}
+        <Text fz={11} mt="xs">
+          A continuación se presentan los datos asociados al evento.
+        </Text>
         <Divider my="xs" />
       </div>
 
@@ -413,12 +421,17 @@ export default function EventReportView({
             </Group>
             <SimpleGrid cols={3} spacing="sm">
               <Stat label="Enviados" value={email.totals.sent} />
-              <Stat label="Clics únicos" value={email.totals.clicked} />
-              <Stat label="CTR" value={`${emailClickRate}%`} />
+              <Stat label="Personas hicieron clic" value={email.totals.clicked} />
+              <Stat label="CTR (personas que hicieron clic)" value={`${emailClickRate}%`} />
               <Stat label="Clics totales" value={email.totals.totalClicks} />
               <Stat label="Rebotes" value={email.totals.bounced} />
               <Stat label="Fallidos" value={email.totals.failed} />
             </SimpleGrid>
+            <Text size="xs" c="dimmed" mt="sm">
+              <b>CTR</b> = porcentaje de enviados que hicieron al menos un
+              clic. <b>Rebotes</b> = correos que no pudieron entregarse (dirección
+              inválida, buzón lleno, etc.).
+            </Text>
           </Card>
         </Grid.Col>
 
@@ -447,10 +460,15 @@ export default function EventReportView({
         {/* ─── Engagement / visualización ─── */}
         <Grid.Col span={12}>
           <Card withBorder radius="md" className="report-card-breakable">
-            <Group gap="xs" mb="md">
+            <Group gap="xs" mb={4}>
               <IconEye size={22} color="var(--mantine-color-grape-6)" />
               <Title order={4}>Engagement y visualización</Title>
             </Group>
+            <Text size="xs" c="dimmed" mb="md">
+              <b>Engagement</b>: qué tanto interactuaron los registrados con el
+              evento — cuántos se conectaron y cuántos realmente vieron la
+              transmisión, en vivo o en diferido.
+            </Text>
 
             {/* Indicadores clave, destacados aparte. */}
             <SimpleGrid cols={{ base: 2, sm: 4 }} spacing="md">
@@ -467,13 +485,13 @@ export default function EventReportView({
                 icon={<IconUsers size={18} color="var(--mantine-color-grape-6)" />}
               />
               <BigStat
-                label="Vieron en vivo"
+                label="Vistas en vivo"
                 value={viewing.liveViewers}
                 color="red"
                 icon={<IconEye size={18} color="var(--mantine-color-red-6)" />}
               />
               <BigStat
-                label="Vieron en diferido"
+                label="Vistas en diferido"
                 value={viewing.replayViewers}
                 color="indigo"
                 icon={<IconEye size={18} color="var(--mantine-color-indigo-6)" />}
@@ -529,7 +547,7 @@ export default function EventReportView({
               <div className="report-legend">
                 <Text size="xs" c="dimmed">
                   <b>Espectadores únicos</b> = personas distintas que se conectaron
-                  (asistencia), reprodujeran o no. <b>Vieron en vivo</b> /{" "}
+                  (asistencia), reprodujeran o no. <b>Vistas en vivo</b> /{" "}
                   <b>en diferido</b> son quienes <b>reprodujeron de verdad</b> el
                   video durante el live o el replay (una misma persona puede estar en
                   ambos); pueden ser menos que los únicos, lo que revela cuántos
@@ -552,7 +570,7 @@ export default function EventReportView({
             ) : (
               <Text size="xs" c="dimmed" className="report-legend">
                 <b>Espectadores únicos</b> = personas distintas que se conectaron
-                (asistencia). <b>Vieron en vivo</b> / <b>en diferido</b> son quienes
+                (asistencia). <b>Vistas en vivo</b> / <b>en diferido</b> son quienes
                 reprodujeron de verdad el video. Cambia a <b>Detallado</b> para ver
                 sesiones, pico concurrente y tiempos de reproducción.
               </Text>

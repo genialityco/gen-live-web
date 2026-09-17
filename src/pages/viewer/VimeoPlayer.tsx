@@ -14,6 +14,8 @@ type Props = {
   src: string;
   /** Notifica cuándo el video está realmente reproduciéndose (métricas reales). */
   onPlayingChange?: (playing: boolean) => void;
+  /** Notifica un error del SDK (video privado/eliminado/no encontrado, etc.). */
+  onError?: () => void;
   title?: string;
 };
 
@@ -47,10 +49,12 @@ function ensureAutoplayParams(src: string, forceMuted: boolean): string {
   }
 }
 
-export function VimeoPlayer({ src, onPlayingChange, title }: Props) {
+export function VimeoPlayer({ src, onPlayingChange, onError, title }: Props) {
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const onPlayingChangeRef = useRef(onPlayingChange);
   onPlayingChangeRef.current = onPlayingChange;
+  const onErrorRef = useRef(onError);
+  onErrorRef.current = onError;
   const playerRef = useRef<Player | null>(null);
 
   // Si arrancamos en silencio (autoplay bloqueado con sonido), ofrecemos un
@@ -88,6 +92,7 @@ export function VimeoPlayer({ src, onPlayingChange, title }: Props) {
         })
         .catch(() => {});
     };
+    const onPlayerError = () => onErrorRef.current?.();
 
     // El SDK es best-effort: si falla (URL inválida, ad-blocker, fallo de red al
     // cargar player.js), el <iframe> sigue funcionando; solo perdemos métricas
@@ -103,6 +108,7 @@ export function VimeoPlayer({ src, onPlayingChange, title }: Props) {
       player.on("bufferstart", onBufferStart);
       player.on("bufferend", onBufferEnd);
       player.on("volumechange", onVolumeChange);
+      player.on("error", onPlayerError);
 
       // Arranque automático.
       if (forceMuted) {
@@ -137,6 +143,7 @@ export function VimeoPlayer({ src, onPlayingChange, title }: Props) {
         player.off("bufferstart", onBufferStart);
         player.off("bufferend", onBufferEnd);
         player.off("volumechange", onVolumeChange);
+        player.off("error", onPlayerError);
         // No destruimos el player (destruiría el iframe que React controla);
         // basta con soltar los listeners.
       } catch {
