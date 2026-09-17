@@ -35,6 +35,21 @@ function isIosLike(): boolean {
   return iOS || iPadOS;
 }
 
+/**
+ * Parámetros del embed de Vimeo que ocultan toda la marca/chrome del
+ * reproductor (logo, título, autor, avatar) y dejan solo los controles
+ * básicos de reproducción (play/pausa, volumen, línea de tiempo, pantalla
+ * completa). `logo=0` requiere un plan Vimeo con esa opción habilitada; el
+ * resto funciona siempre vía URL sin importar el plan.
+ */
+const BRANDING_PARAMS: Record<string, string> = {
+  title: "0",
+  byline: "0",
+  portrait: "0",
+  logo: "0",
+  dnt: "1",
+};
+
 /** Asegura los parámetros de autoplay/inline (y muted en iOS) en la URL embed. */
 function ensureAutoplayParams(src: string, forceMuted: boolean): string {
   try {
@@ -42,10 +57,16 @@ function ensureAutoplayParams(src: string, forceMuted: boolean): string {
     u.searchParams.set("autoplay", "1");
     u.searchParams.set("playsinline", "1");
     if (forceMuted) u.searchParams.set("muted", "1");
+    for (const [key, value] of Object.entries(BRANDING_PARAMS)) {
+      u.searchParams.set(key, value);
+    }
     return u.toString();
   } catch {
     const sep = src.includes("?") ? "&" : "?";
-    return `${src}${sep}autoplay=1&playsinline=1${forceMuted ? "&muted=1" : ""}`;
+    const branding = Object.entries(BRANDING_PARAMS)
+      .map(([key, value]) => `${key}=${value}`)
+      .join("&");
+    return `${src}${sep}autoplay=1&playsinline=1${forceMuted ? "&muted=1" : ""}&${branding}`;
   }
 }
 
