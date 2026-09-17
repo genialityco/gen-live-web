@@ -39,14 +39,14 @@ function isIosLike(): boolean {
  * Parámetros del embed de Vimeo que ocultan toda la marca/chrome del
  * reproductor (logo, título, autor, avatar) y dejan solo los controles
  * básicos de reproducción (play/pausa, volumen, línea de tiempo, pantalla
- * completa). `logo=0` requiere un plan Vimeo con esa opción habilitada; el
- * resto funciona siempre vía URL sin importar el plan.
+ * completa). `vimeo_logo=0` requiere un plan Vimeo con esa opción habilitada;
+ * el resto funciona siempre vía URL sin importar el plan.
  */
 const BRANDING_PARAMS: Record<string, string> = {
   title: "0",
   byline: "0",
   portrait: "0",
-  logo: "0",
+  vimeo_logo: "0",
   dnt: "1",
 };
 
