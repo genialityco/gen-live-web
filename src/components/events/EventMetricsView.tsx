@@ -166,20 +166,22 @@ export default function EventMetricsView({
               </Stack>
             </Paper>
 
-            <Paper p="xl" withBorder style={{ height: "100%", background: "var(--mantine-color-indigo-0)" }}>
-              <Stack gap="xs" align="center">
-                <IconRewindForward10 size={48} color="var(--mantine-color-indigo-6)" />
-                <Text size="xs" c="dimmed" ta="center" fw={500}>
-                  Diferidos
-                </Text>
-                <Text size="2.5rem" fw={700} c="indigo">
-                  {metrics.replayViewers ?? "—"}
-                </Text>
-                <Text size="xs" c="dimmed">
-                  Reprodujeron la repetición
-                </Text>
-              </Stack>
-            </Paper>
+            {!isLive && (
+              <Paper p="xl" withBorder style={{ height: "100%", background: "var(--mantine-color-indigo-0)" }}>
+                <Stack gap="xs" align="center">
+                  <IconRewindForward10 size={48} color="var(--mantine-color-indigo-6)" />
+                  <Text size="xs" c="dimmed" ta="center" fw={500}>
+                    Diferidos
+                  </Text>
+                  <Text size="2.5rem" fw={700} c="indigo">
+                    {metrics.replayViewers ?? "—"}
+                  </Text>
+                  <Text size="xs" c="dimmed">
+                    Reprodujeron la repetición
+                  </Text>
+                </Stack>
+              </Paper>
+            )}
 
             <Paper p="xl" withBorder style={{ height: "100%", background: "var(--mantine-color-teal-0)" }}>
               <Stack gap="xs" align="center">
