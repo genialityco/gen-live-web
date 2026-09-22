@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Accordion,
   Badge,
@@ -10,7 +10,6 @@ import {
   Stack,
   Text,
   TextInput,
-  PasswordInput,
   Divider,
   NumberInput,
   Box,
@@ -88,15 +87,6 @@ export const LiveConfigPanel: React.FC<Props> = ({
   });
 
   const ingestProtocol = form.values.ingestProtocol;
-
-  const maskedRtmpKey = useMemo(
-    () => form.values.rtmpStreamKey === "****",
-    [form.values.rtmpStreamKey]
-  );
-  const maskedSrt = useMemo(
-    () => form.values.srtIngestUrl === "****",
-    [form.values.srtIngestUrl]
-  );
 
   const loadConfig = async () => {
     setLoading(true);
@@ -305,28 +295,18 @@ export const LiveConfigPanel: React.FC<Props> = ({
                     placeholder="rtmp://global-live.mux.com:5222/app"
                     {...form.getInputProps("rtmpServerUrl")}
                   />
-                  <PasswordInput
+                  <TextInput
                     disabled={disabled}
                     label="RTMP Stream Key"
-                    placeholder={maskedRtmpKey ? "****" : "stream_key..."}
-                    description={
-                      maskedRtmpKey
-                        ? "Guardada (enmascarada). Escribe para reemplazar."
-                        : undefined
-                    }
+                    placeholder="stream_key..."
                     {...form.getInputProps("rtmpStreamKey")}
                   />
                 </>
               ) : (
-                <PasswordInput
+                <TextInput
                   disabled={disabled}
                   label="SRT Ingest URL"
-                  placeholder={maskedSrt ? "****" : "srt://..."}
-                  description={
-                    maskedSrt
-                      ? "Guardada (enmascarada). Escribe para reemplazar."
-                      : undefined
-                  }
+                  placeholder="srt://..."
                   {...form.getInputProps("srtIngestUrl")}
                 />
               )}
@@ -367,8 +347,8 @@ export const LiveConfigPanel: React.FC<Props> = ({
               </form>
 
               <Text size="xs" c="dimmed">
-                Tip: si la key aparece enmascarada (****), ya está guardada; solo
-                escribe si quieres reemplazarla.
+                La RTMP Stream Key y la SRT Ingest URL se muestran en texto
+                plano para poder verificarlas.
               </Text>
             </Stack>
           </Accordion.Panel>
