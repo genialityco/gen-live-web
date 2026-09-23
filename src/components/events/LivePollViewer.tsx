@@ -384,12 +384,12 @@ export default function LivePollViewer({
                 )}
 
                 <Stack gap="md">
-                  {activePoll.questions.map((question, index) => (
+                  {activePoll.questions.map((question) => (
                     <Card key={question.id} withBorder radius="md" p="md">
                       <Stack gap="sm">
                         <Box>
                           <Text fw={600} size="sm">
-                            {index + 1}. {question.text}
+                            {question.text}
                             {question.required && (
                               <Text component="span" c="red" ml={4}>
                                 *
