@@ -1,5 +1,5 @@
 /* eslint-disable react-hooks/exhaustive-deps */
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import {
   Drawer,
   Stack,
@@ -19,7 +19,7 @@ import {
   Transition,
 } from "@mantine/core";
 import { IconCheck, IconAlertCircle, IconX, IconChartBar } from "@tabler/icons-react";
-import { ref, onValue, off } from "firebase/database";
+import { ref, onValue } from "firebase/database";
 import { rtdb } from "../../core/firebase";
 import { submitPollResponse, checkIfUserResponded, type PollAnswer } from "../../api/polls";
 
@@ -47,6 +47,33 @@ interface ActivePoll {
   questions: PollQuestion[];
 }
 
+/**
+ * Fusiona una actualización de la encuesta sin reemplazar la estructura de
+ * preguntas/opciones: sólo refresca los votos. Así los ids que usan los
+ * Radio/Checkbox permanecen estables y la selección del usuario no se pierde
+ * cuando llega un snapshot de Firebase (p. ej. cuando otro asistente vota).
+ */
+function mergePollStats(prev: ActivePoll, next: Partial<ActivePoll>): ActivePoll {
+  const incoming = next.questions;
+
+  const questions = incoming
+    ? prev.questions.map((question) => {
+        const updated = incoming.find((q) => q.id === question.id);
+        if (!updated) return question;
+
+        return {
+          ...question,
+          options: question.options.map((option) => {
+            const updatedOption = updated.options?.find((o) => o.id === option.id);
+            return updatedOption ? { ...option, votes: updatedOption.votes } : option;
+          }),
+        };
+      })
+    : prev.questions;
+
+  return { ...prev, ...next, id: prev.id, questions };
+}
+
 interface LivePollViewerProps {
   orgSlug: string;
   eventSlug: string;
@@ -69,6 +96,27 @@ export default function LivePollViewer({
   const [drawerOpen, setDrawerOpen] = useState(true); // Control manual del drawer
   const [, setCheckingResponse] = useState(false);
 
+  // Encuesta que ya se abrió automáticamente: evita reabrir el drawer en cada
+  // actualización del nodo activePoll (votos, totalResponses, reconexiones...)
+  const openedPollIdRef = useRef<string | null>(null);
+  // Clave pollId:orgAttendeeId ya verificada contra el backend
+  const checkedKeyRef = useRef<string | null>(null);
+  // Encuesta cuyas respuestas ya se inicializaron
+  const answersPollIdRef = useRef<string | null>(null);
+
+  // Inicializa las respuestas vacías UNA sola vez por encuesta. Los snapshots
+  // posteriores no deben tocar `answers` o borrarían lo que el usuario marcó.
+  const ensureAnswers = useCallback((pollId: string, questions: PollQuestion[]) => {
+    if (answersPollIdRef.current === pollId) return;
+    answersPollIdRef.current = pollId;
+
+    const initialAnswers: Record<string, string[]> = {};
+    questions.forEach((q) => {
+      initialAnswers[q.id] = [];
+    });
+    setAnswers(initialAnswers);
+  }, []);
+
   useEffect(() => {
     
     if (!eventId) {
@@ -82,22 +130,36 @@ export default function LivePollViewer({
         const data = snapshot.val();
         
         if (data && data.status === "published") {
-          setActivePoll(data);
-          setDrawerOpen(true); // Abrir automáticamente cuando se publica
-          
+          setActivePoll((prev) =>
+            prev && prev.id === data.id ? mergePollStats(prev, data) : data
+          );
+
+          // Abrir automáticamente solo la primera vez que se publica esta
+          // encuesta; si el usuario ya cerró el drawer, respetamos su decisión
+          if (openedPollIdRef.current !== data.id) {
+            openedPollIdRef.current = data.id;
+            setDrawerOpen(true);
+            setSubmitted(false);
+            setHasResponded(false);
+            setError("");
+          }
+
           // Solo verificar si tenemos orgAttendeeId
           if (!orgAttendeeId) {
             console.log('[LivePollViewer] Waiting for orgAttendeeId...');
             setCheckingResponse(false);
             // Inicializar respuestas vacías mientras tanto
-            const initialAnswers: Record<string, string[]> = {};
-            data.questions.forEach((q: PollQuestion) => {
-              initialAnswers[q.id] = [];
-            });
-            setAnswers(initialAnswers);
+            ensureAnswers(data.id, data.questions);
             return;
           }
-          
+
+          // Verificar una sola vez por encuesta/asistente
+          const checkKey = `${data.id}:${orgAttendeeId}`;
+          if (checkedKeyRef.current === checkKey) {
+            return;
+          }
+          checkedKeyRef.current = checkKey;
+
           // Verificar en el backend si el usuario ya respondió esta encuesta
           setCheckingResponse(true);
           console.log('[LivePollViewer] Checking if user responded - pollId:', data.id, 'orgAttendeeId:', orgAttendeeId);
@@ -109,28 +171,24 @@ export default function LivePollViewer({
               
               // Inicializar respuestas vacías solo si no ha respondido
               if (!result.hasResponded) {
-                const initialAnswers: Record<string, string[]> = {};
-                data.questions.forEach((q: PollQuestion) => {
-                  initialAnswers[q.id] = [];
-                });
-                setAnswers(initialAnswers);
+                ensureAnswers(data.id, data.questions);
               }
             })
             .catch((err) => {
               console.error('Error checking if user responded:', err);
-              // En caso de error, permitir responder
+              // En caso de error, permitir responder y reintentar la próxima vez
+              checkedKeyRef.current = null;
               setHasResponded(false);
-              const initialAnswers: Record<string, string[]> = {};
-              data.questions.forEach((q: PollQuestion) => {
-                initialAnswers[q.id] = [];
-              });
-              setAnswers(initialAnswers);
+              ensureAnswers(data.id, data.questions);
             })
             .finally(() => {
               setCheckingResponse(false);
             });
         } else {
           // Si se despublica, cerrar el drawer
+          openedPollIdRef.current = null;
+          checkedKeyRef.current = null;
+          answersPollIdRef.current = null;
           setActivePoll(null);
           setSubmitted(false);
           setHasResponded(false);
@@ -147,7 +205,7 @@ export default function LivePollViewer({
     } catch (err) {
       console.error('[LivePollViewer] Error setting up listener:', err);
     }
-  }, [eventId, orgAttendeeId]);
+  }, [eventId, orgAttendeeId, ensureAnswers]);
 
   // Escuchar actualizaciones en tiempo real de las estadísticas
   useEffect(() => {
@@ -155,15 +213,15 @@ export default function LivePollViewer({
 
     const pollRef = ref(rtdb, `events/${eventId}/polls/${activePoll.id}`);
 
-    onValue(pollRef, (snapshot) => {
+    const unsubscribe = onValue(pollRef, (snapshot) => {
       const data = snapshot.val();
       if (data) {
-        setActivePoll((prev) => (prev ? { ...prev, ...data } : null));
+        setActivePoll((prev) => (prev ? mergePollStats(prev, data) : null));
       }
     });
 
     return () => {
-      off(pollRef);
+      unsubscribe();
     };
   }, [eventId, activePoll?.id, activePoll?.showStatistics]);
 
@@ -427,7 +485,7 @@ export default function LivePollViewer({
                                 <Checkbox
                                   key={option.id}
                                   label={option.text}
-                                  checked={answers[question.id]?.includes(option.id)}
+                                  checked={answers[question.id]?.includes(option.id) ?? false}
                                   onChange={() =>
                                     handleAnswerChange(question.id, option.id, true)
                                   }
