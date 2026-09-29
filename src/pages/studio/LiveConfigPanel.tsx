@@ -7,6 +7,7 @@ import {
   Group,
   Loader,
   Paper,
+  Select,
   Stack,
   Text,
   TextInput,
@@ -36,13 +37,29 @@ const PROVIDER_LABELS: Record<string, string> = {
   vimeo: "Vimeo",
   mux: "Mux",
   gcore: "Gcore",
+  cloudflare: "Cloudflare",
 };
 
 const PROVIDER_COLORS: Record<string, string> = {
   vimeo: "blue",
   mux: "orange",
   gcore: "teal",
+  cloudflare: "grape",
 };
+
+/**
+ * RTMP server por defecto de cada proveedor seleccionable en el estudio.
+ * El stream key sigue siendo manual (es específico de cada evento).
+ */
+const RTMP_SERVER_BY_PROVIDER: Record<string, string> = {
+  vimeo: "rtmp://rtmp-global.cloud.vimeo.com/live",
+  cloudflare: "rtmps://live.cloudflare.com:443/live",
+};
+
+const PROVIDER_SELECT_OPTIONS = [
+  { value: "vimeo", label: "Vimeo" },
+  { value: "cloudflare", label: "Cloudflare" },
+];
 
 export const LiveConfigPanel: React.FC<Props> = ({
   eventSlug,
@@ -52,7 +69,7 @@ export const LiveConfigPanel: React.FC<Props> = ({
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [provisioning, setProvisioning] = useState(false);
-  const [currentProvider, setCurrentProvider] = useState<StreamProvider>("mux");
+  const [currentProvider, setCurrentProvider] = useState<StreamProvider>("vimeo");
   const [providerStreamId, setProviderStreamId] = useState("");
 
   const form = useForm({
@@ -119,10 +136,20 @@ export const LiveConfigPanel: React.FC<Props> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [eventSlug]);
 
+  const handleProviderChange = (value: string | null) => {
+    if (!value) return;
+    setCurrentProvider(value as StreamProvider);
+    const rtmpServerUrl = RTMP_SERVER_BY_PROVIDER[value];
+    if (rtmpServerUrl) {
+      form.setFieldValue("ingestProtocol", "rtmp");
+      form.setFieldValue("rtmpServerUrl", rtmpServerUrl);
+    }
+  };
+
   const onSave = form.onSubmit(async (values) => {
     setSaving(true);
     try {
-      const payload: any = { eventSlug, ...values };
+      const payload: any = { eventSlug, provider: currentProvider, ...values };
       if (payload.rtmpStreamKey === "****") delete payload.rtmpStreamKey;
       if (payload.srtIngestUrl === "****") delete payload.srtIngestUrl;
 
@@ -235,6 +262,21 @@ export const LiveConfigPanel: React.FC<Props> = ({
           <Accordion.Panel>
             <Stack gap="sm" pt="xs">
 
+              <Select
+                disabled={disabled}
+                label="Proveedor de Live"
+                description="Selecciona el destino del RTMP. Precarga el RTMP Server; el Stream Key sigue siendo manual."
+                data={PROVIDER_SELECT_OPTIONS}
+                value={
+                  PROVIDER_SELECT_OPTIONS.some((o) => o.value === currentProvider)
+                    ? currentProvider
+                    : null
+                }
+                onChange={handleProviderChange}
+              />
+
+              <Divider />
+
               {/* Provisionar con Mux */}
               <Box>
                 <Text size="sm" fw={500} mb={4}>
@@ -276,10 +318,27 @@ export const LiveConfigPanel: React.FC<Props> = ({
                     icon={<IconAlertCircle size={14} />}
                   >
                     <Text size="xs">
-                      Proveedor: <strong>Vimeo</strong>. Ingresa el RTMP server,
-                      stream key y la URL embed del video
+                      Proveedor: <strong>Vimeo</strong>. El RTMP Server ya está
+                      precargado; solo falta el Stream Key (de tu evento en
+                      Vimeo Live) y la URL embed del video
                       (<code>https://player.vimeo.com/video/...</code>) como
                       Playback URL.
+                    </Text>
+                  </Alert>
+                )}
+
+                {currentProvider === "cloudflare" && (
+                  <Alert
+                    mt="xs"
+                    variant="light"
+                    color="grape"
+                    icon={<IconAlertCircle size={14} />}
+                  >
+                    <Text size="xs">
+                      Proveedor: <strong>Cloudflare</strong>. El RTMP Server ya
+                      está precargado; solo falta el Stream Key (del Live Input
+                      en Cloudflare Stream) y la URL de playback
+                      (<code>https://customer-xxx.cloudflarestream.com/.../manifest/video.m3u8</code>).
                     </Text>
                   </Alert>
                 )}
