@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Hls from "hls.js";
 import { attachPlaybackTracking } from "../../utils/playback-tracking";
+import { stripCloudflareLowLatencyParam } from "../../utils/hls-url";
 
 type Props = {
   src: string;
@@ -91,7 +92,7 @@ export function VodHlsPlayer({
 
     hlsRef.current = hls;
 
-    hls.loadSource(src);
+    hls.loadSource(stripCloudflareLowLatencyParam(src));
     hls.attachMedia(video);
 
     const tryPlay = () => {

@@ -7,6 +7,7 @@ import {
   Group,
   Loader,
   Paper,
+  SegmentedControl,
   Select,
   Stack,
   Text,
@@ -54,6 +55,15 @@ const PROVIDER_COLORS: Record<string, string> = {
 const RTMP_SERVER_BY_PROVIDER: Record<string, string> = {
   vimeo: "rtmp://rtmp-global.cloud.vimeo.com/live",
   cloudflare: "rtmps://live.cloudflare.com:443/live",
+};
+
+/**
+ * SRT ingest por defecto de los proveedores que lo soportan. Un proveedor
+ * que no aparece acá (ej. Vimeo) no ofrece SRT, así que no se muestra el
+ * toggle de protocolo para él y queda fijo en RTMP.
+ */
+const SRT_SERVER_BY_PROVIDER: Record<string, string> = {
+  cloudflare: "srt://live.cloudflare.com:778",
 };
 
 const PROVIDER_SELECT_OPTIONS = [
@@ -139,10 +149,25 @@ export const LiveConfigPanel: React.FC<Props> = ({
   const handleProviderChange = (value: string | null) => {
     if (!value) return;
     setCurrentProvider(value as StreamProvider);
+    // Cambiar de proveedor siempre vuelve a RTMP por defecto; si el nuevo
+    // proveedor también soporta SRT, el host puede cambiar el protocolo con
+    // el toggle de abajo.
+    form.setFieldValue("ingestProtocol", "rtmp");
     const rtmpServerUrl = RTMP_SERVER_BY_PROVIDER[value];
     if (rtmpServerUrl) {
-      form.setFieldValue("ingestProtocol", "rtmp");
       form.setFieldValue("rtmpServerUrl", rtmpServerUrl);
+    }
+  };
+
+  const handleIngestProtocolChange = (value: string) => {
+    const protocol = value as "rtmp" | "srt";
+    form.setFieldValue("ingestProtocol", protocol);
+    if (protocol === "srt") {
+      const srtServerUrl = SRT_SERVER_BY_PROVIDER[currentProvider];
+      if (srtServerUrl) form.setFieldValue("srtIngestUrl", srtServerUrl);
+    } else {
+      const rtmpServerUrl = RTMP_SERVER_BY_PROVIDER[currentProvider];
+      if (rtmpServerUrl) form.setFieldValue("rtmpServerUrl", rtmpServerUrl);
     }
   };
 
@@ -335,9 +360,10 @@ export const LiveConfigPanel: React.FC<Props> = ({
                     icon={<IconAlertCircle size={14} />}
                   >
                     <Text size="xs">
-                      Proveedor: <strong>Cloudflare</strong>. El RTMP Server ya
-                      está precargado; solo falta el Stream Key (del Live Input
-                      en Cloudflare Stream) y la URL de playback
+                      Proveedor: <strong>Cloudflare</strong>. Soporta RTMP o
+                      SRT (elegí el protocolo abajo) — el server ya está
+                      precargado; solo falta el Stream Key / streamid (del
+                      Live Input en Cloudflare Stream) y la URL de playback
                       (<code>https://customer-xxx.cloudflarestream.com/.../manifest/video.m3u8</code>).
                     </Text>
                   </Alert>
@@ -345,6 +371,19 @@ export const LiveConfigPanel: React.FC<Props> = ({
               </Box>
 
               <Divider />
+
+              {SRT_SERVER_BY_PROVIDER[currentProvider] && (
+                <SegmentedControl
+                  disabled={disabled}
+                  fullWidth
+                  data={[
+                    { label: "RTMP", value: "rtmp" },
+                    { label: "SRT", value: "srt" },
+                  ]}
+                  value={ingestProtocol}
+                  onChange={handleIngestProtocolChange}
+                />
+              )}
 
               {ingestProtocol === "rtmp" ? (
                 <>
@@ -365,7 +404,8 @@ export const LiveConfigPanel: React.FC<Props> = ({
                 <TextInput
                   disabled={disabled}
                   label="SRT Ingest URL"
-                  placeholder="srt://..."
+                  placeholder="srt://live.cloudflare.com:778?streamid=..."
+                  description="El server ya está precargado; agregale el streamid/passphrase del Live Input (va todo en una sola URL, a diferencia de RTMP que separa server y key)."
                   {...form.getInputProps("srtIngestUrl")}
                 />
               )}
