@@ -2,16 +2,18 @@
 
 /**
  * Cloudflare Stream permite pedir el manifest en modo Low-Latency HLS
- * agregando `?protocol=llhls`/`llhlsbeta`. Ese modo está pensado para
- * reproductores NATIVOS (Safari/iOS AVPlayer tiene soporte LL-HLS real);
- * con hls.js (el resto de navegadores) es conocido que el "blocking
- * playlist reload" y los segmentos parciales de Cloudflare no siempre
- * calzan con su implementación, y la reproducción se cuelga o falla.
+ * agregando `?protocol=llhls`/`llhlsbeta` (requiere además tener
+ * `preferLowLatency: true` configurado en el Live Input de Cloudflare — si
+ * no, el parámetro no tiene efecto real). Con versiones viejas de hls.js
+ * esto llegó a colgar la reproducción (el "blocking playlist reload" y los
+ * segmentos parciales de Cloudflare no calzaban bien), así que se dejó de
+ * usar en vivo. Tras subir hls.js a 1.7.3 (con varios fixes de LL-HLS) se
+ * volvió a habilitar para el reproductor en vivo (`ViewerHlsPlayer`) — ya
+ * no se le quita el parámetro ahí.
  *
- * Esta función quita ese parámetro antes de pasarle la URL a hls.js, para
- * que siempre caiga al manifest HLS regular (compatible), sin importar
- * cómo haya quedado configurada la playback URL. No toca nada si el
- * parámetro no está presente.
+ * Para VOD/repetición (`VodHlsPlayer`) sí se sigue quitando con esta
+ * función: no hay "borde en vivo" que acelerar, así que no aporta nada y
+ * evita cualquier complejidad extra de LL-HLS en ese reproductor.
  */
 export function stripCloudflareLowLatencyParam(url: string): string {
   try {

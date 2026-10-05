@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState } from "react";
 import Hls from "hls.js";
 import { attachPlaybackTracking } from "../../utils/playback-tracking";
-import { stripCloudflareLowLatencyParam } from "../../utils/hls-url";
 
 type Props = {
   src: string;
@@ -159,7 +158,11 @@ export function ViewerHlsPlayer({
     hlsRef.current = hls;
     setIsRecovering(false);
 
-    hls.loadSource(stripCloudflareLowLatencyParam(src));
+    // No se le quita el protocol=llhls de Cloudflare acá (sí se quita en el
+    // VOD de VodHlsPlayer): en vivo es justamente lo que reduce la latencia
+    // a unos pocos segundos. Requiere preferLowLatency=true en el Live
+    // Input de Cloudflare — ver nota en hls-url.ts.
+    hls.loadSource(src);
     hls.attachMedia(video);
 
     const tryPlay = () => video.play().catch(() => {});

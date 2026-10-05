@@ -39,6 +39,7 @@ const PROVIDER_LABELS: Record<string, string> = {
   mux: "Mux",
   gcore: "Gcore",
   cloudflare: "Cloudflare",
+  bunny: "Bunny",
 };
 
 const PROVIDER_COLORS: Record<string, string> = {
@@ -46,6 +47,7 @@ const PROVIDER_COLORS: Record<string, string> = {
   mux: "orange",
   gcore: "teal",
   cloudflare: "grape",
+  bunny: "yellow",
 };
 
 /**
@@ -55,6 +57,7 @@ const PROVIDER_COLORS: Record<string, string> = {
 const RTMP_SERVER_BY_PROVIDER: Record<string, string> = {
   vimeo: "rtmp://rtmp-global.cloud.vimeo.com/live",
   cloudflare: "rtmps://live.cloudflare.com:443/live",
+  bunny: "rtmp://global.rtmp.mediadelivery.net/live",
 };
 
 /**
@@ -69,6 +72,7 @@ const SRT_SERVER_BY_PROVIDER: Record<string, string> = {
 const PROVIDER_SELECT_OPTIONS = [
   { value: "vimeo", label: "Vimeo" },
   { value: "cloudflare", label: "Cloudflare" },
+  { value: "bunny", label: "Bunny" },
 ];
 
 export const LiveConfigPanel: React.FC<Props> = ({
@@ -365,6 +369,23 @@ export const LiveConfigPanel: React.FC<Props> = ({
                       precargado; solo falta el Stream Key / streamid (del
                       Live Input en Cloudflare Stream) y la URL de playback
                       (<code>https://customer-xxx.cloudflarestream.com/.../manifest/video.m3u8</code>).
+                    </Text>
+                  </Alert>
+                )}
+
+                {currentProvider === "bunny" && (
+                  <Alert
+                    mt="xs"
+                    variant="light"
+                    color="yellow"
+                    icon={<IconAlertCircle size={14} />}
+                  >
+                    <Text size="xs">
+                      Proveedor: <strong>Bunny</strong>. El RTMP Server ya
+                      está precargado; solo falta el Stream Key (de tu Live
+                      Stream en Bunny Stream) y la URL de playback (el
+                      manifest HLS que te da Bunny para ese live, ej.
+                      <code> https://vz-xxx.b-cdn.net/{"{videoId}"}/playlist.m3u8</code>).
                     </Text>
                   </Alert>
                 )}

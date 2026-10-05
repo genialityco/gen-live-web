@@ -4,7 +4,7 @@ import { api } from "../core/api";
 export type LiveRole = "host" | "speaker" | "viewer";
 export type LayoutMode = "speaker" | "grid";
 
-export type StreamProvider = "vimeo" | "mux" | "gcore" | "cloudflare";
+export type StreamProvider = "vimeo" | "mux" | "gcore" | "cloudflare" | "bunny";
 
 export interface LiveConfig {
   eventSlug: string;
