@@ -21,6 +21,7 @@ import {
 import { notifications } from "@mantine/notifications";
 import { IconUpload, IconMusic, IconPresentation } from "@tabler/icons-react";
 import type { CreateMediaItemDto } from "../../api/media-library-service";
+import { checkVideoCodec } from "../../utils/video-codec-check";
 
 interface UploadMediaDialogProps {
   opened: boolean;
@@ -58,13 +59,14 @@ export function UploadMediaDialog({
   const [defaultMuted, setDefaultMuted] = useState(false);
   const [defaultFit, setDefaultFit] = useState<"cover" | "contain">("cover");
   const [defaultOpacity, setDefaultOpacity] = useState(1);
+  const [checkingCodec, setCheckingCodec] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const isPresentationFile = (mime: string) =>
     mime === "application/pdf";
 
-  const handleFileChange = (selectedFile: File | null) => {
+  const handleFileChange = async (selectedFile: File | null) => {
     if (!selectedFile) {
       setFile(null);
       setPreview("");
@@ -130,6 +132,28 @@ export function UploadMediaDialog({
       return;
     }
 
+    // HEVC/H.265 (comun en videos exportados directo de iPhone) reproduce
+    // bien en cualquier reproductor normal, pero el compositor de LiveKit en
+    // el egress del estudio no tiene decoder HEVC y queda en pantalla negra
+    // al salir en vivo. Lo detectamos aca antes de subir para no descubrirlo
+    // recien en la transmision.
+    if (selectedFile.type === "video/mp4") {
+      setCheckingCodec(true);
+      const codecResult = await checkVideoCodec(selectedFile);
+      setCheckingCodec(false);
+
+      if (codecResult.status === "unsupported") {
+        notifications.show({
+          title: "Video no compatible con transmision en vivo",
+          message:
+            "Este archivo usa el codec H.265/HEVC (comun en exportaciones de iPhone), que no se puede reproducir en el estudio en vivo. Convierte el video a H.264 (por ejemplo con HandBrake, exportandolo de nuevo, o reenviandolo por WhatsApp) y vuelve a subirlo.",
+          color: "red",
+          autoClose: 10000,
+        });
+        return;
+      }
+    }
+
     setFile(selectedFile);
 
     if (!name) {
@@ -187,6 +211,7 @@ export function UploadMediaDialog({
     setDefaultMuted(false);
     setDefaultFit("cover");
     setDefaultOpacity(1);
+    setCheckingCodec(false);
     onClose();
   };
 
@@ -209,10 +234,11 @@ export function UploadMediaDialog({
           withBorder
           style={{
             borderStyle: "dashed",
-            cursor: "pointer",
+            cursor: checkingCodec ? "wait" : "pointer",
             textAlign: "center",
+            opacity: checkingCodec ? 0.6 : 1,
           }}
-          onClick={() => fileInputRef.current?.click()}
+          onClick={() => !checkingCodec && fileInputRef.current?.click()}
         >
           <input
             type="file"
@@ -221,11 +247,15 @@ export function UploadMediaDialog({
             style={{ display: "none" }}
             onChange={(e) => {
               const selectedFile = e.target.files?.[0];
-              handleFileChange(selectedFile || null);
+              void handleFileChange(selectedFile || null);
             }}
           />
 
-          {!file ? (
+          {checkingCodec ? (
+            <Stack gap="xs" align="center">
+              <Text size="sm">Verificando compatibilidad del video...</Text>
+            </Stack>
+          ) : !file ? (
             <Stack gap="xs" align="center">
               <IconUpload size={32} />
               <Text size="sm">Click para seleccionar archivo</Text>
@@ -407,7 +437,10 @@ export function UploadMediaDialog({
           <Button variant="default" onClick={handleClose}>
             Cancelar
           </Button>
-          <Button onClick={handleSubmit} disabled={!file || !name.trim()}>
+          <Button
+            onClick={handleSubmit}
+            disabled={!file || !name.trim() || checkingCodec}
+          >
             Subir
           </Button>
         </Group>
