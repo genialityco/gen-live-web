@@ -14,6 +14,7 @@ import {
   parseStageKey,
 } from "../../utils/screen-share-utils";
 import { CleanTile } from "../../components/studio/CleanTile";
+import { AnnouncementBanner } from "../../components/studio/AnnouncementBanner";
 import type { NameTagStyle, TileAppearance } from "../../api/live-stage-service";
 import { Document, Page, pdfjs } from "react-pdf";
 
@@ -541,38 +542,7 @@ export function LiveMonitor({
       )}
 
       {/* BANNER DE ANUNCIOS (zIndex 25) — sincronizado vía RTDB, visible en monitor y egress */}
-      {stage.banner?.visible && !!stage.banner.text?.trim() && (
-        <Box
-          style={{
-            position: "absolute",
-            left: 0,
-            right: 0,
-            bottom: 0,
-            zIndex: 25,
-            pointerEvents: "none",
-            background: "linear-gradient(90deg, rgba(0,0,0,0.78), rgba(0,0,0,0.62))",
-            color: "#fff",
-            padding: "1.4cqw 2.4cqw",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          <span
-            style={{
-              fontSize: "2.6cqw",
-              lineHeight: 1.25,
-              fontWeight: 600,
-              textAlign: "center",
-              textShadow: "0 1px 2px rgba(0,0,0,0.5)",
-              whiteSpace: "pre-wrap",
-              wordBreak: "break-word",
-            }}
-          >
-            {stage.banner.text}
-          </span>
-        </Box>
-      )}
+      <AnnouncementBanner banner={stage.banner} zIndex={25} />
 
       {/* FULLSCREEN BUTTON (zIndex 30) — oculto en egress */}
       {!hideControls && (

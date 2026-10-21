@@ -20,7 +20,7 @@ import { JoinRequestsPanel } from "./JoinRequestsPanel";
 import { InvitationManager } from "../../components/studio/InvitationManager";
 import { FrameControls } from "./FrameControls";
 import { BackgroundControls } from "./BackgroundControls";
-import { BannerControls } from "./BannerControls";
+import { AnnouncementPublisher } from "./AnnouncementPublisher";
 import { MediaLibrary } from "./MediaLibrary";
 import { TileAppearancePanel } from "./TileAppearancePanel";
 
@@ -140,12 +140,12 @@ export const StudioSidePanel: React.FC<Props> = ({
               <Accordion.Item value="banner">
                 <Accordion.Control>
                   <Box>
-                    <Text size="sm" fw={600}>Banner de anuncios</Text>
-                    <Text size="xs" c="dimmed">Texto sobre el monitor y la transmisión</Text>
+                    <Text size="sm" fw={600}>Publicador de anuncios</Text>
+                    <Text size="xs" c="dimmed">Mensajes sobre el monitor y la transmisión</Text>
                   </Box>
                 </Accordion.Control>
                 <Accordion.Panel>
-                  <BannerControls eventSlug={eventSlug} disabled={disabled} />
+                  <AnnouncementPublisher eventSlug={eventSlug} disabled={disabled} />
                 </Accordion.Panel>
               </Accordion.Item>
 
