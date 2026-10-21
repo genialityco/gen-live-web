@@ -14,10 +14,18 @@ import {
   Progress,
 } from "@mantine/core";
 import { IconAlertCircle, IconClock } from "@tabler/icons-react";
-import { getPublicPollResults, type PublicPollResults } from "../../api/polls";
+import { ref, onValue } from "firebase/database";
+import {
+  getPublicPollResults,
+  type PollStatistics,
+  type PublicPollResults,
+} from "../../api/polls";
+import { ensureAnon, rtdb } from "../../core/firebase";
 import PublicEventHeader from "../../components/events/PublicEventHeader";
 
-const POLL_INTERVAL_MS = 10_000;
+// Respaldo por HTTP por si la conexión a RTDB falla; los votos llegan en
+// tiempo real por la suscripción a Firebase.
+const POLL_INTERVAL_MS = 30_000;
 
 const STATUS_INFO: Record<string, { label: string; color: string }> = {
   draft: { label: "Aún no publicada", color: "gray" },
@@ -25,11 +33,59 @@ const STATUS_INFO: Record<string, { label: string; color: string }> = {
   closed: { label: "Cerrada", color: "red" },
 };
 
+/** Nodo events/{eventId}/polls/{pollId} que escribe el backend en cada voto */
+interface RtdbPoll {
+  status?: string;
+  showStatistics?: boolean;
+  totalResponses?: number;
+  questions?: {
+    id: string;
+    options?: { id: string; votes?: number }[];
+  }[];
+}
+
+/**
+ * Aplica un snapshot de RTDB sobre las estadísticas actuales: refresca votos,
+ * totales y porcentajes (mismo cálculo que el backend) sin tocar textos.
+ */
+function applyRtdbPoll(prev: PollStatistics, live: RtdbPoll): PollStatistics {
+  const questions = prev.questions.map((question) => {
+    const liveQ = live.questions?.find((q) => q.id === question.id);
+    if (!liveQ) return question;
+
+    const options = question.options.map((option) => {
+      const liveO = liveQ.options?.find((o) => o.id === option.id);
+      return liveO ? { ...option, votes: Number(liveO.votes ?? 0) } : option;
+    });
+    const totalVotes = options.reduce((sum, o) => sum + o.votes, 0);
+
+    return {
+      ...question,
+      totalVotes,
+      options: options.map((o) => ({
+        ...o,
+        percentage:
+          totalVotes > 0
+            ? parseFloat(((o.votes / totalVotes) * 100).toFixed(2))
+            : 0,
+      })),
+    };
+  });
+
+  return {
+    ...prev,
+    status: live.status ?? prev.status,
+    showStatistics: live.showStatistics ?? prev.showStatistics,
+    totalResponses: live.totalResponses ?? prev.totalResponses,
+    questions,
+  };
+}
+
 /**
  * Página PÚBLICA de resultados de una encuesta (compartible por enlace, sin
  * login). Solo responde si el admin activó "mostrar estadísticas" en la
- * encuesta; no da acceso a ninguna otra sección del admin. Se actualiza por
- * polling al endpoint público (~cada 10s) para reflejar nuevos votos.
+ * encuesta; no da acceso a ninguna otra sección del admin. Los votos se
+ * actualizan en tiempo real escuchando RTDB, con polling HTTP de respaldo.
  */
 export default function PollResultsPublic() {
   const { eventSlug, pollId } = useParams<{
@@ -41,6 +97,7 @@ export default function PollResultsPublic() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const firstLoad = useRef(true);
+  const eventId = data?.poll.eventId;
 
   useEffect(() => {
     if (!eventSlug || !pollId) {
@@ -80,6 +137,41 @@ export default function PollResultsPublic() {
       clearInterval(interval);
     };
   }, [eventSlug, pollId]);
+
+  // Suscripción en tiempo real a los votos (el backend sincroniza este nodo
+  // en cada respuesta, cambio de estado o de visibilidad de estadísticas)
+  useEffect(() => {
+    if (!eventId || !pollId) return;
+    let unsubscribe: (() => void) | null = null;
+    let cancelled = false;
+
+    ensureAnon()
+      .then(() => {
+        if (cancelled) return;
+        unsubscribe = onValue(
+          ref(rtdb, `events/${eventId}/polls/${pollId}`),
+          (snapshot) => {
+            const live = snapshot.val() as RtdbPoll | null;
+            if (!live) return;
+            if (live.showStatistics === false) {
+              setError("Los resultados de esta encuesta no son públicos");
+              return;
+            }
+            setError(null);
+            setData((prev) =>
+              prev ? { ...prev, poll: applyRtdbPoll(prev.poll, live) } : prev
+            );
+          },
+          (err) => console.error("RTDB poll results listener error:", err)
+        );
+      })
+      .catch((err) => console.error("Anonymous auth failed:", err));
+
+    return () => {
+      cancelled = true;
+      unsubscribe?.();
+    };
+  }, [eventId, pollId]);
 
   if (loading) {
     return (

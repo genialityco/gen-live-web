@@ -65,6 +65,8 @@ export interface SubmitPollResponse {
 
 export interface PollStatistics {
   pollId: string;
+  /** Solo presente en la respuesta pública (public-results) */
+  eventId?: string;
   title: string;
   totalResponses: number;
   status: string;
