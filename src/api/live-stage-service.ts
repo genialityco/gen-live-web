@@ -45,27 +45,44 @@ export type TileAppearance = {
   accentColor?: string;
 };
 
+export type AnnouncementTemplate = "bar" | "lowerThird" | "breaking" | "pill" | "glass";
+export type AnnouncementAnimation = "slide" | "fade" | "wipe" | "pop";
+export type AnnouncementFont = "system" | "inter" | "montserrat" | "oswald";
+
 /** Apariencia de un anuncio (todos los campos opcionales → ver DEFAULT_ANNOUNCEMENT_STYLE) */
 export type AnnouncementStyle = {
+  template?: AnnouncementTemplate;
   position?: "top" | "bottom";
+  align?: "left" | "center" | "right"; // solo plantillas que no ocupan todo el ancho
   mode?: "static" | "ticker"; // ticker = texto desplazándose de derecha a izquierda
   size?: "sm" | "md" | "lg";
+  animation?: AnnouncementAnimation;
+  font?: AnnouncementFont;
   bgColor?: string;
   textColor?: string;
+  accentColor?: string;
 };
 
+// Los defaults reproducen el banner original para anuncios guardados antes de
+// que existieran las plantillas.
 export const DEFAULT_ANNOUNCEMENT_STYLE: Required<AnnouncementStyle> = {
+  template: "bar",
   position: "bottom",
+  align: "left",
   mode: "static",
   size: "md",
+  animation: "slide",
+  font: "system",
   bgColor: "rgba(0, 0, 0, 0.75)",
   textColor: "#ffffff",
+  accentColor: "#3b82f6",
 };
 
 /** Anuncio preparado en el publicador del estudio (/live/{eventSlug}/announcements/{id}) */
 export type Announcement = {
   id: string;
   text: string;
+  label?: string | null; // etiqueta corta opcional: "AVISO", "EN VIVO"...
   style?: AnnouncementStyle;
   durationSec?: number | null; // null/0 = sin límite
   order: number;
@@ -80,6 +97,7 @@ export type Announcement = {
 export type BannerState = {
   visible: boolean;
   text: string;
+  label?: string | null;
   style?: AnnouncementStyle;
   announcementId?: string | null;
   publishedAt?: number | null;
@@ -181,12 +199,13 @@ export function isBannerActive(banner: BannerState | undefined | null, now = get
 
 export function publishAnnouncement(
   eventSlug: string,
-  a: Pick<Announcement, "id" | "text" | "style" | "durationSec">,
+  a: Pick<Announcement, "id" | "text" | "label" | "style" | "durationSec">,
 ) {
   const now = getServerNow();
   return setBanner(eventSlug, {
     visible: true,
     text: a.text,
+    label: a.label || null,
     style: a.style,
     announcementId: a.id,
     publishedAt: now,
@@ -202,11 +221,12 @@ export function hideBanner(eventSlug: string) {
 /** Actualiza texto/estilo del banner al aire sin reiniciar su duración */
 export function updateBannerContent(
   eventSlug: string,
-  patch: Pick<BannerState, "text" | "style">,
+  patch: Pick<BannerState, "text" | "label" | "style">,
 ) {
   const db = getDatabase();
   return update(ref(db, `/live/${eventSlug}/banner`), {
     text: patch.text,
+    label: patch.label || null,
     style: patch.style ? stripUndefined(patch.style) : null,
   });
 }
@@ -220,6 +240,7 @@ export async function saveAnnouncement(
   if (id) {
     await update(ref(db, `/live/${eventSlug}/announcements/${id}`), {
       text: data.text,
+      label: data.label || null,
       style: data.style ? stripUndefined(data.style) : null,
       durationSec: data.durationSec || null,
     });
@@ -229,7 +250,13 @@ export async function saveAnnouncement(
   const now = Date.now();
   await set(
     newRef,
-    stripUndefined({ ...data, durationSec: data.durationSec || null, order: now, createdAt: now }),
+    stripUndefined({
+      ...data,
+      label: data.label || null,
+      durationSec: data.durationSec || null,
+      order: now,
+      createdAt: now,
+    }),
   );
   return newRef.key!;
 }

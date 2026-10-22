@@ -68,6 +68,7 @@ import {
 } from "../../api/live-stage-service";
 import { StudioToolbar, LayoutPicker } from "./StudioToolbar";
 import { StudioSidePanel } from "./StudioSidePanel";
+import { AnnouncementBar } from "./AnnouncementBar";
 import { VirtualBackgroundControl } from "./VirtualBackgroundControl";
 import { DeviceSelectorPanel } from "./DeviceSelectorPanel";
 import type { LayoutMode } from "../../types";
@@ -891,6 +892,9 @@ export const StudioView: React.FC<StudioViewProps> = ({
                       <Paper p="sm" withBorder radius="md" style={{ display: "flex", justifyContent: "center" }}>
                         <ControlBar variation="minimal" />
                       </Paper>
+                      {role === "host" && (
+                        <AnnouncementBar eventSlug={eventSlug} disabled={isBusy} />
+                      )}
                       <Paper p="sm" withBorder radius="md">
                         <DeviceSelectorPanel />
                       </Paper>
@@ -1050,6 +1054,11 @@ export const StudioView: React.FC<StudioViewProps> = ({
                           />
                         </Group>
                       </Paper>
+                    )}
+
+                    {/* Anuncios — debajo del monitor para dispararlos mirando el programa */}
+                    {role === "host" && (
+                      <AnnouncementBar eventSlug={eventSlug} disabled={isBusy} />
                     )}
 
                     {/* A/V controls agrupados */}
