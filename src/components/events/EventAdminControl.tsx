@@ -31,16 +31,20 @@ import EventStreamForm from "./EventStreamForm";
 import { StreamPlayer } from "./StreamPlayer";
 import { resolveStreams } from "./streamUtils";
 import { useEventEmergency } from "../../hooks/useEventEmergency";
+import type { FormField } from "../../types";
+import { HerdAnnouncementsCard } from "./HerdAnnouncementsCard";
 
 interface EventAdminControlProps {
   event: EventItem;
   orgSlug: string;
+  formFields?: FormField[];
   onEventUpdate: (event: EventItem) => void;
 }
 
 export default function EventAdminControl({
   event,
   orgSlug,
+  formFields = [],
   onEventUpdate,
 }: EventAdminControlProps) {
   const emergency = useEventEmergency(orgSlug, event.slug);
@@ -634,6 +638,13 @@ export default function EventAdminControl({
                   )}
               </Stack>
             </Card>
+
+            {/* Anuncios de manada sobre el video del asistente */}
+            <HerdAnnouncementsCard
+              event={event}
+              formFields={formFields}
+              onEventUpdate={onEventUpdate}
+            />
 
             {/* Configuración de transmisión */}
             <Card withBorder radius="lg" p="lg">

@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { api } from "../core/api";
+import type { EventHerdConfig } from "./herd";
 
 // Tipos de branding para eventos
 export interface EventBrandingColors {
@@ -61,6 +62,7 @@ export type EventItem = {
   streams?: EventStream[];
   branding?: EventBrandingConfig; // Campo de branding del evento
   certificatesConfig?: EventCertificatesConfig; // Toggle de certificados de asistencia
+  herdConfig?: EventHerdConfig; // Anuncios de manada sobre el video del asistente
   hidden?: boolean;
   createdAt?: string;
   startDate?: string; // Para compatibilidad

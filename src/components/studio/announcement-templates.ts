@@ -42,6 +42,12 @@ export const ANNOUNCEMENT_TEMPLATES: Record<AnnouncementTemplate, TemplatePreset
   },
 };
 
+// Plantillas que no ocupan todo el ancho y por tanto admiten alineación
+export const ALIGNABLE_TEMPLATES: AnnouncementTemplate[] = ["lowerThird", "pill", "glass"];
+
+export const ANNOUNCEMENT_PREVIEW_BG =
+  "radial-gradient(circle at 30% 35%, #3b4252 0%, #1a1d26 55%, #0d0f14 100%)";
+
 export const ANNOUNCEMENT_FONTS: Record<AnnouncementFont, { label: string; family: string; google?: string }> = {
   system: { label: "Sistema", family: "system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" },
   inter: { label: "Inter", family: "'Inter', system-ui, sans-serif", google: "Inter:wght@500;600;700;800" },

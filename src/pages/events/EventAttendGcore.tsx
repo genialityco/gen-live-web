@@ -78,6 +78,7 @@ import { VodHlsPlayer } from "../viewer/VodHlsPlayer";
 import { VimeoPlayer } from "../viewer/VimeoPlayer";
 import { resolveStreams } from "../../components/events/streamUtils";
 import { AttendAnnouncementOverlay } from "../../components/studio/AnnouncementBanner";
+import { HerdOverlay } from "../../components/events/HerdOverlay";
 import { Track } from "livekit-client";
 import { trackEvent } from "../../lib/utmTracking";
 
@@ -1188,6 +1189,13 @@ export default function EventAttendGcore() {
                         eventSlug={eventSlugToUse}
                         enabled={mode !== "studio" && !!playbackUrl}
                       />
+                      <HerdOverlay
+                        eventId={event?._id}
+                        enabled={mode !== "studio" && !!playbackUrl && !emergency.active}
+                        uid={user?.uid}
+                        registrationData={attendeeData}
+                        name={effectiveChatName}
+                      />
                     </Box>
                   ) : status === "replay" && replayStreamList.length > 0 ? (
                     <Box style={{ position: "absolute", inset: 0 }}>
@@ -1469,6 +1477,13 @@ export default function EventAttendGcore() {
                             <AttendAnnouncementOverlay
                               eventSlug={eventSlugToUse}
                               enabled={mode !== "studio" && !!playbackUrl}
+                            />
+                            <HerdOverlay
+                              eventId={event?._id}
+                              enabled={mode !== "studio" && !!playbackUrl && !emergency.active}
+                              uid={user?.uid}
+                              registrationData={attendeeData}
+                              name={effectiveChatName}
                             />
                           </Box>
                         ) : status === "replay" && replayStreamList.length > 0 ? (
