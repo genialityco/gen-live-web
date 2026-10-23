@@ -92,11 +92,13 @@ interface StudioViewProps {
   orgSlug?: string;
 }
 
+// Enum EgressStatus de LiveKit: la API devuelve el número, no el nombre
+const EGRESS_STATUS_NAMES = ["starting", "active", "ending", "complete", "failed", "aborted", "limit_reached"];
+
 function normalizeStatus(s: any): string {
-  if (!s) return "";
-  if (typeof s === "string") return s.toLowerCase();
-  if (typeof s === "number") return String(s);
-  return String(s).toLowerCase();
+  if (s === null || s === undefined || s === "") return "";
+  const str = String(s).toLowerCase();
+  return /^\d+$/.test(str) ? EGRESS_STATUS_NAMES[Number(str)] ?? str : str;
 }
 
 function isTerminalEgressStatus(status: string) {
@@ -108,6 +110,7 @@ function isTerminalEgressStatus(status: string) {
     "failed",
     "aborted",
     "stopped",
+    "limit_reached",
   ].includes(status);
 }
 

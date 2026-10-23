@@ -176,7 +176,9 @@ function statusLabel(egressId: string | null, status: string | null) {
     return { text: "En vivo", color: "green" as const };
   if (["starting", "pending", "0"].includes(normalizedStatus) || String(status) === "0")
     return { text: "Iniciando…", color: "yellow" as const };
-  if (["failed", "aborted"].includes(normalizedStatus))
+  if (["ending"].includes(normalizedStatus))
+    return { text: "Finalizando…", color: "yellow" as const };
+  if (["failed", "aborted", "limit_reached"].includes(normalizedStatus))
     return { text: "Error", color: "red" as const };
   if (["complete", "completed", "ended", "stopped"].includes(normalizedStatus))
     return { text: "Finalizado", color: "gray" as const };
