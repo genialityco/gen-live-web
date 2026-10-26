@@ -642,6 +642,7 @@ export default function EventAdminControl({
             {/* Anuncios de manada sobre el video del asistente */}
             <HerdAnnouncementsCard
               event={event}
+              orgSlug={orgSlug}
               formFields={formFields}
               onEventUpdate={onEventUpdate}
             />

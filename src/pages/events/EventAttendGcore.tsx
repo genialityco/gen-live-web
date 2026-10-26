@@ -36,7 +36,7 @@ import {
   IconInfoCircle,
 } from "@tabler/icons-react";
 
-import { fetchOrgBySlug, type Org } from "../../api/orgs";
+import { fetchOrgBySlug, fetchOrgBySlugForAdmin, type Org } from "../../api/orgs";
 import {
   fetchEventsByOrg,
   checkIfRegistered,
@@ -364,7 +364,7 @@ export default function EventAttendGcore() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const isMobile = useMediaQuery("(max-width: 768px)");
-  const { user, sessionName } = useAuth();
+  const { user, sessionName, loading: authLoading } = useAuth();
 
   // Click arrival confirmation (email y WhatsApp comparten el parámetro _tc)
   useEffect(() => {
@@ -418,7 +418,27 @@ export default function EventAttendGcore() {
   const mobileStream = isMobile && (status === "live" || status === "replay");
   const chatHeight = mobileLive ? "clamp(260px, calc(100svh - 370px), 420px)" : isMobile ? 360 : 520;
 
-  const isOwner = !!(user && org && org.ownerUid === user.uid);
+  // El endpoint público de la org no trae ownerUid: con cuenta real (no
+  // anónima) se verifica contra el endpoint de admin. null = verificando.
+  // Sin esto el dueño era redirigido a la landing, que le cerraba la sesión.
+  const [ownerVerified, setOwnerVerified] = useState<boolean | null>(null);
+  useEffect(() => {
+    if (authLoading) return;
+    if (!slug || !user || user.isAnonymous) {
+      setOwnerVerified(false);
+      return;
+    }
+    let cancelled = false;
+    setOwnerVerified(null);
+    fetchOrgBySlugForAdmin(slug)
+      .then(() => !cancelled && setOwnerVerified(true))
+      .catch(() => !cancelled && setOwnerVerified(false));
+    return () => {
+      cancelled = true;
+    };
+  }, [slug, user, authLoading]);
+
+  const isOwner = ownerVerified === true || !!(user && org && org.ownerUid === user.uid);
 
   // Branding: evento tiene prioridad sobre org; se recalcula cuando event carga.
   // En modo emergencia sale del cache RTDB (orgBranding/eventBranding), no de Mongo.
@@ -632,7 +652,9 @@ export default function EventAttendGcore() {
     if (emergency.active) return; // modo emergencia: sin gate de registro
     if (!slug || !eventSlug) return;
 
-    if (!checkingRegistration && !loading && !eventLoading) {
+    // Esperar a que Firebase restaure la sesión: con user aún null se
+    // redirigía al admin a la landing, que le cierra la sesión
+    if (!authLoading && !checkingRegistration && !loading && !eventLoading && ownerVerified !== null) {
       if (!isRegistered && !isOwner) {
         console.log(
           "🔒 EventAttend: User not registered, redirecting to event landing",
@@ -646,6 +668,8 @@ export default function EventAttendGcore() {
     eventLoading,
     isRegistered,
     isOwner,
+    ownerVerified,
+    authLoading,
     slug,
     eventSlug,
     navigate,
@@ -1076,6 +1100,21 @@ export default function EventAttendGcore() {
     );
   }
 
+  // ?herdDemo=1: panel para probar los anuncios de manada sobre el video (solo local)
+  const herdDemo = searchParams.get("herdDemo") === "1";
+  // La instancia del vivo ya trae el panel; en cualquier otro estado se monta una solo para la demo
+  const herdLiveOverlay = status === "live" && mode !== "studio" && !!playbackUrl && !emergency.active;
+  const herdDemoOverlay = herdDemo && !herdLiveOverlay && (
+    <HerdOverlay
+      eventId={event?._id}
+      enabled
+      uid={user?.uid}
+      registrationData={attendeeData}
+      name={effectiveChatName}
+      demo
+    />
+  );
+
   return (
     <MantineProvider theme={theme} defaultColorScheme="light" withCssVariables>
       <Box
@@ -1195,6 +1234,7 @@ export default function EventAttendGcore() {
                         uid={user?.uid}
                         registrationData={attendeeData}
                         name={effectiveChatName}
+                        demo={herdDemo}
                       />
                     </Box>
                   ) : status === "replay" && replayStreamList.length > 0 ? (
@@ -1206,6 +1246,7 @@ export default function EventAttendGcore() {
                       <Text c="dimmed" size="sm">No hay transmisión disponible</Text>
                     </Box>
                   )}
+                  {herdDemoOverlay}
                 </Box>
               </Box>
 
@@ -1484,6 +1525,7 @@ export default function EventAttendGcore() {
                               uid={user?.uid}
                               registrationData={attendeeData}
                               name={effectiveChatName}
+                              demo={herdDemo}
                             />
                           </Box>
                         ) : status === "replay" && replayStreamList.length > 0 ? (
@@ -1591,6 +1633,7 @@ export default function EventAttendGcore() {
                             </Stack>
                           </Box>
                         )}
+                        {herdDemoOverlay}
                       </Box>
                     </Box>
                   </Card>

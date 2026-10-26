@@ -32,9 +32,14 @@ import {
   DEFAULT_HERD_PRIVATE,
   DEFAULT_HERD_PUBLIC,
   DEFAULT_HERD_STYLE,
+  HERD_MAX_FIRST,
   HERD_POSITIONS,
   herdBannerStyle,
+  herdGroupForms,
   herdKey,
+  herdOrdinal,
+  pluralizeEs,
+  singularizeEs,
   renderHerdTemplate,
   subscribeHerdCounts,
   updateHerdConfig,
@@ -42,7 +47,9 @@ import {
   type HerdCounts,
   type HerdMessageConfig,
   type HerdMessageResolved,
+  type HerdOrdinalGender,
   type HerdPosition,
+  type HerdPrivateMessageConfig,
   type HerdPublicMessageConfig,
 } from "../../api/herd";
 import { AnnouncementBanner } from "../studio/AnnouncementBanner";
@@ -93,15 +100,17 @@ const positionLabel = (p?: HerdPosition) =>
 
 /**
  * Configuración de los anuncios de manada (Control del evento): qué campo del
- * registro agrupa a los asistentes, plantillas de los mensajes privado y
- * público, su diseño y en qué parte del video aparece cada uno.
+ * registro agrupa a los asistentes, plantillas de los mensajes individual
+ * (privado) y grupal (público), su diseño y en qué parte del video aparece cada uno.
  */
 export function HerdAnnouncementsCard({
   event,
+  orgSlug,
   formFields,
   onEventUpdate,
 }: {
   event: EventItem;
+  orgSlug: string;
   formFields: FormField[];
   onEventUpdate: (event: EventItem) => void;
 }) {
@@ -161,9 +170,9 @@ export function HerdAnnouncementsCard({
               Agrupa por: <b>{field?.label ?? "—"}</b>
             </Text>
             <Text size="xs" c="dimmed">
-              Privado {saved.privateMessage?.enabled ? `(${positionLabel(saved.privateMessage.position)})` : "desactivado"}
+              Individual {saved.privateMessage?.enabled ? `(${positionLabel(saved.privateMessage.position)})` : "desactivado"}
               {" · "}
-              Público {saved.publicMessage?.enabled ? `(${positionLabel(saved.publicMessage.position)})` : "desactivado"}
+              Grupal {saved.publicMessage?.enabled ? `(${positionLabel(saved.publicMessage.position)})` : "desactivado"}
             </Text>
           </Stack>
         )}
@@ -173,6 +182,17 @@ export function HerdAnnouncementsCard({
         )}
 
         <Group justify="flex-end">
+          <Button
+            size="xs"
+            variant="subtle"
+            component="a"
+            href={`/org/${orgSlug}/event/${event.slug}/attend?herdDemo=1`}
+            target="_blank"
+            rel="noopener"
+            title="Abre la página del asistente con un panel para disparar los mensajes. Solo lo ves tú."
+          >
+            🧪 Probar sobre el video
+          </Button>
           <Button
             size="xs"
             variant="light"
@@ -212,8 +232,8 @@ export function HerdAnnouncementsCard({
 }
 
 /**
- * Lanzar un anuncio ya, sin esperar al automático: público (todos ven el
- * conteo de un grupo) o privado (cada conectado ve otra vez el suyo).
+ * Lanzar un anuncio ya, sin esperar al automático: grupal (todos ven el
+ * conteo de un grupo) o individual (cada conectado ve otra vez el suyo).
  */
 function HerdQuickAnnounce({
   eventId,
@@ -235,8 +255,8 @@ function HerdQuickAnnounce({
   // Nombre de cada grupo conectado: el configurado en plural, o la opción del formulario
   const labelByKey = new Map<string, string>();
   for (const o of field?.options ?? []) {
-    const custom = config.groupLabels?.find((g) => g.value === o.value)?.label;
-    labelByKey.set(herdKey(o.value), custom || o.label);
+    const custom = config.groupLabels?.find((g) => g.value === o.value);
+    labelByKey.set(herdKey(o.value), herdGroupForms(custom, o.label).plural);
   }
   const groups = Object.entries(counts?.counts ?? {})
     .filter(([, n]) => n > 0)
@@ -255,8 +275,8 @@ function HerdQuickAnnounce({
         color: "green",
         message:
           type === "public"
-            ? `Anuncio público lanzado: ${r.label ?? r.key} (${r.count})`
-            : `Mensaje privado enviado a ${r.count} conectado(s)`,
+            ? `Mensaje grupal lanzado: ${r.label ?? r.key} (${r.count})`
+            : `Mensaje individual enviado a ${r.count} conectado(s)`,
       });
       setText("");
     } catch (err) {
@@ -282,8 +302,8 @@ function HerdQuickAnnounce({
         value={type}
         onChange={(v) => setType(v as "public" | "private")}
         data={[
-          { value: "public", label: "👥 Público" },
-          { value: "private", label: "👋 Privado" },
+          { value: "public", label: "👥 Grupal" },
+          { value: "private", label: "👋 Individual" },
         ]}
       />
       <Select
@@ -303,11 +323,11 @@ function HerdQuickAnnounce({
       />
       <Text size="xs" c="dimmed">
         {type === "public"
-          ? "Todos ven el conteo del grupo, aunque el público automático esté apagado."
+          ? "Todos ven el conteo del grupo, aunque el grupal automático esté apagado."
           : "Cada asistente ve su propio mensaje (con su nombre y grupo), aunque ya lo haya visto."}
       </Text>
       <Button size="xs" onClick={() => void handleSend()} loading={sending} disabled={!groups.length}>
-        Lanzar {type === "public" ? "anuncio público" : "mensaje privado"}
+        Lanzar {type === "public" ? "mensaje grupal" : "mensaje individual"}
       </Button>
     </Stack>
   );
@@ -338,23 +358,33 @@ function HerdConfigForm({
   const field = formFields.find((f) => f.id === config.fieldId);
   const options = field?.type === "select" ? field.options ?? [] : [];
 
-  const labelFor = (value: string) =>
-    config.groupLabels?.find((g) => g.value === value)?.label ?? "";
+  const customFor = (value: string) => config.groupLabels?.find((g) => g.value === value);
 
-  const setGroupLabel = (value: string, label: string) =>
-    setConfig((c) => ({
-      ...c,
-      groupLabels: [...(c.groupLabels ?? []).filter((g) => g.value !== value), { value, label }],
-    }));
+  // label = plural; singular aparte. La forma vacía se deduce de la otra.
+  const setGroupLabel = (value: string, patch: { label?: string; singular?: string }) =>
+    setConfig((c) => {
+      const prev = c.groupLabels?.find((g) => g.value === value);
+      return {
+        ...c,
+        groupLabels: [
+          ...(c.groupLabels ?? []).filter((g) => g.value !== value),
+          { value, label: prev?.label ?? "", singular: prev?.singular ?? "", ...patch },
+        ],
+      };
+    });
 
-  const setPriv = (patch: Partial<HerdMessageConfig>) =>
+  const setPriv = (patch: Partial<HerdPrivateMessageConfig>) =>
     setConfig((c) => ({ ...c, privateMessage: { ...priv, ...patch } }));
   const setPub = (patch: Partial<HerdPublicMessageConfig>) =>
     setConfig((c) => ({ ...c, publicMessage: { ...pub, ...patch } }));
 
   // Vista previa con el primer grupo (o uno de ejemplo)
   const sample = options[0];
-  const sampleGroup = sample ? labelFor(sample.value) || sample.label : "endocrinólogos";
+  const sampleForms = sample
+    ? herdGroupForms(customFor(sample.value), sample.label)
+    : { plural: "endocrinólogos", singular: "endocrinólogo" };
+  const sampleGroup = sampleForms.plural;
+  const sampleSingular = sampleForms.singular;
 
   const fieldOptions = formFields
     .filter((f) => f.type === "select" || f.type === "text")
@@ -366,11 +396,11 @@ function HerdConfigForm({
         <Tabs.List>
           <Tabs.Tab value="general">General</Tabs.Tab>
           <Tabs.Tab value="private">
-            👋 Mensaje privado{" "}
+            👋 Mensaje individual{" "}
             {!priv.enabled && <Badge size="xs" color="gray" variant="light">off</Badge>}
           </Tabs.Tab>
           <Tabs.Tab value="public">
-            👥 Mensaje público{" "}
+            👥 Mensaje grupal{" "}
             {!pub.enabled && <Badge size="xs" color="gray" variant="light">off</Badge>}
           </Tabs.Tab>
         </Tabs.List>
@@ -406,37 +436,53 @@ function HerdConfigForm({
               <div>
                 <Text size="sm" fw={500}>Nombre de cada grupo en los mensajes</Text>
                 <Text size="xs" c="dimmed" mb={6}>
-                  Opcional. Úsalo en plural para que el mensaje suene natural:
-                  «Endocrinología» → «endocrinólogos».
+                  Opcional. Escribe una sola forma (singular o plural) y la otra
+                  se completa sola (en gris); escríbela solo si la sugerencia no
+                  queda bien. «Endocrinología» → «endocrinólogo» / «endocrinólogos».
+                  En los mensajes, {"{grupo}"} usa el singular con 1 conectado y el plural con más.
                 </Text>
                 <ScrollArea.Autosize mah={320}>
                   <Table verticalSpacing={4} withTableBorder>
                     <Table.Thead>
                       <Table.Tr>
                         <Table.Th>Opción del formulario</Table.Th>
-                        <Table.Th>Se muestra como</Table.Th>
-                        <Table.Th w={90}>Conectados</Table.Th>
+                        <Table.Th>Singular (1)</Table.Th>
+                        <Table.Th>Plural (2 o más)</Table.Th>
+                        <Table.Th w={110}>Conectados / inscritos</Table.Th>
                       </Table.Tr>
                     </Table.Thead>
                     <Table.Tbody>
-                      {options.map((o) => (
-                        <Table.Tr key={o.value}>
-                          <Table.Td><Text size="xs">{o.label}</Text></Table.Td>
-                          <Table.Td>
-                            <TextInput
-                              size="xs"
-                              placeholder={o.label}
-                              value={labelFor(o.value)}
-                              onChange={(e) => setGroupLabel(o.value, e.currentTarget.value)}
-                            />
-                          </Table.Td>
-                          <Table.Td>
-                            <Badge variant="light" size="sm">
-                              {counts?.counts[herdKey(o.value)] ?? 0}
-                            </Badge>
-                          </Table.Td>
-                        </Table.Tr>
-                      ))}
+                      {options.map((o) => {
+                        const custom = customFor(o.value);
+                        const typedSingular = custom?.singular?.trim() ?? "";
+                        const typedPlural = custom?.label?.trim() ?? "";
+                        return (
+                          <Table.Tr key={o.value}>
+                            <Table.Td><Text size="xs">{o.label}</Text></Table.Td>
+                            <Table.Td>
+                              <TextInput
+                                size="xs"
+                                placeholder={typedPlural ? singularizeEs(typedPlural) : o.label}
+                                value={custom?.singular ?? ""}
+                                onChange={(e) => setGroupLabel(o.value, { singular: e.currentTarget.value })}
+                              />
+                            </Table.Td>
+                            <Table.Td>
+                              <TextInput
+                                size="xs"
+                                placeholder={typedSingular ? pluralizeEs(typedSingular) : o.label}
+                                value={custom?.label ?? ""}
+                                onChange={(e) => setGroupLabel(o.value, { label: e.currentTarget.value })}
+                              />
+                            </Table.Td>
+                            <Table.Td>
+                              <Badge variant="light" size="sm">
+                                {counts?.counts[herdKey(o.value)] ?? 0} / {counts?.registered[herdKey(o.value)] ?? 0}
+                              </Badge>
+                            </Table.Td>
+                          </Table.Tr>
+                        );
+                      })}
                     </Table.Tbody>
                   </Table>
                 </ScrollArea.Autosize>
@@ -454,9 +500,69 @@ function HerdConfigForm({
               nombre: "Ana",
               cantidad: 34,
               grupo: sampleGroup,
+              grupoSingular: sampleSingular,
+              inscritos: 50,
+              inscritosTotal: 300,
               total: 120,
             })}
-          />
+          >
+            <Stack gap={6} p="sm" style={{ border: "1px solid var(--mantine-color-default-border)", borderRadius: 8 }}>
+              <Text size="sm" fw={600}>🥇 Primeros en conectarse</Text>
+              <Text size="xs" c="dimmed">
+                Los primeros de cada grupo ven este mensaje en lugar del de arriba.
+                Desde el siguiente en llegar, todos ven el mensaje normal.
+              </Text>
+              <Group grow align="flex-start">
+                <NumberInput
+                  label="Personalizar para los primeros"
+                  description="0 = desactivado"
+                  min={0}
+                  max={HERD_MAX_FIRST}
+                  value={priv.firstCount}
+                  onChange={(v) => setPriv({ firstCount: Math.min(HERD_MAX_FIRST, Math.max(0, Number(v) || 0)) })}
+                  disabled={!priv.enabled}
+                />
+                <Select
+                  label="{posicion} se escribe"
+                  data={[
+                    { value: "f", label: "primera, segunda… (persona)" },
+                    { value: "m", label: "primer, segundo… (médico)" },
+                  ]}
+                  value={priv.ordinalGender}
+                  onChange={(v) => v && setPriv({ ordinalGender: v as HerdOrdinalGender })}
+                  allowDeselect={false}
+                  disabled={!priv.enabled || !priv.firstCount}
+                />
+              </Group>
+              <Textarea
+                label="Mensaje para los primeros"
+                description="Variables: {posicion}, {nombre}, {cantidad} del grupo, {grupo}, {grupo_singular}, {grupo_plural}, {total} conectados, {inscritos} del grupo, {inscritos_total}"
+                autosize
+                minRows={2}
+                maxLength={280}
+                value={priv.firstTemplate}
+                onChange={(e) => setPriv({ firstTemplate: e.currentTarget.value })}
+                disabled={!priv.enabled || !priv.firstCount}
+              />
+              {!!priv.firstCount && (
+                <Text size="xs" c="dimmed">
+                  Ej. para quien llega de segundo:{" "}
+                  <i>
+                    {renderHerdTemplate(priv.firstTemplate, {
+                      nombre: "Ana",
+                      cantidad: 2,
+                      grupo: sampleGroup,
+                      grupoSingular: sampleSingular,
+                      inscritos: 50,
+                      inscritosTotal: 300,
+                      total: 15,
+                      posicion: herdOrdinal(2, priv.ordinalGender),
+                    })}
+                  </i>
+                </Text>
+              )}
+            </Stack>
+          </HerdMessageEditor>
         </Tabs.Panel>
 
         <Tabs.Panel value="public" pt="md">
@@ -467,13 +573,16 @@ function HerdConfigForm({
             previewText={renderHerdTemplate(pub.template, {
               cantidad: 35,
               grupo: sampleGroup,
+              grupoSingular: sampleSingular,
+              inscritos: 50,
+              inscritosTotal: 300,
               total: 121,
             })}
           >
             <Group grow align="flex-start">
               <NumberInput
                 label="Intervalo mínimo (s)"
-                description="Entre anuncios públicos"
+                description="Entre mensajes grupales"
                 min={5}
                 max={600}
                 value={pub.minIntervalSec}
@@ -509,7 +618,7 @@ function HerdConfigForm({
 }
 
 /**
- * Editor de un mensaje (privado o público): vista previa animada a la
+ * Editor de un mensaje (individual o grupal): vista previa animada a la
  * izquierda y texto, colocación y diseño a la derecha, como el editor de
  * anuncios del estudio.
  */
@@ -564,8 +673,8 @@ function HerdMessageEditor({
           <Group justify="space-between">
             <Text size="xs" c="dimmed">
               {kind === "private"
-                ? "Solo lo ve el asistente al conectarse (una vez por sesión)."
-                : "Lo ven todos cuando crece la conexión de un grupo."}
+                ? "Solo lo ve el asistente al conectarse (una vez por sesión) y, si se repite, cada cierto tiempo."
+                : "Lo ven todos cuando crece la conexión de un grupo y, si se repite, cada cierto tiempo."}
             </Text>
             <Button
               size="compact-xs"
@@ -578,7 +687,7 @@ function HerdMessageEditor({
           </Group>
 
           <Switch
-            label={kind === "private" ? "Mostrar mensaje privado" : "Mostrar mensaje público"}
+            label={kind === "private" ? "Mostrar mensaje individual" : "Mostrar mensaje grupal"}
             checked={msg.enabled}
             onChange={(e) => onChange({ enabled: e.currentTarget.checked })}
           />
@@ -586,8 +695,8 @@ function HerdMessageEditor({
             label="Mensaje"
             description={
               kind === "private"
-                ? "Variables: {nombre}, {cantidad} del grupo, {grupo}, {total} conectados"
-                : "Variables: {cantidad} del grupo, {grupo}, {total} conectados"
+                ? "Variables: {nombre}, {cantidad} del grupo, {grupo} (singular con 1, plural con más), {grupo_singular}, {grupo_plural}, {total} conectados, {inscritos} del grupo, {inscritos_total} en el evento. Concordancia: {es|son}, {conectado|conectados}…"
+                : "Variables: {cantidad} del grupo, {grupo} (singular con 1, plural con más), {grupo_singular}, {grupo_plural}, {total} conectados, {inscritos} del grupo, {inscritos_total} en el evento. Concordancia: {es|son}, {conectado|conectados}…"
             }
             autosize
             minRows={2}
@@ -618,6 +727,32 @@ function HerdMessageEditor({
               disabled={off}
             />
           </Group>
+          <NumberInput
+            label="Repetir cada (minutos)"
+            description={
+              kind === "private"
+                ? "Cada asistente vuelve a ver su mensaje con los conectados de ese momento. 0 = no repetir"
+                : "Se anuncia el estado actual de un grupo (rotando entre grupos) aunque nadie nuevo llegue. 0 = no repetir"
+            }
+            min={0}
+            max={60}
+            value={msg.repeatEverySec / 60}
+            onChange={(v) => onChange({ repeatEverySec: Math.round(Math.min(60, Math.max(0, Number(v) || 0)) * 60) })}
+            disabled={off}
+          />
+          {msg.repeatEverySec > 0 && (
+            <Textarea
+              label="Mensaje al repetir (opcional)"
+              description="Vacío = el mismo mensaje de arriba"
+              placeholder="Ej: Ahora mismo hay {cantidad} {grupo} conectados"
+              autosize
+              minRows={1}
+              maxLength={280}
+              value={msg.repeatTemplate}
+              onChange={(e) => onChange({ repeatTemplate: e.currentTarget.value })}
+              disabled={off}
+            />
+          )}
           {children}
         </Stack>
       </Grid.Col>
