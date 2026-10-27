@@ -83,6 +83,7 @@ export default function EventAdmin() {
         <EventAdminControl
           event={event}
           orgSlug={org.domainSlug}
+          formFields={org.registrationForm?.fields}
           onEventUpdate={setEvent}
         />
       );

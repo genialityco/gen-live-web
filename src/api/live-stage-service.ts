@@ -2,6 +2,9 @@ import {
   getDatabase,
   ref,
   set,
+  update,
+  push,
+  remove,
   onValue,
   off,
   DataSnapshot,
@@ -42,10 +45,71 @@ export type TileAppearance = {
   accentColor?: string;
 };
 
-/** Banner de anuncios efímero, sincronizado via RTDB (aparece en monitor y egress) */
+export type AnnouncementTemplate = "bar" | "lowerThird" | "breaking" | "pill" | "glass";
+export type AnnouncementAnimation = "slide" | "fade" | "wipe" | "pop";
+export type AnnouncementFont = "system" | "inter" | "montserrat" | "oswald";
+
+/** Apariencia de un anuncio (todos los campos opcionales → ver DEFAULT_ANNOUNCEMENT_STYLE) */
+export type AnnouncementStyle = {
+  template?: AnnouncementTemplate;
+  position?: "top" | "bottom";
+  align?: "left" | "center" | "right"; // solo plantillas que no ocupan todo el ancho
+  mode?: "static" | "ticker"; // ticker = texto desplazándose de derecha a izquierda
+  size?: "sm" | "md" | "lg";
+  animation?: AnnouncementAnimation;
+  font?: AnnouncementFont;
+  bgColor?: string;
+  textColor?: string;
+  accentColor?: string;
+};
+
+// Los defaults reproducen el banner original para anuncios guardados antes de
+// que existieran las plantillas.
+export const DEFAULT_ANNOUNCEMENT_STYLE: Required<AnnouncementStyle> = {
+  template: "bar",
+  position: "bottom",
+  align: "left",
+  mode: "static",
+  size: "md",
+  animation: "slide",
+  font: "system",
+  bgColor: "rgba(0, 0, 0, 0.75)",
+  textColor: "#ffffff",
+  accentColor: "#3b82f6",
+};
+
+/** Anuncio preparado en el publicador del estudio (/live/{eventSlug}/announcements/{id}) */
+export type Announcement = {
+  id: string;
+  text: string;
+  label?: string | null; // etiqueta corta opcional: "AVISO", "EN VIVO"...
+  style?: AnnouncementStyle;
+  durationSec?: number | null; // null/0 = sin límite
+  order: number;
+  createdAt: number;
+};
+
+/**
+ * Banner de anuncios al aire, sincronizado via RTDB (aparece en monitor, egress
+ * y opcionalmente sobre el reproductor del asistente). Los campos extra son
+ * opcionales para seguir leyendo banners antiguos { visible, text }.
+ */
 export type BannerState = {
   visible: boolean;
   text: string;
+  label?: string | null;
+  style?: AnnouncementStyle;
+  announcementId?: string | null;
+  publishedAt?: number | null;
+  // Hora del servidor (ms) en la que el banner deja de mostrarse. Cada cliente
+  // lo oculta localmente al llegar ese momento, aunque el estudio esté cerrado.
+  expiresAt?: number | null;
+};
+
+export type AnnouncementSettings = {
+  // Mostrar el banner también como overlay HTML sobre el reproductor de la
+  // página del asistente (para transmisiones que no salen del estudio/egress).
+  showOnAttend?: boolean;
 };
 
 export function setOnStage(eventSlug: string, uid: string, onStage: boolean) {
@@ -100,9 +164,169 @@ export function setTileAppearance(eventSlug: string, appearance: TileAppearance)
   return set(ref(db, `/live/${eventSlug}/tileAppearance`), appearance);
 }
 
+/** RTDB rechaza valores undefined: los quitamos antes de escribir */
+function stripUndefined<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
+}
+
 export function setBanner(eventSlug: string, banner: BannerState) {
   const db = getDatabase();
-  return set(ref(db, `/live/${eventSlug}/banner`), banner);
+  return set(ref(db, `/live/${eventSlug}/banner`), stripUndefined(banner));
+}
+
+// ── Reloj del servidor ────────────────────────────────────────────────────
+// expiresAt se calcula con la hora del servidor de Firebase para que el estudio,
+// el egress y los asistentes oculten el banner al mismo tiempo aunque sus relojes
+// locales difieran.
+let serverTimeOffset = 0;
+let offsetSubscribed = false;
+
+export function getServerNow(): number {
+  if (!offsetSubscribed) {
+    offsetSubscribed = true;
+    onValue(ref(getDatabase(), ".info/serverTimeOffset"), (snap) => {
+      serverTimeOffset = Number(snap.val()) || 0;
+    });
+  }
+  return Date.now() + serverTimeOffset;
+}
+
+/** ¿El banner debe verse ahora mismo? (visible, con texto y sin expirar) */
+export function isBannerActive(banner: BannerState | undefined | null, now = getServerNow()) {
+  if (!banner?.visible || !banner.text?.trim()) return false;
+  return !banner.expiresAt || now < banner.expiresAt;
+}
+
+export function publishAnnouncement(
+  eventSlug: string,
+  a: Pick<Announcement, "id" | "text" | "label" | "style" | "durationSec">,
+) {
+  const now = getServerNow();
+  return setBanner(eventSlug, {
+    visible: true,
+    text: a.text,
+    label: a.label || null,
+    style: a.style,
+    announcementId: a.id,
+    publishedAt: now,
+    expiresAt: a.durationSec ? now + a.durationSec * 1000 : null,
+  });
+}
+
+export function hideBanner(eventSlug: string) {
+  const db = getDatabase();
+  return set(ref(db, `/live/${eventSlug}/banner/visible`), false);
+}
+
+/** Actualiza texto/estilo del banner al aire sin reiniciar su duración */
+export function updateBannerContent(
+  eventSlug: string,
+  patch: Pick<BannerState, "text" | "label" | "style">,
+) {
+  const db = getDatabase();
+  return update(ref(db, `/live/${eventSlug}/banner`), {
+    text: patch.text,
+    label: patch.label || null,
+    style: patch.style ? stripUndefined(patch.style) : null,
+  });
+}
+
+export async function saveAnnouncement(
+  eventSlug: string,
+  data: Omit<Announcement, "id" | "order" | "createdAt">,
+  id?: string,
+): Promise<string> {
+  const db = getDatabase();
+  if (id) {
+    await update(ref(db, `/live/${eventSlug}/announcements/${id}`), {
+      text: data.text,
+      label: data.label || null,
+      style: data.style ? stripUndefined(data.style) : null,
+      durationSec: data.durationSec || null,
+    });
+    return id;
+  }
+  const newRef = push(ref(db, `/live/${eventSlug}/announcements`));
+  const now = Date.now();
+  await set(
+    newRef,
+    stripUndefined({
+      ...data,
+      label: data.label || null,
+      durationSec: data.durationSec || null,
+      order: now,
+      createdAt: now,
+    }),
+  );
+  return newRef.key!;
+}
+
+export function deleteAnnouncement(eventSlug: string, id: string) {
+  const db = getDatabase();
+  return remove(ref(db, `/live/${eventSlug}/announcements/${id}`));
+}
+
+/** Intercambia el orden de dos anuncios en una sola escritura */
+export function swapAnnouncementOrder(eventSlug: string, a: Announcement, b: Announcement) {
+  const db = getDatabase();
+  return update(ref(db, `/live/${eventSlug}/announcements`), {
+    [`${a.id}/order`]: b.order,
+    [`${b.id}/order`]: a.order,
+  });
+}
+
+export function subscribeAnnouncements(
+  eventSlug: string,
+  cb: (list: Announcement[]) => void,
+) {
+  const db = getDatabase();
+  const listRef = ref(db, `/live/${eventSlug}/announcements`);
+  const handler = (snap: DataSnapshot) => {
+    const val = (snap.val() ?? {}) as Record<string, Omit<Announcement, "id">>;
+    cb(
+      Object.entries(val)
+        .map(([id, a]) => ({ ...a, id }))
+        .sort((x, y) => x.order - y.order),
+    );
+  };
+  onValue(listRef, handler);
+  return () => off(listRef, "value", handler);
+}
+
+export function setAnnouncementSettings(eventSlug: string, settings: AnnouncementSettings) {
+  const db = getDatabase();
+  return update(ref(db, `/live/${eventSlug}/announcementSettings`), stripUndefined(settings));
+}
+
+/**
+ * Suscripción liviana para la página del asistente: solo lee el banner y los
+ * ajustes, no todo /live/{eventSlug} (que incluye estado interno del estudio).
+ */
+export function subscribeBannerOverlay(
+  eventSlug: string,
+  cb: (s: { banner: BannerState | null; settings: AnnouncementSettings }) => void,
+) {
+  const db = getDatabase();
+  const bannerRef = ref(db, `/live/${eventSlug}/banner`);
+  const settingsRef = ref(db, `/live/${eventSlug}/announcementSettings`);
+  let banner: BannerState | null = null;
+  let settings: AnnouncementSettings = {};
+
+  const onBanner = (snap: DataSnapshot) => {
+    banner = (snap.val() as BannerState) ?? null;
+    cb({ banner, settings });
+  };
+  const onSettings = (snap: DataSnapshot) => {
+    settings = (snap.val() as AnnouncementSettings) ?? {};
+    cb({ banner, settings });
+  };
+
+  onValue(bannerRef, onBanner);
+  onValue(settingsRef, onSettings);
+  return () => {
+    off(bannerRef, "value", onBanner);
+    off(settingsRef, "value", onSettings);
+  };
 }
 
 export function subscribeStageState(

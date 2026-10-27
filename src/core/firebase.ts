@@ -18,6 +18,10 @@ export const rtdb = getDatabase(app);
 export const storage = getStorage(app);
 
 export async function ensureAnon(): Promise<string> {
+  // Esperar a que Firebase restaure la sesión guardada: en una pestaña nueva
+  // currentUser es null unos instantes y signInAnonymously reemplazaría al
+  // admin autenticado en todas las pestañas.
+  await auth.authStateReady();
   if (!auth.currentUser) await signInAnonymously(auth);
   return new Promise((resolve) => {
     const unsub = onAuthStateChanged(auth, (u) => {

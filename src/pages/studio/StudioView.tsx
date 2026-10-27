@@ -68,6 +68,7 @@ import {
 } from "../../api/live-stage-service";
 import { StudioToolbar, LayoutPicker } from "./StudioToolbar";
 import { StudioSidePanel } from "./StudioSidePanel";
+import { AnnouncementBar } from "./AnnouncementBar";
 import { VirtualBackgroundControl } from "./VirtualBackgroundControl";
 import { DeviceSelectorPanel } from "./DeviceSelectorPanel";
 import type { LayoutMode } from "../../types";
@@ -91,11 +92,13 @@ interface StudioViewProps {
   orgSlug?: string;
 }
 
+// Enum EgressStatus de LiveKit: la API devuelve el número, no el nombre
+const EGRESS_STATUS_NAMES = ["starting", "active", "ending", "complete", "failed", "aborted", "limit_reached"];
+
 function normalizeStatus(s: any): string {
-  if (!s) return "";
-  if (typeof s === "string") return s.toLowerCase();
-  if (typeof s === "number") return String(s);
-  return String(s).toLowerCase();
+  if (s === null || s === undefined || s === "") return "";
+  const str = String(s).toLowerCase();
+  return /^\d+$/.test(str) ? EGRESS_STATUS_NAMES[Number(str)] ?? str : str;
 }
 
 function isTerminalEgressStatus(status: string) {
@@ -107,6 +110,7 @@ function isTerminalEgressStatus(status: string) {
     "failed",
     "aborted",
     "stopped",
+    "limit_reached",
   ].includes(status);
 }
 
@@ -891,6 +895,9 @@ export const StudioView: React.FC<StudioViewProps> = ({
                       <Paper p="sm" withBorder radius="md" style={{ display: "flex", justifyContent: "center" }}>
                         <ControlBar variation="minimal" />
                       </Paper>
+                      {role === "host" && (
+                        <AnnouncementBar eventSlug={eventSlug} disabled={isBusy} />
+                      )}
                       <Paper p="sm" withBorder radius="md">
                         <DeviceSelectorPanel />
                       </Paper>
@@ -1050,6 +1057,11 @@ export const StudioView: React.FC<StudioViewProps> = ({
                           />
                         </Group>
                       </Paper>
+                    )}
+
+                    {/* Anuncios — debajo del monitor para dispararlos mirando el programa */}
+                    {role === "host" && (
+                      <AnnouncementBar eventSlug={eventSlug} disabled={isBusy} />
                     )}
 
                     {/* A/V controls agrupados */}
