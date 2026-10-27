@@ -172,6 +172,14 @@ export function HerdOverlay({
   const ownGroup =
     memberGroup ?? (config ? findOwnHerdGroup(config, registrationData) : null);
 
+  // Silenciado (grupo excluido o grupo de control): no ve ningún mensaje. Lo
+  // decide el backend; sin su respuesta y con experimento activo no se sabe
+  // si cayó en control, así que se calla para no contaminar la medición.
+  const experiment = (config?.holdoutPercent ?? 0) > 0;
+  const muted = memberGroup
+    ? !!memberGroup.muted
+    : experiment || !!config?.groups?.find((g) => g.key === ownGroup?.key)?.excluded;
+
   useEffect(() => {
     if (!active) return;
     console.info("[herd]", {
@@ -179,9 +187,10 @@ export function HerdOverlay({
       fieldId: config?.fieldId ?? null,
       ownGroup,
       fromBackend: !!memberGroup,
+      muted,
       counts,
     });
-  }, [active, config?.enabled, config?.fieldId, ownGroup?.key, !!memberGroup, counts]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [active, config?.enabled, config?.fieldId, ownGroup?.key, !!memberGroup, muted, counts]); // eslint-disable-line react-hooks/exhaustive-deps
   const firstName = (name ?? "").trim().split(/\s+/)[0] ?? "";
   const privateReady = on && priv.enabled && !!ownGroup && counts !== null;
 
@@ -190,8 +199,8 @@ export function HerdOverlay({
   const firstGroup = config?.groups?.[0];
   const sampleGroup = ownGroup ?? (firstGroup ? { key: firstGroup.key, label: firstGroup.label, singular: firstGroup.singular } : DEMO_GROUP);
 
-  const privateArgs = useRef({ priv, ownGroup, memberGroup, sampleGroup, firstName, accent: config?.accentColor });
-  privateArgs.current = { priv, ownGroup, memberGroup, sampleGroup, firstName, accent: config?.accentColor };
+  const privateArgs = useRef({ priv, ownGroup, memberGroup, sampleGroup, firstName, muted, accent: config?.accentColor });
+  privateArgs.current = { priv, ownGroup, memberGroup, sampleGroup, firstName, muted, accent: config?.accentColor };
 
   /**
    * Arma y muestra el mensaje privado con el grupo y conteo actuales:
@@ -205,8 +214,9 @@ export function HerdOverlay({
     textOverride?: string,
     demo?: { position?: number },
   ) => {
-    const { priv: p, ownGroup, memberGroup: member, sampleGroup: sample, firstName: nombre, accent } =
+    const { priv: p, ownGroup, memberGroup: member, sampleGroup: sample, firstName: nombre, muted, accent } =
       privateArgs.current;
+    if (muted && !demo) return false;
     const g = ownGroup ?? (demo ? sample : null);
     if (!g) return false;
     const c = countsRef.current;
@@ -282,6 +292,7 @@ export function HerdOverlay({
       if (!e?.at || e.at === lastAt) return;
       const first = lastAt === null;
       lastAt = e.at;
+      if (privateArgs.current.muted) return;
       const p = { ...DEFAULT_HERD_PUBLIC, ...(pubRef.current.msg ?? {}) };
       // Los lanzados a mano desde el admin se muestran aunque el automático esté apagado
       if (!p.enabled && !e.manual) return;

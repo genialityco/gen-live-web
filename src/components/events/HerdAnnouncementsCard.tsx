@@ -6,8 +6,10 @@ import {
   Box,
   Button,
   Card,
+  Checkbox,
   Grid,
   Group,
+  Loader,
   Modal,
   NumberInput,
   ScrollArea,
@@ -32,6 +34,7 @@ import {
   DEFAULT_HERD_PRIVATE,
   DEFAULT_HERD_PUBLIC,
   DEFAULT_HERD_STYLE,
+  getHerdExperiment,
   HERD_MAX_FIRST,
   HERD_POSITIONS,
   herdBannerStyle,
@@ -45,6 +48,8 @@ import {
   updateHerdConfig,
   type EventHerdConfig,
   type HerdCounts,
+  type HerdExperimentArm,
+  type HerdExperimentReport,
   type HerdMessageConfig,
   type HerdMessageResolved,
   type HerdOrdinalGender,
@@ -88,6 +93,8 @@ function withDefaults(event: EventItem, fields: FormField[]): EventHerdConfig {
     enabled: c?.enabled ?? false,
     fieldId: c?.fieldId ?? guessField(fields)?.id,
     groupLabels: c?.groupLabels ?? [],
+    excludedGroups: c?.excludedGroups ?? [],
+    holdoutPercent: c?.holdoutPercent ?? 0,
     // El color de acento global de versiones anteriores pasa al estilo de cada mensaje
     accentColor: c?.accentColor,
     privateMessage: { ...privateMessage, style: messageStyle(privateMessage, c?.accentColor) },
@@ -118,8 +125,11 @@ export function HerdAnnouncementsCard({
   // Al activar sin campo configurado se abre el modal ya con el switch encendido
   const [openEnabling, setOpenEnabling] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
   const saved = useMemo(() => withDefaults(event, formFields), [event, formFields]);
   const field = formFields.find((f) => f.id === saved.fieldId);
+  const optionCount = field?.type === "select" ? field.options?.length ?? 0 : 0;
+  const excludedCount = saved.excludedGroups?.length ?? 0;
 
   const save = async (config: EventHerdConfig) => {
     setSaving(true);
@@ -174,6 +184,13 @@ export function HerdAnnouncementsCard({
               {" · "}
               Grupal {saved.publicMessage?.enabled ? `(${positionLabel(saved.publicMessage.position)})` : "desactivado"}
             </Text>
+            {(excludedCount > 0 || !!saved.holdoutPercent) && (
+              <Text size="xs" c="dimmed">
+                {excludedCount > 0 && `Anuncia a ${optionCount - excludedCount} de ${optionCount} grupos`}
+                {excludedCount > 0 && !!saved.holdoutPercent && " · "}
+                {!!saved.holdoutPercent && `🧪 Grupo de control: ${saved.holdoutPercent}% sin mensajes`}
+              </Text>
+            )}
           </Stack>
         )}
 
@@ -182,6 +199,14 @@ export function HerdAnnouncementsCard({
         )}
 
         <Group justify="flex-end">
+          <Button
+            size="xs"
+            variant="subtle"
+            onClick={() => setReportOpen(true)}
+            title="Compara la retención de quienes ven los mensajes contra el grupo de control"
+          >
+            📊 Medir impacto
+          </Button>
           <Button
             size="xs"
             variant="subtle"
@@ -227,6 +252,17 @@ export function HerdAnnouncementsCard({
           />
         )}
       </Modal>
+
+      <Modal
+        opened={reportOpen}
+        onClose={() => setReportOpen(false)}
+        title={<Text fw={700}>📊 Impacto de los anuncios de manada</Text>}
+        size="lg"
+        radius="md"
+        centered
+      >
+        {reportOpen && <HerdExperimentView eventId={event._id} />}
+      </Modal>
     </Card>
   );
 }
@@ -258,8 +294,9 @@ function HerdQuickAnnounce({
     const custom = config.groupLabels?.find((g) => g.value === o.value);
     labelByKey.set(herdKey(o.value), herdGroupForms(custom, o.label).plural);
   }
+  const excludedKeys = new Set((config.excludedGroups ?? []).map(herdKey));
   const groups = Object.entries(counts?.counts ?? {})
-    .filter(([, n]) => n > 0)
+    .filter(([key, n]) => n > 0 && !excludedKeys.has(key))
     .sort(([, a], [, b]) => b - a)
     .map(([key, n]) => ({ value: key, label: `${labelByKey.get(key) ?? key} (${n})` }));
 
@@ -360,6 +397,17 @@ function HerdConfigForm({
 
   const customFor = (value: string) => config.groupLabels?.find((g) => g.value === value);
 
+  const excluded = new Set(config.excludedGroups ?? []);
+  const setIncluded = (values: string[], included: boolean) =>
+    setConfig((c) => {
+      const next = new Set(c.excludedGroups ?? []);
+      for (const v of values) {
+        if (included) next.delete(v);
+        else next.add(v);
+      }
+      return { ...c, excludedGroups: [...next] };
+    });
+
   // label = plural; singular aparte. La forma vacía se deduce de la otra.
   const setGroupLabel = (value: string, patch: { label?: string; singular?: string }) =>
     setConfig((c) => {
@@ -428,14 +476,31 @@ function HerdConfigForm({
               description="Campo del formulario de registro que define la manada (especialidad, sociedad…)"
               data={fieldOptions}
               value={config.fieldId ?? null}
-              onChange={(v) => setConfig((c) => ({ ...c, fieldId: v ?? undefined }))}
+              // Las exclusiones son opciones del campo anterior: se descartan
+              onChange={(v) => setConfig((c) => ({ ...c, fieldId: v ?? undefined, excludedGroups: [] }))}
               searchable
             />
 
             {options.length > 0 && (
               <div>
-                <Text size="sm" fw={500}>Nombre de cada grupo en los mensajes</Text>
+                <Group justify="space-between" align="flex-end">
+                  <Text size="sm" fw={500}>Grupos y nombre de cada uno en los mensajes</Text>
+                  <Group gap={4}>
+                    <Text size="xs" c="dimmed">
+                      Anuncia a {options.filter((o) => !excluded.has(o.value)).length} de {options.length}
+                    </Text>
+                    <Button size="compact-xs" variant="subtle" onClick={() => setIncluded(options.map((o) => o.value), true)}>
+                      Todos
+                    </Button>
+                    <Button size="compact-xs" variant="subtle" onClick={() => setIncluded(options.map((o) => o.value), false)}>
+                      Ninguno
+                    </Button>
+                  </Group>
+                </Group>
                 <Text size="xs" c="dimmed" mb={6}>
+                  Desmarca «Anunciar» para que los asistentes de ese grupo no vean
+                  ningún mensaje (ni individual ni grupal) y para que el grupal
+                  nunca hable de ese grupo.{" "}
                   Opcional. Escribe una sola forma (singular o plural) y la otra
                   se completa sola (en gris); escríbela solo si la sugerencia no
                   queda bien. «Endocrinología» → «endocrinólogo» / «endocrinólogos».
@@ -445,6 +510,7 @@ function HerdConfigForm({
                   <Table verticalSpacing={4} withTableBorder>
                     <Table.Thead>
                       <Table.Tr>
+                        <Table.Th w={70}>Anunciar</Table.Th>
                         <Table.Th>Opción del formulario</Table.Th>
                         <Table.Th>Singular (1)</Table.Th>
                         <Table.Th>Plural (2 o más)</Table.Th>
@@ -457,7 +523,15 @@ function HerdConfigForm({
                         const typedSingular = custom?.singular?.trim() ?? "";
                         const typedPlural = custom?.label?.trim() ?? "";
                         return (
-                          <Table.Tr key={o.value}>
+                          <Table.Tr key={o.value} style={{ opacity: excluded.has(o.value) ? 0.5 : 1 }}>
+                            <Table.Td>
+                              <Checkbox
+                                size="xs"
+                                checked={!excluded.has(o.value)}
+                                onChange={(e) => setIncluded([o.value], e.currentTarget.checked)}
+                                aria-label={`Anunciar a ${o.label}`}
+                              />
+                            </Table.Td>
                             <Table.Td><Text size="xs">{o.label}</Text></Table.Td>
                             <Table.Td>
                               <TextInput
@@ -488,6 +562,46 @@ function HerdConfigForm({
                 </ScrollArea.Autosize>
               </div>
             )}
+
+            <Stack gap={6} p="sm" style={{ border: "1px solid var(--mantine-color-default-border)", borderRadius: 8 }}>
+              <Text size="sm" fw={600}>🧪 Experimento: grupo de control</Text>
+              <Text size="xs" c="dimmed">
+                Un porcentaje de los asistentes, sorteado al azar al conectarse por
+                primera vez, no ve ningún mensaje. Así puedes comparar su retención
+                contra quienes sí los ven en «📊 Medir impacto». Cada asistente
+                conserva su sorteo aunque salga y vuelva. 0 = todos ven los mensajes.
+              </Text>
+              <Group align="flex-end" gap="xs">
+                <NumberInput
+                  w={140}
+                  label="Sin mensajes"
+                  suffix="%"
+                  min={0}
+                  max={90}
+                  step={5}
+                  value={config.holdoutPercent ?? 0}
+                  onChange={(v) =>
+                    setConfig((c) => ({ ...c, holdoutPercent: Math.round(Math.min(90, Math.max(0, Number(v) || 0))) }))
+                  }
+                />
+                {[0, 10, 20, 50].map((n) => (
+                  <Button
+                    key={n}
+                    size="xs"
+                    variant={config.holdoutPercent === n ? "filled" : "default"}
+                    onClick={() => setConfig((c) => ({ ...c, holdoutPercent: n }))}
+                  >
+                    {n}%
+                  </Button>
+                ))}
+              </Group>
+              {!!config.holdoutPercent && (
+                <Text size="xs" c="dimmed">
+                  50% da la medición más rápida; 10–20% sacrifica menos audiencia
+                  pero necesita más asistentes para concluir.
+                </Text>
+              )}
+            </Stack>
           </Stack>
         </Tabs.Panel>
 
@@ -579,6 +693,18 @@ function HerdConfigForm({
               total: 121,
             })}
           >
+            <Switch
+              label="Anunciar también cuando crece un grupo"
+              description="Apagado: el grupal solo sale cada «Repetir cada» minutos, con un grupo al azar (sin repetir hasta que salgan todos)"
+              checked={pub.announceOnGrowth}
+              onChange={(e) => setPub({ announceOnGrowth: e.currentTarget.checked })}
+              disabled={!pub.enabled}
+            />
+            {pub.enabled && !pub.announceOnGrowth && !pub.repeatEverySec && (
+              <Alert color="yellow" variant="light" p="xs">
+                Sin anuncio al crecer y sin «Repetir cada», el grupal solo saldrá cuando lo lances a mano.
+              </Alert>
+            )}
             <Group grow align="flex-start">
               <NumberInput
                 label="Intervalo mínimo (s)"
@@ -587,7 +713,7 @@ function HerdConfigForm({
                 max={600}
                 value={pub.minIntervalSec}
                 onChange={(v) => setPub({ minIntervalSec: Number(v) || DEFAULT_HERD_PUBLIC.minIntervalSec })}
-                disabled={!pub.enabled}
+                disabled={!pub.enabled || !pub.announceOnGrowth}
               />
               <NumberInput
                 label="Anunciar cada"
@@ -596,7 +722,7 @@ function HerdConfigForm({
                 max={1000}
                 value={pub.milestoneEvery}
                 onChange={(v) => setPub({ milestoneEvery: Number(v) || 1 })}
-                disabled={!pub.enabled}
+                disabled={!pub.enabled || !pub.announceOnGrowth}
               />
             </Group>
           </HerdMessageEditor>
@@ -783,5 +909,119 @@ function HerdMessageEditor({
         </ScrollArea.Autosize>
       </Grid.Col>
     </Grid>
+  );
+}
+
+const fmtMin = (n: number) => `${n.toLocaleString("es")} min`;
+const fmtPct = (n: number | null) => (n === null ? "—" : `${n.toLocaleString("es")}%`);
+
+const ARM_ROWS: Array<{ label: string; get: (a: HerdExperimentArm) => string }> = [
+  { label: "Asistentes", get: (a) => a.attendees.toLocaleString("es") },
+  { label: "Reproducción promedio", get: (a) => fmtMin(a.avgPlaybackMin) },
+  { label: "Reproducción mediana", get: (a) => fmtMin(a.medianPlaybackMin) },
+  { label: "Conectado promedio", get: (a) => fmtMin(a.avgPresenceMin) },
+  { label: "Vio ≥ 15 min", get: (a) => fmtPct(a.watched15Pct) },
+  { label: "Vio ≥ 30 min", get: (a) => fmtPct(a.watched30Pct) },
+  { label: "Vio ≥ 60 min", get: (a) => fmtPct(a.watched60Pct) },
+  { label: "Se quedó hasta el final", get: (a) => fmtPct(a.untilEndPct) },
+  { label: "Sesiones por asistente", get: (a) => a.avgSessions.toLocaleString("es") },
+];
+
+/**
+ * Reporte del experimento: quienes vieron los mensajes (tratamiento) contra
+ * el grupo de control sorteado. Los grupos excluidos van aparte porque no se
+ * eligieron al azar.
+ */
+function HerdExperimentView({ eventId }: { eventId: string }) {
+  const [report, setReport] = useState<HerdExperimentReport | null>(null);
+  const [error, setError] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  const load = async () => {
+    setLoading(true);
+    setError(false);
+    try {
+      setReport(await getHerdExperiment(eventId));
+    } catch (err) {
+      console.error("Error cargando el experimento de manada:", err);
+      setError(true);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [eventId]);
+
+  if (loading && !report) return <Group justify="center" p="lg"><Loader size="sm" /></Group>;
+  if (error || !report) return <Alert color="red" variant="light">No se pudo cargar el reporte.</Alert>;
+
+  const { treatment, control, excluded, lift } = report;
+  const hasControl = control.attendees > 0;
+  const significant = lift.pValue !== null && lift.pValue < 0.05;
+  const verdictColor =
+    !hasControl || lift.pValue === null ? "gray" : significant ? (lift.playbackMin > 0 ? "green" : "red") : "yellow";
+
+  return (
+    <Stack gap="md">
+      {!hasControl ? (
+        <Alert color="gray" variant="light">
+          Aún no hay grupo de control. Configura un porcentaje en «⚙️ Configurar →
+          🧪 Experimento» antes de que se conecten los asistentes.
+        </Alert>
+      ) : (
+        <Alert color={verdictColor} variant="light">
+          {lift.pValue === null ? (
+            "Todavía no hay datos suficientes para comparar."
+          ) : (
+            <>
+              Quienes ven los mensajes reproducen{" "}
+              <b>{lift.playbackMin > 0 ? "+" : ""}{fmtMin(lift.playbackMin)}</b>
+              {lift.playbackPct !== null && <> ({lift.playbackPct > 0 ? "+" : ""}{lift.playbackPct}%)</>} en
+              promedio frente al grupo de control.{" "}
+              {significant
+                ? `La diferencia es estadísticamente significativa (p = ${lift.pValue}).`
+                : `Aún puede ser azar (p = ${lift.pValue}; se busca p < 0.05): hacen falta más asistentes o un efecto mayor.`}
+            </>
+          )}
+        </Alert>
+      )}
+
+      <Table withTableBorder verticalSpacing={4} fz="xs">
+        <Table.Thead>
+          <Table.Tr>
+            <Table.Th />
+            <Table.Th>👥 Ven mensajes</Table.Th>
+            <Table.Th>🧪 Control</Table.Th>
+            {excluded.attendees > 0 && <Table.Th>🚫 Grupos excluidos</Table.Th>}
+          </Table.Tr>
+        </Table.Thead>
+        <Table.Tbody>
+          {ARM_ROWS.map((r) => (
+            <Table.Tr key={r.label}>
+              <Table.Td>{r.label}</Table.Td>
+              <Table.Td>{r.get(treatment)}</Table.Td>
+              <Table.Td>{r.get(control)}</Table.Td>
+              {excluded.attendees > 0 && <Table.Td>{r.get(excluded)}</Table.Td>}
+            </Table.Tr>
+          ))}
+        </Table.Tbody>
+      </Table>
+
+      <Text size="xs" c="dimmed">
+        Solo cuenta a los asistentes con grupo que se conectaron con la manada
+        activa. «Reproducción» es tiempo real de video (sin pausas ni pestañas de
+        fondo). {!report.eventEnded && "«Se quedó hasta el final» aparece cuando el evento termina. "}
+        Los grupos excluidos no se eligieron al azar: compáralos solo como referencia.
+      </Text>
+
+      <Group justify="flex-end">
+        <Button size="xs" variant="light" leftSection={<IconRefresh size={14} />} loading={loading} onClick={() => void load()}>
+          Actualizar
+        </Button>
+      </Group>
+    </Stack>
   );
 }

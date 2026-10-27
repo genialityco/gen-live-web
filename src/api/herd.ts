@@ -41,6 +41,7 @@ export type HerdPrivateMessageConfig = HerdMessageConfig & {
 };
 
 export type HerdPublicMessageConfig = HerdMessageConfig & {
+  announceOnGrowth?: boolean; // false = solo cada repeatEverySec (y a mano)
   minIntervalSec?: number;
   milestoneEvery?: number;
 };
@@ -50,6 +51,10 @@ export type EventHerdConfig = {
   fieldId?: string;
   // label = plural, singular = singular; la forma que falte se deduce
   groupLabels?: Array<{ value: string; label?: string; singular?: string }>;
+  // Valores de las opciones cuyos asistentes no ven mensajes (ni se anuncian)
+  excludedGroups?: string[];
+  // % de asistentes que al azar quedan sin mensajes (grupo de control); 0 = sin experimento
+  holdoutPercent?: number;
   accentColor?: string;
   privateMessage?: HerdPrivateMessageConfig;
   publicMessage?: HerdPublicMessageConfig;
@@ -62,6 +67,7 @@ export type HerdGroup = {
   optionLabel: string;
   label: string; // plural
   singular?: string;
+  excluded?: boolean; // no recibe mensajes
 };
 
 /** Grupo con sus dos formas: label = plural ("endocrinólogos"), singular = "endocrinólogo" */
@@ -75,10 +81,14 @@ export type HerdLiveConfig = {
   privateMessage?: HerdPrivateMessageConfig;
   publicMessage?: HerdPublicMessageConfig;
   groups?: HerdGroup[];
+  holdoutPercent?: number;
 };
 
 /** Grupo propio del asistente y su orden de llegada en él (1 = el primero) */
-export type HerdMember = HerdGroupRef & { position?: number };
+export type HerdMember = HerdGroupRef & {
+  position?: number;
+  muted?: boolean; // grupo excluido o grupo de control: no ve mensajes
+};
 
 export type HerdCounts = {
   counts: Record<string, number>;
@@ -128,11 +138,12 @@ export const DEFAULT_HERD_PRIVATE: HerdMessageResolved &
 };
 
 export const DEFAULT_HERD_PUBLIC: HerdMessageResolved &
-  Required<Pick<HerdPublicMessageConfig, "minIntervalSec" | "milestoneEvery">> = {
+  Required<Pick<HerdPublicMessageConfig, "announceOnGrowth" | "minIntervalSec" | "milestoneEvery">> = {
   enabled: true,
   template: "¡Ya son {cantidad} {grupo} conectados!",
   position: "bottom-left",
   durationSec: 6,
+  announceOnGrowth: true,
   minIntervalSec: 20,
   milestoneEvery: 1,
   repeatEverySec: 0,
@@ -412,6 +423,33 @@ export async function announceHerd(
   payload: { type: "public" | "private"; key?: string; text?: string },
 ): Promise<{ type: string; key: string | null; label?: string; count: number }> {
   const { data } = await api.post(`/events/${eventId}/herd/announce`, payload);
+  return data;
+}
+
+export type HerdExperimentArm = {
+  attendees: number;
+  avgPlaybackMin: number;
+  medianPlaybackMin: number;
+  avgPresenceMin: number;
+  avgSessions: number;
+  watched15Pct: number;
+  watched30Pct: number;
+  watched60Pct: number;
+  untilEndPct: number | null; // null si el evento no ha terminado
+};
+
+/** Retención de quienes vieron los mensajes (tratamiento) vs. el grupo de control */
+export type HerdExperimentReport = {
+  holdoutPercent: number;
+  eventEnded: boolean;
+  treatment: HerdExperimentArm;
+  control: HerdExperimentArm;
+  excluded: HerdExperimentArm;
+  lift: { playbackMin: number; playbackPct: number | null; pValue: number | null };
+};
+
+export async function getHerdExperiment(eventId: string): Promise<HerdExperimentReport> {
+  const { data } = await api.get(`/events/${eventId}/herd/experiment`);
   return data;
 }
 
