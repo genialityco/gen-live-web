@@ -477,6 +477,8 @@ export default function EventAttendGcore() {
 
   const [, setShowFrame] = useState(false);
   const [, setFrameUrl] = useState("");
+  // El admin puede apagar "Solicitar unirme al estudio" (llega con la config en vivo)
+  const [joinEnabled, setJoinEnabled] = useState(true);
 
   // 1) Cargar datos de organización y evento
   useEffect(() => {
@@ -906,6 +908,7 @@ export default function EventAttendGcore() {
         });
         setShowFrame(!!cfg.showFrame);
         setFrameUrl(cfg.frameUrl || "");
+        setJoinEnabled(cfg.joinRequestsEnabled !== false);
       } catch (err) {
         console.error("❌ Error polling frame config:", err);
       }
@@ -937,7 +940,11 @@ export default function EventAttendGcore() {
 
   const joinMessage =
     !emergency.active && status === "live" ? getJoinMessage(joinState) : "";
+  // Botón visible (el admin no lo apagó); canRequestJoin además exige poder pedirlo ya
+  const showJoinButton =
+    joinEnabled && !emergency.active && status === "live" && mode !== "studio";
   const canRequestJoin =
+    joinEnabled &&
     !emergency.active &&
     status === "live" &&
     (isRegistered || isOwner) &&
@@ -1274,7 +1281,7 @@ export default function EventAttendGcore() {
                   >
                     {getStatusText(status)}
                   </Badge>
-                  {!emergency.active && status === "live" && mode !== "studio" && (
+                  {showJoinButton && (
                     <ActionIcon
                       size="sm"
                       variant={joinState === "pending" ? "filled" : "light"}
@@ -1639,7 +1646,7 @@ export default function EventAttendGcore() {
                   </Card>
 
                   {/* Botón sutil para solicitar unirse al estudio */}
-                  {!emergency.active && status === "live" && mode !== "studio" && (
+                  {showJoinButton && (
                     <Group justify="center" mt="xs">
                       <Button
                         variant="subtle"

@@ -26,7 +26,13 @@ import {
   updateEventCertificatesConfig,
   backfillEventCertificates,
 } from "../../api/events";
-import { getMuxReplayByAsset, listMuxAssets, type MuxAsset } from "../../api/livekit-service";
+import {
+  getLiveConfig,
+  getMuxReplayByAsset,
+  listMuxAssets,
+  updateLiveConfig,
+  type MuxAsset,
+} from "../../api/livekit-service";
 import EventStreamForm from "./EventStreamForm";
 import { StreamPlayer } from "./StreamPlayer";
 import { resolveStreams } from "./streamUtils";
@@ -96,6 +102,44 @@ export default function EventAdminControl({
       });
     } finally {
       setCertificatesToggling(false);
+    }
+  };
+
+  // "Solicitar unirme al estudio": vive en la config en vivo (por eventSlug)
+  const [joinRequestsEnabled, setJoinRequestsEnabled] = useState<boolean | null>(null);
+  const [joinToggling, setJoinToggling] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    getLiveConfig(event.slug)
+      .then((cfg) => alive && setJoinRequestsEnabled(cfg.joinRequestsEnabled !== false))
+      .catch((err) => console.error("Error cargando config en vivo:", err));
+    return () => {
+      alive = false;
+    };
+  }, [event.slug]);
+
+  const handleToggleJoinRequests = async (enabled: boolean) => {
+    setJoinToggling(true);
+    try {
+      await updateLiveConfig({ eventSlug: event.slug, joinRequestsEnabled: enabled });
+      setJoinRequestsEnabled(enabled);
+      notifications.show({
+        title: enabled ? "Solicitudes al estudio activadas" : "Solicitudes al estudio desactivadas",
+        message: enabled
+          ? "Los asistentes ven el botón «Solicitar unirme al estudio»."
+          : "Se ocultó el botón para unirse al estudio en la página del asistente.",
+        color: enabled ? "green" : "gray",
+      });
+    } catch (err) {
+      console.error("Error cambiando solicitudes al estudio:", err);
+      notifications.show({
+        title: "Error",
+        message: "No se pudo cambiar la configuración. Intenta de nuevo.",
+        color: "red",
+      });
+    } finally {
+      setJoinToggling(false);
     }
   };
 
@@ -637,6 +681,27 @@ export default function EventAdminControl({
                     </Group>
                   )}
               </Stack>
+            </Card>
+
+            {/* Botón para que los asistentes pidan unirse al estudio */}
+            <Card withBorder radius="lg" p="lg">
+              <Group justify="space-between" align="center" wrap="nowrap">
+                <div>
+                  <Title order={3}>🎙️ Unirse al estudio</Title>
+                  <Text size="xs" c="dimmed">
+                    Muestra a los asistentes el botón «Solicitar unirme al
+                    estudio» durante el vivo. Apagado, nadie puede enviar
+                    solicitudes. Se aplica en unos segundos, sin recargar.
+                  </Text>
+                </div>
+                <Switch
+                  checked={!!joinRequestsEnabled}
+                  onChange={(e) =>
+                    void handleToggleJoinRequests(e.currentTarget.checked)
+                  }
+                  disabled={joinToggling || joinRequestsEnabled === null}
+                />
+              </Group>
             </Card>
 
             {/* Anuncios de manada sobre el video del asistente */}

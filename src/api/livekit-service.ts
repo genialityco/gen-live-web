@@ -29,6 +29,8 @@ export interface LiveConfig {
   lastError?: string;
   showFrame?: boolean;
   frameUrl?: string;
+  // Botón "Solicitar unirme al estudio" para los asistentes (por defecto activo)
+  joinRequestsEnabled?: boolean;
   // Media library support - múltiples capas
   activeMediaItemId?: string; // Legacy
   activeVisualItemId?: string;
