@@ -442,6 +442,8 @@ export type HerdExperimentArm = {
 export type HerdExperimentReport = {
   holdoutPercent: number;
   eventEnded: boolean;
+  // Sorteados que nunca estuvieron con el evento en vivo (fuera de la comparación)
+  notLive?: number;
   treatment: HerdExperimentArm;
   control: HerdExperimentArm;
   excluded: HerdExperimentArm;

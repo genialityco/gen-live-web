@@ -1011,8 +1011,10 @@ function HerdExperimentView({ eventId }: { eventId: string }) {
       </Table>
 
       <Text size="xs" c="dimmed">
-        Solo cuenta a los asistentes con grupo que se conectaron con la manada
-        activa. «Reproducción» es tiempo real de video (sin pausas ni pestañas de
+        Solo cuenta a los asistentes con grupo que estuvieron conectados con el
+        evento en vivo (en diferido no se muestran los mensajes)
+        {!!report.notLive && ` · ${report.notLive.toLocaleString("es")} sorteados que no llegaron al vivo quedan fuera`}
+        . «Reproducción» es tiempo real de video (sin pausas ni pestañas de
         fondo). {!report.eventEnded && "«Se quedó hasta el final» aparece cuando el evento termina. "}
         Los grupos excluidos no se eligieron al azar: compáralos solo como referencia.
       </Text>
