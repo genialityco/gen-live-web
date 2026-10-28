@@ -79,6 +79,7 @@ import { VimeoPlayer } from "../viewer/VimeoPlayer";
 import { resolveStreams } from "../../components/events/streamUtils";
 import { AttendAnnouncementOverlay } from "../../components/studio/AnnouncementBanner";
 import { HerdOverlay } from "../../components/events/HerdOverlay";
+import { VideoNetworkGuard } from "../../components/events/VideoNetworkGuard";
 import { Track } from "livekit-client";
 import { trackEvent } from "../../lib/utmTracking";
 
@@ -955,7 +956,16 @@ export default function EventAttendGcore() {
   // reproducción real (playing) para las métricas. HLS .m3u8 → <video> nativo;
   // Vimeo → SDK; otros embeds → iframe crudo (sin medición posible).
   const isVimeoUrl = (url: string) => /vimeo\.com/i.test(url);
+  // Cada reproductor va dentro de VideoNetworkGuard: si la red del asistente
+  // bloquea el servidor del video (firewall, inspección SSL…), lo avisa.
   const renderPlayer = (
+    url: string,
+    pmode: "live" | "replay",
+    onError?: () => void,
+  ) => (
+    <VideoNetworkGuard src={url}>{renderPlayerSource(url, pmode, onError)}</VideoNetworkGuard>
+  );
+  const renderPlayerSource = (
     url: string,
     pmode: "live" | "replay",
     onError?: () => void,
