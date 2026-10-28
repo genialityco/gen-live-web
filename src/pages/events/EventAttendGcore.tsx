@@ -963,7 +963,9 @@ export default function EventAttendGcore() {
     pmode: "live" | "replay",
     onError?: () => void,
   ) => (
-    <VideoNetworkGuard src={url}>{renderPlayerSource(url, pmode, onError)}</VideoNetworkGuard>
+    <VideoNetworkGuard src={url} eventId={event?._id}>
+      {renderPlayerSource(url, pmode, onError)}
+    </VideoNetworkGuard>
   );
   const renderPlayerSource = (
     url: string,

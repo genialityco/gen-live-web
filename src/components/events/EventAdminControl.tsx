@@ -39,6 +39,7 @@ import { resolveStreams } from "./streamUtils";
 import { useEventEmergency } from "../../hooks/useEventEmergency";
 import type { FormField } from "../../types";
 import { HerdAnnouncementsCard } from "./HerdAnnouncementsCard";
+import { NetworkBlocksCard } from "./NetworkBlocksCard";
 
 interface EventAdminControlProps {
   event: EventItem;
@@ -703,6 +704,9 @@ export default function EventAdminControl({
                 />
               </Group>
             </Card>
+
+            {/* Asistentes cuya red bloquea el video (firewall, inspección SSL…) */}
+            <NetworkBlocksCard eventId={event._id} />
 
             {/* Anuncios de manada sobre el video del asistente */}
             <HerdAnnouncementsCard
