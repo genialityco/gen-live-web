@@ -43,8 +43,10 @@ export function VodHlsPlayer({
       onPlayingChangeRef.current?.(p),
     );
 
-    // Safari / iOS nativo (sin hls.js)
-    if (video.canPlayType("application/vnd.apple.mpegurl")) {
+    // Safari / iOS nativo (sin hls.js): solo si no hay MSE. Chrome 156 dice
+    // "maybe" a canPlayType(m3u8) pero su HLS nativo falla (error 4) con
+    // streams que hls.js reproduce bien, así que hls.js va primero.
+    if (!Hls.isSupported() && video.canPlayType("application/vnd.apple.mpegurl")) {
       video.src = src;
       if (autoPlay) {
         video.play().catch(() => {});

@@ -79,7 +79,9 @@ export function ViewerHlsPlayer({
     );
 
     // ---- Safari / iOS nativo (sin hls.js) ----
-    if (video.canPlayType("application/vnd.apple.mpegurl")) {
+    // Solo si no hay MSE: Chrome 156 dice "maybe" a canPlayType(m3u8) pero su
+    // HLS nativo falla (error 4) con streams que hls.js reproduce bien.
+    if (!Hls.isSupported() && video.canPlayType("application/vnd.apple.mpegurl")) {
       video.src = src;
 
       const snapSafari = throttle(() => {
