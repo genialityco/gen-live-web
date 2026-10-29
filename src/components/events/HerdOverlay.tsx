@@ -348,7 +348,7 @@ export function HerdOverlay({
     const sent = (recipients: number) =>
       recipients > 0
         ? `👋 Saludaste a ${recipients} ${recipients === 1 ? "colega" : "colegas"} de ${g.label}`
-        : `👋 ¡Listo! Tus colegas de ${g.label} verán tu saludo al conectarse`;
+        : `👋 ¡Saludo enviado a tus colegas de ${g.label}!`;
     if (demo) {
       edit("private", bannerId, { text: sent(Math.max(1, (countsRef.current?.counts[g.key] ?? 13) - 1)), action: null }, CONFIRM_MS);
       return;
