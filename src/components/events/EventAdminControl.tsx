@@ -251,6 +251,8 @@ export default function EventAdminControl({
   const [assetsLoading, setAssetsLoading] = useState(false);
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
   const [assetsProvider, setAssetsProvider] = useState<StreamProvider | null>(null);
+  // Error del proveedor al listar (p. ej. Cloudflare sin credenciales)
+  const [assetsError, setAssetsError] = useState<string | null>(null);
 
   // Más reciente primero (Mux las devuelve de la más vieja a la más nueva)
   const sortAssets = (list: MuxAsset[]) =>
@@ -272,6 +274,7 @@ export default function EventAdminControl({
       try {
         const result = await listMuxAssets(event.slug);
         setAssetsProvider(result.provider ?? null);
+        setAssetsError(result.ok ? null : result.message || null);
         if (result.ok && result.assets.length > 0) {
           const sorted = sortAssets(result.assets);
           setAssets(sorted);
@@ -293,6 +296,7 @@ export default function EventAdminControl({
     try {
       const result = await listMuxAssets(event.slug);
       setAssetsProvider(result.provider ?? null);
+        setAssetsError(result.ok ? null : result.message || null);
       if (result.ok) {
         const sorted = sortAssets(result.assets);
         setAssets(sorted);
@@ -848,8 +852,8 @@ export default function EventAdminControl({
                     ) : assets.length === 0 ? (
                       <Alert variant="light" color="gray">
                         <Text size="sm">
-                          No hay grabaciones disponibles. Transmite al menos una
-                          vez para generar una grabación.
+                          {assetsError ??
+                            "No hay grabaciones disponibles. Transmite al menos una vez para generar una grabación."}
                         </Text>
                       </Alert>
                     ) : (
