@@ -154,6 +154,33 @@ export async function getLiveConfig(eventSlug: string) {
   return data;
 }
 
+/** Campos de la config del estudio sin credenciales (asistentes y speakers). */
+export type PublicLiveConfig = Omit<
+  LiveConfig,
+  | "provider"
+  | "providerStreamId"
+  | "ingestProtocol"
+  | "rtmpServerUrl"
+  | "rtmpStreamKey"
+  | "srtIngestUrl"
+  | "playbackHlsUrl"
+  | "maxParticipants"
+  | "status"
+  | "activeEgressId"
+  | "lastError"
+>;
+
+/**
+ * Config pública (sin auth). Con caché de ~30 s en el servidor; `fresh`
+ * lo salta (estudio, donde el host necesita ver sus cambios al instante).
+ */
+export async function getPublicLiveConfig(eventSlug: string, fresh = false) {
+  const { data } = await api.get<PublicLiveConfig>(`/livekit/public-config`, {
+    params: { eventSlug, ...(fresh ? { fresh: "1" } : {}) },
+  });
+  return data;
+}
+
 export async function updateLiveConfig(
   payload: Partial<LiveConfig> & { eventSlug: string },
 ) {

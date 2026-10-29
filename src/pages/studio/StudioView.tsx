@@ -8,7 +8,7 @@ import {
   startLiveRtmp,
   stopLive,
   getEgressStatus,
-  getLiveConfig,
+  getPublicLiveConfig,
   updateLiveConfig,
   renameParticipant,
 } from "../../api/livekit-service";
@@ -477,7 +477,7 @@ export const StudioView: React.FC<StudioViewProps> = ({
 
   const fetchConfig = async () => {
     try {
-      const cfg = await getLiveConfig(eventSlug);
+      const cfg = await getPublicLiveConfig(eventSlug, true);
 
       setShowFrame(!!cfg.showFrame);
       setFrameUrl(cfg.frameUrl || "");
