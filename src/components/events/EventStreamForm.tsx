@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { ActionIcon, Button, Group, Select, Stack, TextInput } from "@mantine/core";
 import { IconPlus, IconTrash } from "@tabler/icons-react";
 import { updateEventStreams, type EventItem, type EventStream } from "../../api/events";
+import { normalizePlaybackUrl } from "../../pages/studio/streamProviders";
 
 const PROVIDER_OPTIONS = [
   { label: "Vimeo", value: "vimeo" },
@@ -10,14 +11,8 @@ const PROVIDER_OPTIONS = [
   { label: "Otro (iframe)", value: "other" },
 ];
 
-function normalizeStreamUrl(provider: string, input: string) {
-  if (provider === "vimeo") {
-    // admite: https://vimeo.com/12345 o https://player.vimeo.com/video/12345
-    const idMatch = input.match(/vimeo\.com\/(?:video\/)?(\d+)/i)?.[1];
-    if (idMatch) return `https://player.vimeo.com/video/${idMatch}`;
-  }
-  return input.trim();
-}
+// admite https://vimeo.com/12345 (o /12345/hash) y https://player.vimeo.com/video/12345
+const normalizeStreamUrl = normalizePlaybackUrl;
 
 export default function EventStreamForm({
   eventId,

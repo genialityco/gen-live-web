@@ -58,7 +58,7 @@ import LivePollViewer from "../../components/events/LivePollViewer";
 import {
   ensureRoom,
   getPlayback,
-  getLiveConfig,
+  getPublicLiveConfig,
 } from "../../api/livekit-service";
 import {
   requestToJoin,
@@ -901,7 +901,7 @@ export default function EventAttendGcore() {
 
     const pollConfig = async () => {
       try {
-        const cfg = await getLiveConfig(eventSlugToUse);
+        const cfg = await getPublicLiveConfig(eventSlugToUse);
         if (!alive) return;
         console.log("🖼️ Frame config:", {
           showFrame: cfg.showFrame,
@@ -916,7 +916,9 @@ export default function EventAttendGcore() {
     };
 
     void pollConfig();
-    const interval = setInterval(() => void pollConfig(), 2000);
+    // La config pública tiene caché de ~30 s en el servidor: sondear más
+    // seguido no trae cambios antes y solo suma carga con miles de asistentes.
+    const interval = setInterval(() => void pollConfig(), 10000);
 
     return () => {
       alive = false;
@@ -963,7 +965,9 @@ export default function EventAttendGcore() {
     pmode: "live" | "replay",
     onError?: () => void,
   ) => (
-    <VideoNetworkGuard src={url}>{renderPlayerSource(url, pmode, onError)}</VideoNetworkGuard>
+    <VideoNetworkGuard src={url} eventId={event?._id}>
+      {renderPlayerSource(url, pmode, onError)}
+    </VideoNetworkGuard>
   );
   const renderPlayerSource = (
     url: string,
