@@ -104,6 +104,9 @@ export type BannerState = {
   // Hora del servidor (ms) en la que el banner deja de mostrarse. Cada cliente
   // lo oculta localmente al llegar ese momento, aunque el estudio esté cerrado.
   expiresAt?: number | null;
+  // Botón dentro del banner (solo en la página del asistente; p. ej. «👋 Saludar»
+  // de los anuncios de manada). No se publica en RTDB.
+  action?: { label: string; onClick: () => void; disabled?: boolean } | null;
 };
 
 export type AnnouncementSettings = {

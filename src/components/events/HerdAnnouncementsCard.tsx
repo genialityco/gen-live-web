@@ -31,10 +31,12 @@ import type { FormField } from "../../types";
 import type { AnnouncementStyle } from "../../api/live-stage-service";
 import {
   announceHerd,
+  DEFAULT_HERD_GREETING,
   DEFAULT_HERD_PRIVATE,
   DEFAULT_HERD_PUBLIC,
   DEFAULT_HERD_STYLE,
   getHerdExperiment,
+  getHerdGreetingReport,
   HERD_MAX_FIRST,
   HERD_POSITIONS,
   herdBannerStyle,
@@ -50,6 +52,8 @@ import {
   type HerdCounts,
   type HerdExperimentArm,
   type HerdExperimentReport,
+  type HerdGreetingConfig,
+  type HerdGreetingReport,
   type HerdMessageConfig,
   type HerdMessageResolved,
   type HerdOrdinalGender,
@@ -99,6 +103,7 @@ function withDefaults(event: EventItem, fields: FormField[]): EventHerdConfig {
     accentColor: c?.accentColor,
     privateMessage: { ...privateMessage, style: messageStyle(privateMessage, c?.accentColor) },
     publicMessage: { ...publicMessage, style: messageStyle(publicMessage, c?.accentColor) },
+    greeting: { ...DEFAULT_HERD_GREETING, ...(c?.greeting ?? {}) },
   };
 }
 
@@ -184,6 +189,12 @@ export function HerdAnnouncementsCard({
               {" · "}
               Grupal {saved.publicMessage?.enabled ? `(${positionLabel(saved.publicMessage.position)})` : "desactivado"}
             </Text>
+            {saved.greeting?.enabled && (
+              <Text size="xs" c="dimmed">
+                🤝 Saludo entre colegas activo
+                {!!saved.greeting.holdoutPercent && ` · 🧪 ${saved.greeting.holdoutPercent}% sin botón`}
+              </Text>
+            )}
             {(excludedCount > 0 || !!saved.holdoutPercent) && (
               <Text size="xs" c="dimmed">
                 {excludedCount > 0 && `Anuncia a ${optionCount - excludedCount} de ${optionCount} grupos`}
@@ -261,7 +272,20 @@ export function HerdAnnouncementsCard({
         radius="md"
         centered
       >
-        {reportOpen && <HerdExperimentView eventId={event._id} />}
+        {reportOpen && (
+          <Tabs defaultValue="retention" keepMounted={false}>
+            <Tabs.List mb="md">
+              <Tabs.Tab value="retention">👥 Retención</Tabs.Tab>
+              <Tabs.Tab value="greeting">🤝 Saludo entre colegas</Tabs.Tab>
+            </Tabs.List>
+            <Tabs.Panel value="retention">
+              <HerdExperimentView eventId={event._id} />
+            </Tabs.Panel>
+            <Tabs.Panel value="greeting">
+              <HerdGreetingView eventId={event._id} />
+            </Tabs.Panel>
+          </Tabs>
+        )}
       </Modal>
     </Card>
   );
@@ -425,6 +449,9 @@ function HerdConfigForm({
     setConfig((c) => ({ ...c, privateMessage: { ...priv, ...patch } }));
   const setPub = (patch: Partial<HerdPublicMessageConfig>) =>
     setConfig((c) => ({ ...c, publicMessage: { ...pub, ...patch } }));
+  const greet = { ...DEFAULT_HERD_GREETING, ...config.greeting };
+  const setGreet = (patch: Partial<HerdGreetingConfig>) =>
+    setConfig((c) => ({ ...c, greeting: { ...greet, ...patch } }));
 
   // Vista previa con el primer grupo (o uno de ejemplo)
   const sample = options[0];
@@ -450,6 +477,10 @@ function HerdConfigForm({
           <Tabs.Tab value="public">
             👥 Mensaje grupal{" "}
             {!pub.enabled && <Badge size="xs" color="gray" variant="light">off</Badge>}
+          </Tabs.Tab>
+          <Tabs.Tab value="greeting">
+            🤝 Saludo{" "}
+            {!greet.enabled && <Badge size="xs" color="gray" variant="light">off</Badge>}
           </Tabs.Tab>
         </Tabs.List>
 
@@ -726,6 +757,16 @@ function HerdConfigForm({
               />
             </Group>
           </HerdMessageEditor>
+        </Tabs.Panel>
+
+        <Tabs.Panel value="greeting" pt="md">
+          <HerdGreetingForm
+            greet={greet}
+            onChange={setGreet}
+            privateEnabled={priv.enabled}
+            privateRepeats={!!priv.repeatEverySec}
+            sampleGroup={sampleGroup}
+          />
         </Tabs.Panel>
       </Tabs>
 
@@ -1018,6 +1059,279 @@ function HerdExperimentView({ eventId }: { eventId: string }) {
         fondo). {!report.eventEnded && "«Se quedó hasta el final» aparece cuando el evento termina. "}
         Los grupos excluidos no se eligieron al azar: compáralos solo como referencia.
       </Text>
+
+      <Group justify="flex-end">
+        <Button size="xs" variant="light" leftSection={<IconRefresh size={14} />} loading={loading} onClick={() => void load()}>
+          Actualizar
+        </Button>
+      </Group>
+    </Stack>
+  );
+}
+
+/**
+ * Configuración del saludo entre colegas: el anuncio individual trae
+ * «👋 Saludar a mis colegas» y los conectados del mismo grupo reciben
+ * «👋 Ana te saluda desde …», con opción de devolverlo.
+ */
+function HerdGreetingForm({
+  greet,
+  onChange,
+  privateEnabled,
+  privateRepeats,
+  sampleGroup,
+}: {
+  greet: Required<HerdGreetingConfig>;
+  onChange: (patch: Partial<HerdGreetingConfig>) => void;
+  privateEnabled: boolean;
+  privateRepeats: boolean;
+  sampleGroup: string;
+}) {
+  const examples = [
+    ["Quien lo ve en su anuncio individual", "👋 Saludar a mis colegas (botón)"],
+    ["Al tocarlo, se confirma", `👋 Saludaste a 22 colegas de ${sampleGroup}`],
+    ["Lo reciben los conectados de su grupo", `👋 Ana te saluda desde ${sampleGroup}`],
+    ["Si saludan varios seguidos", `👋 Carlos, Ana y 3 colegas más de ${sampleGroup} te saludan`],
+    ["Botón para devolverlo; quien saludó ve", "🙌 Carlos te devolvió el saludo"],
+  ];
+  return (
+    <Stack gap="md">
+      <Switch
+        label="Activar «👋 Saludar a mis colegas»"
+        description="Solo lo ven y reciben los asistentes del mismo grupo, con el evento en vivo. Se muestra el primer nombre de quien saluda."
+        checked={greet.enabled}
+        onChange={(e) => onChange({ enabled: e.currentTarget.checked })}
+      />
+      {greet.enabled && !privateEnabled && (
+        <Alert color="yellow" variant="light" p="xs">
+          El botón va dentro del mensaje individual, que está apagado: actívalo para que alguien pueda saludar.
+        </Alert>
+      )}
+      {greet.enabled && privateEnabled && !privateRepeats && (
+        <Alert color="blue" variant="light" p="xs">
+          El mensaje individual no se repite: cada asistente tendrá una sola oportunidad de saludar (al
+          conectarse). Para más interacción, configura «Repetir cada» en el mensaje individual o lánzalo a
+          mano desde la tarjeta.
+        </Alert>
+      )}
+
+      <Table withTableBorder verticalSpacing={4} fz="xs">
+        <Table.Tbody>
+          {examples.map(([when, text]) => (
+            <Table.Tr key={when}>
+              <Table.Td c="dimmed" w="40%">{when}</Table.Td>
+              <Table.Td>{text}</Table.Td>
+            </Table.Tr>
+          ))}
+        </Table.Tbody>
+      </Table>
+
+      <Group grow align="flex-start">
+        <Select
+          label="Dónde aparece el saludo recibido"
+          data={HERD_POSITIONS}
+          value={greet.position}
+          onChange={(v) => v && onChange({ position: v as HerdPosition })}
+          allowDeselect={false}
+          disabled={!greet.enabled}
+        />
+        <NumberInput
+          label="Duración (s)"
+          min={3}
+          max={30}
+          value={greet.durationSec}
+          onChange={(v) => onChange({ durationSec: Math.min(30, Math.max(3, Number(v) || 6)) })}
+          disabled={!greet.enabled}
+        />
+        <NumberInput
+          label="Espera entre saludos (s)"
+          description="Por persona"
+          min={10}
+          max={3600}
+          value={greet.cooldownSec}
+          onChange={(v) => onChange({ cooldownSec: Math.min(3600, Math.max(10, Number(v) || 60)) })}
+          disabled={!greet.enabled}
+        />
+      </Group>
+
+      <Stack gap={6}>
+        <Text size="sm" fw={600}>🧪 Experimento: ¿el botón aumenta la permanencia?</Text>
+        <Text size="xs" c="dimmed">
+          Un porcentaje al azar de quienes reciben mensajes no ve el botón (ni puede devolver saludos). En
+          «📊 Medir impacto → Saludo entre colegas» se compara su tiempo de reproducción contra quienes sí lo
+          ven. 0 = todos ven el botón.
+        </Text>
+        <Group gap="xs" align="flex-end">
+          <NumberInput
+            w={120}
+            label="% sin botón"
+            min={0}
+            max={90}
+            value={greet.holdoutPercent}
+            onChange={(v) => onChange({ holdoutPercent: Math.round(Math.min(90, Math.max(0, Number(v) || 0))) })}
+            disabled={!greet.enabled}
+          />
+          {[0, 20, 50].map((n) => (
+            <Button
+              key={n}
+              size="xs"
+              variant={greet.holdoutPercent === n ? "filled" : "default"}
+              onClick={() => onChange({ holdoutPercent: n })}
+              disabled={!greet.enabled}
+            >
+              {n}%
+            </Button>
+          ))}
+        </Group>
+      </Stack>
+    </Stack>
+  );
+}
+
+const greetPct = (n: number | null | undefined) => (n === null || n === undefined ? "—" : `${n}%`);
+
+type GreetingArm = NonNullable<HerdGreetingReport["experiment"]>["withButton"];
+
+const GREETING_ARM_ROWS: Array<{ label: string; get: (a: GreetingArm) => string | number }> = [
+  { label: "Asistentes en vivo", get: (a) => a.attendees },
+  { label: "Reproducción promedio (min)", get: (a) => a.avgPlaybackMin },
+  { label: "Mediana (min)", get: (a) => a.medianPlaybackMin },
+  { label: "Vieron 30+ min", get: (a) => `${a.watched30Pct}%` },
+];
+
+/** Métricas del saludo entre colegas (📊 Medir impacto → Saludo entre colegas) */
+function HerdGreetingView({ eventId }: { eventId: string }) {
+  const [report, setReport] = useState<HerdGreetingReport | null>(null);
+  const [error, setError] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  const load = async () => {
+    setLoading(true);
+    setError(false);
+    try {
+      setReport(await getHerdGreetingReport(eventId));
+    } catch (err) {
+      console.error("Error cargando el reporte del saludo:", err);
+      setError(true);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [eventId]);
+
+  if (loading && !report) return <Group justify="center" p="lg"><Loader size="sm" /></Group>;
+  if (error || !report) return <Alert color="red" variant="light">No se pudo cargar el reporte.</Alert>;
+
+  const { impressions, greets, replies, experiment: exp } = report;
+  const significant = !!exp && exp.lift.pValue !== null && exp.lift.pValue < 0.05;
+
+  return (
+    <Stack gap="md">
+      {!report.enabled && impressions.total === 0 && (
+        <Alert color="gray" variant="light">
+          El saludo entre colegas está apagado. Actívalo en «⚙️ Configurar → 🤝 Saludo».
+        </Alert>
+      )}
+
+      <Group grow>
+        {[
+          ["Vieron el botón", impressions.withButton.toLocaleString("es")],
+          ["Saludaron", `${greets.senders.toLocaleString("es")} (${greetPct(greets.ctrPct)})`],
+          ["Saludos recibidos", greets.recipients.toLocaleString("es")],
+          ["Devueltos", `${replies.total.toLocaleString("es")} (${greetPct(replies.greetsWithReplyPct)})`],
+        ].map(([label, value]) => (
+          <Card key={label} withBorder radius="md" p="xs">
+            <Text size="xs" c="dimmed">{label}</Text>
+            <Text fw={700}>{value}</Text>
+          </Card>
+        ))}
+      </Group>
+      <Text size="xs" c="dimmed">
+        «Saludaron»: de quienes vieron el botón, cuántos saludaron al menos una vez. «Saludos recibidos»: suma
+        de colegas conectados que recibió cada saludo. «Devueltos»: % de saludos con al menos una devolución.
+        {impressions.attendees > impressions.withButton &&
+          ` ${(impressions.attendees - impressions.withButton).toLocaleString("es")} asistentes vieron el anuncio sin botón (experimento).`}
+      </Text>
+
+      {report.byGroup.length > 0 && (
+        <ScrollArea.Autosize mah={260}>
+          <Table withTableBorder verticalSpacing={4} fz="xs">
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th>Grupo</Table.Th>
+                <Table.Th>Vieron botón</Table.Th>
+                <Table.Th>Saludaron</Table.Th>
+                <Table.Th>Saludos</Table.Th>
+                <Table.Th>Recibidos</Table.Th>
+                <Table.Th>Devueltos</Table.Th>
+              </Table.Tr>
+            </Table.Thead>
+            <Table.Tbody>
+              {report.byGroup.map((g) => (
+                <Table.Tr key={g.key}>
+                  <Table.Td>{g.label}</Table.Td>
+                  <Table.Td>{g.shown}</Table.Td>
+                  <Table.Td>{g.senders} ({greetPct(g.ctrPct)})</Table.Td>
+                  <Table.Td>{g.greets}</Table.Td>
+                  <Table.Td>{g.recipients}</Table.Td>
+                  <Table.Td>{g.replies}</Table.Td>
+                </Table.Tr>
+              ))}
+            </Table.Tbody>
+          </Table>
+        </ScrollArea.Autosize>
+      )}
+
+      {exp ? (
+        <Stack gap={6}>
+          <Text size="sm" fw={600}>🧪 Permanencia con botón vs. sin botón</Text>
+          <Alert
+            color={exp.lift.pValue === null ? "gray" : significant ? (exp.lift.playbackMin > 0 ? "green" : "red") : "yellow"}
+            variant="light"
+            p="xs"
+          >
+            {exp.lift.pValue === null
+              ? "Todavía no hay datos suficientes para comparar."
+              : `Con botón reproducen ${exp.lift.playbackMin > 0 ? "+" : ""}${exp.lift.playbackMin} min${
+                  exp.lift.playbackPct !== null ? ` (${exp.lift.playbackPct > 0 ? "+" : ""}${exp.lift.playbackPct}%)` : ""
+                } en promedio. ${
+                  significant
+                    ? `Diferencia significativa (p = ${exp.lift.pValue}).`
+                    : `Aún puede ser azar (p = ${exp.lift.pValue}; se busca p < 0.05).`
+                }`}
+          </Alert>
+          <Table withTableBorder verticalSpacing={4} fz="xs">
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th />
+                <Table.Th>👋 Con botón</Table.Th>
+                <Table.Th>Sin botón</Table.Th>
+              </Table.Tr>
+            </Table.Thead>
+            <Table.Tbody>
+              {GREETING_ARM_ROWS.map((r) => (
+                <Table.Tr key={r.label}>
+                  <Table.Td>{r.label}</Table.Td>
+                  <Table.Td>{r.get(exp.withButton)}</Table.Td>
+                  <Table.Td>{r.get(exp.withoutButton)}</Table.Td>
+                </Table.Tr>
+              ))}
+            </Table.Tbody>
+          </Table>
+          <Text size="xs" c="dimmed">
+            Solo asistentes que ven los anuncios (sin grupo de control ni grupos excluidos) y estuvieron con el
+            evento en vivo.
+          </Text>
+        </Stack>
+      ) : (
+        <Text size="xs" c="dimmed">
+          Sin experimento: configura un «% sin botón» en «⚙️ Configurar → 🤝 Saludo» para comparar la permanencia.
+        </Text>
+      )}
 
       <Group justify="flex-end">
         <Button size="xs" variant="light" leftSection={<IconRefresh size={14} />} loading={loading} onClick={() => void load()}>

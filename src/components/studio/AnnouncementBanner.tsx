@@ -255,6 +255,34 @@ function BannerGraphic({
         }}
       >
         {banner.text}
+        {banner.action && (
+          <span style={{ display: "block", marginTop: "0.6cqw", textAlign }}>
+            <button
+              type="button"
+              disabled={banner.action.disabled}
+              onClick={banner.action.onClick}
+              style={{
+                // El overlay no captura clics; el botón sí
+                pointerEvents: "auto",
+                cursor: banner.action.disabled ? "default" : "pointer",
+                // Tocable también en celular, donde el video es angosto
+                fontSize: `max(12px, ${fs * 0.72}cqw)`,
+                fontWeight: 700,
+                fontFamily: "inherit",
+                lineHeight: 1.1,
+                padding: "0.45em 0.9em",
+                borderRadius: 999,
+                border: "none",
+                background: accent,
+                color: readableOn(accent),
+                opacity: banner.action.disabled ? 0.6 : 1,
+                boxShadow: "0 2px 8px rgba(0,0,0,0.25)",
+              }}
+            >
+              {banner.action.label}
+            </button>
+          </span>
+        )}
       </span>
     );
 

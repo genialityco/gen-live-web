@@ -3,7 +3,7 @@
 // grupo (especialidad, sociedad...) están conectados. El backend publica los
 // conteos en RTDB (/herd/{eventId}/live) y los anuncios públicos
 // (/herd/{eventId}/public); la config se espeja en /herd/{eventId}/config.
-import { onValue, ref } from "firebase/database";
+import { limitToLast, onChildAdded, onValue, query, ref } from "firebase/database";
 import { api } from "../core/api";
 import { rtdb } from "../core/firebase";
 import type { EventItem } from "./events";
@@ -46,6 +46,24 @@ export type HerdPublicMessageConfig = HerdMessageConfig & {
   milestoneEvery?: number;
 };
 
+/** Saludo entre colegas: botón «👋 Saludar» en el anuncio individual */
+export type HerdGreetingConfig = {
+  enabled?: boolean;
+  position?: HerdPosition; // dónde aparece el saludo recibido
+  durationSec?: number;
+  cooldownSec?: number; // espera entre saludos de una misma persona
+  holdoutPercent?: number; // % al azar sin botón (experimento)
+};
+
+// Debe coincidir con DEFAULT_HERD_CONFIG.greeting del backend
+export const DEFAULT_HERD_GREETING: Required<HerdGreetingConfig> = {
+  enabled: false,
+  position: "bottom-right",
+  durationSec: 6,
+  cooldownSec: 60,
+  holdoutPercent: 0,
+};
+
 export type EventHerdConfig = {
   enabled: boolean;
   fieldId?: string;
@@ -58,6 +76,7 @@ export type EventHerdConfig = {
   accentColor?: string;
   privateMessage?: HerdPrivateMessageConfig;
   publicMessage?: HerdPublicMessageConfig;
+  greeting?: HerdGreetingConfig;
 };
 
 /** Grupo (opción del campo) tal como lo espeja el backend */
@@ -82,13 +101,21 @@ export type HerdLiveConfig = {
   publicMessage?: HerdPublicMessageConfig;
   groups?: HerdGroup[];
   holdoutPercent?: number;
+  greeting?: HerdGreetingConfig;
 };
 
 /** Grupo propio del asistente y su orden de llegada en él (1 = el primero) */
 export type HerdMember = HerdGroupRef & {
   position?: number;
   muted?: boolean; // grupo excluido o grupo de control: no ve mensajes
+  greet?: boolean; // su anuncio individual trae el botón «👋 Saludar»
 };
+
+/** Saludo recibido de un colega del mismo grupo */
+export type HerdGreetingEvent = { id: string; fromUid: string; name: string; at: number };
+
+/** Devolución de un saludo propio */
+export type HerdGreetReplyEvent = { id: string; fromUid: string; name: string; greetingId: string; at: number };
 
 export type HerdCounts = {
   counts: Record<string, number>;
@@ -415,7 +442,100 @@ export function subscribeHerdPrivateTrigger(
   );
 }
 
+/**
+ * Saludos del grupo propio a medida que llegan (y los últimos ya guardados:
+ * quien llama descarta los viejos comparando `at` con la hora del servidor).
+ */
+export function subscribeHerdGreetings(
+  eventId: string,
+  groupKey: string,
+  cb: (g: HerdGreetingEvent) => void,
+) {
+  const path = `/herd/${eventId}/greetings/${groupKey}`;
+  return onChildAdded(
+    query(ref(rtdb, path), limitToLast(5)),
+    (s) => {
+      const v = s.val() as Omit<HerdGreetingEvent, "id"> | null;
+      if (v?.at) cb({ ...v, id: s.key! });
+    },
+    logError(path),
+  );
+}
+
+/** Devoluciones de mis saludos */
+export function subscribeHerdGreetReplies(
+  eventId: string,
+  uid: string,
+  cb: (r: HerdGreetReplyEvent) => void,
+) {
+  const path = `/herd/${eventId}/greetReplies/${uid}`;
+  return onChildAdded(
+    query(ref(rtdb, path), limitToLast(5)),
+    (s) => {
+      const v = s.val() as Omit<HerdGreetReplyEvent, "id"> | null;
+      if (v?.at) cb({ ...v, id: s.key! });
+    },
+    logError(path),
+  );
+}
+
 // ── API ───────────────────────────────────────────────────────────────────
+
+export type HerdGreetingSource = "welcome" | "repeat" | "manual";
+
+/** Registra que vio su anuncio individual (para medir la tasa de saludo) */
+export async function reportHerdImpression(eventId: string, source: HerdGreetingSource, name?: string) {
+  const { data } = await api.post(`/events/${eventId}/herd/greetings`, { action: "impression", source, name });
+  return data as { ok: boolean; hasButton: boolean };
+}
+
+/** Saluda a los conectados de su grupo */
+export async function sendHerdGreeting(eventId: string, source: HerdGreetingSource, name?: string) {
+  const { data } = await api.post(`/events/${eventId}/herd/greetings`, { action: "greet", source, name });
+  return data as { ok: boolean; greetingId: string; recipients: number; name: string };
+}
+
+/** Devuelve un saludo recibido */
+export async function replyHerdGreeting(eventId: string, greetingId: string, name?: string) {
+  const { data } = await api.post(`/events/${eventId}/herd/greetings`, { action: "reply", greetingId, name });
+  return data as { ok: boolean };
+}
+
+export type HerdGreetingArmSummary = {
+  attendees: number;
+  avgPlaybackMin: number;
+  medianPlaybackMin: number;
+  watched30Pct: number;
+};
+
+export type HerdGreetingReport = {
+  enabled: boolean;
+  holdoutPercent: number;
+  impressions: { total: number; attendees: number; withButton: number };
+  greets: { total: number; senders: number; recipients: number; ctrPct: number | null };
+  replies: { total: number; repliers: number; greetsWithReplyPct: number | null };
+  byGroup: Array<{
+    key: string;
+    label: string;
+    shown: number;
+    senders: number;
+    greets: number;
+    recipients: number;
+    replies: number;
+    ctrPct: number | null;
+  }>;
+  bySource: Record<string, { shown: number; greets: number }>;
+  experiment: {
+    withButton: HerdGreetingArmSummary;
+    withoutButton: HerdGreetingArmSummary;
+    lift: { playbackMin: number; playbackPct: number | null; pValue: number | null };
+  } | null;
+};
+
+export async function getHerdGreetingReport(eventId: string): Promise<HerdGreetingReport> {
+  const { data } = await api.get(`/events/${eventId}/herd/greetings/report`);
+  return data;
+}
 
 /** Lanza ya un anuncio de manada desde el admin */
 export async function announceHerd(
