@@ -762,6 +762,7 @@ function HerdConfigForm({
         <Tabs.Panel value="greeting" pt="md">
           <HerdGreetingForm
             greet={greet}
+            privMsg={priv}
             onChange={setGreet}
             privateEnabled={priv.enabled}
             privateRepeats={!!priv.repeatEverySec}
@@ -1076,12 +1077,14 @@ function HerdExperimentView({ eventId }: { eventId: string }) {
  */
 function HerdGreetingForm({
   greet,
+  privMsg,
   onChange,
   privateEnabled,
   privateRepeats,
   sampleGroup,
 }: {
   greet: Required<HerdGreetingConfig>;
+  privMsg: HerdMessageConfig; // el saludo usa el diseño del mensaje individual
   onChange: (patch: Partial<HerdGreetingConfig>) => void;
   privateEnabled: boolean;
   privateRepeats: boolean;
@@ -1091,11 +1094,71 @@ function HerdGreetingForm({
     ["Quien lo ve en su anuncio individual", "👋 Saludar a mis colegas (botón)"],
     ["Al tocarlo, se confirma", `👋 Saludaste a 22 colegas de ${sampleGroup}`],
     ["Lo reciben los conectados de su grupo", `👋 Ana te saluda desde ${sampleGroup}`],
-    ["Si saludan varios seguidos", `👋 Carlos, Ana y 3 colegas más de ${sampleGroup} te saludan`],
+    ["Si saludan varios seguidos", `👋 Carlos, Laura y Andrés de ${sampleGroup} te saludan`],
     ["Botón para devolverlo; quien saludó ve", "🙌 Carlos te devolvió el saludo"],
   ];
+
+  // Vista previa sobre fondo de video con el diseño del mensaje individual
+  const [moment, setMoment] = useState<"button" | "received" | "reply">("button");
+  const noop = () => {};
+  const previews = {
+    button: {
+      msg: privMsg,
+      text: `¡Hola Ana! Contigo están conectados 23 profesionales de ${sampleGroup}`,
+      action: { label: "👋 Saludar a mis colegas", onClick: noop },
+    },
+    received: {
+      msg: { ...privMsg, position: greet.position, label: null },
+      text: `👋 Carlos, Laura y Andrés de ${sampleGroup} te saludan`,
+      action: { label: "🙌 Devolver saludo", onClick: noop },
+    },
+    reply: {
+      msg: { ...privMsg, position: greet.position, label: null },
+      text: "🙌 Carlos te devolvió el saludo",
+      action: null,
+    },
+  }[moment];
+
   return (
     <Stack gap="md">
+      <Stack gap={6}>
+        <Box
+          style={{
+            position: "relative",
+            aspectRatio: "16 / 9",
+            borderRadius: 8,
+            overflow: "hidden",
+            background: ANNOUNCEMENT_PREVIEW_BG,
+            opacity: greet.enabled ? 1 : 0.5,
+          }}
+        >
+          <AnnouncementBanner
+            zIndex={1}
+            banner={{
+              visible: true,
+              text: previews.text,
+              label: previews.msg.label?.trim() || null,
+              style: herdBannerStyle(previews.msg),
+              publishedAt: { button: 1, received: 2, reply: 3 }[moment],
+              action: previews.action,
+            }}
+          />
+        </Box>
+        <SegmentedControl
+          size="xs"
+          value={moment}
+          onChange={(v) => setMoment(v as typeof moment)}
+          data={[
+            { value: "button", label: "Anuncio con botón" },
+            { value: "received", label: "Saludo recibido" },
+            { value: "reply", label: "Le devuelven el saludo" },
+          ]}
+        />
+        <Text size="xs" c="dimmed">
+          Usa el diseño del «👋 Mensaje individual»; cámbialo allí. Aquí solo se elige dónde aparece el saludo recibido.
+        </Text>
+      </Stack>
+
       <Switch
         label="Activar «👋 Saludar a mis colegas»"
         description="Solo lo ven y reciben los asistentes del mismo grupo, con el evento en vivo. Se muestra el primer nombre de quien saluda."

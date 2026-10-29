@@ -162,12 +162,12 @@ function useHerdBanners() {
   return { banners, show, edit, isShowing };
 }
 
-/** "Ana" · "Ana y Carlos" · "Ana, Carlos y 3 colegas más" */
+/** "Ana" · "Ana y Carlos" · "Ana, Carlos y Laura" · "Ana, Carlos y 3 colegas más" */
 function joinNames(names: string[]) {
   if (names.length <= 1) return names[0] ?? "";
   if (names.length === 2) return `${names[0]} y ${names[1]}`;
-  const rest = names.length - 2;
-  return `${names[0]}, ${names[1]} y ${rest} ${rest === 1 ? "colega" : "colegas"} más`;
+  if (names.length === 3) return `${names[0]}, ${names[1]} y ${names[2]}`;
+  return `${names[0]}, ${names[1]} y ${names.length - 2} colegas más`;
 }
 
 /**
