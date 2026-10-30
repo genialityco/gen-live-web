@@ -100,6 +100,8 @@ export type HerdLiveConfig = {
   privateMessage?: HerdPrivateMessageConfig;
   publicMessage?: HerdPublicMessageConfig;
   groups?: HerdGroup[];
+  // Claves (herdKey) de los grupos excluidos, también los que no son opción del formulario
+  excludedKeys?: string[];
   holdoutPercent?: number;
   greeting?: HerdGreetingConfig;
 };

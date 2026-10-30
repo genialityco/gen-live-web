@@ -238,10 +238,14 @@ export function HerdOverlay({
   // Silenciado (grupo excluido o grupo de control): no ve ningún mensaje. Lo
   // decide el backend; sin su respuesta y con experimento activo no se sabe
   // si cayó en control, así que se calla para no contaminar la medición.
+  // Mientras tanto, excluidos según excludedKeys (cubre valores que no son
+  // opción del formulario); groups[].excluded queda para configs anteriores
   const experiment = (config?.holdoutPercent ?? 0) > 0;
-  const muted = memberGroup
-    ? !!memberGroup.muted
-    : experiment || !!config?.groups?.find((g) => g.key === ownGroup?.key)?.excluded;
+  const excluded =
+    !!ownGroup &&
+    (!!config?.excludedKeys?.includes(ownGroup.key) ||
+      !!config?.groups?.find((g) => g.key === ownGroup.key)?.excluded);
+  const muted = memberGroup ? !!memberGroup.muted : experiment || excluded;
 
   useEffect(() => {
     if (!active) return;
