@@ -64,13 +64,25 @@ export const DEFAULT_HERD_GREETING: Required<HerdGreetingConfig> = {
   holdoutPercent: 0,
 };
 
-export type EventHerdConfig = {
-  enabled: boolean;
+/** Nombre de los grupos sin nombre propio: "colegas de {valor}" (plural) y/o singular */
+export type HerdNamePattern = { labelPattern?: string; singularPattern?: string };
+
+/** Una manada: campo del formulario, nombre de cada opción y opciones sin mensajes */
+export type HerdFieldConfig = HerdNamePattern & {
   fieldId?: string;
   // label = plural, singular = singular; la forma que falte se deduce
   groupLabels?: Array<{ value: string; label?: string; singular?: string }>;
   // Valores de las opciones cuyos asistentes no ven mensajes (ni se anuncian)
   excludedGroups?: string[];
+};
+
+export type HerdExtraConfig = HerdFieldConfig & { fieldId: string };
+
+// Los campos de la manada principal van sueltos (compatibles con configs anteriores)
+export type EventHerdConfig = HerdFieldConfig & {
+  enabled: boolean;
+  // Manadas adicionales: un grupo por cada campo; los mensajes rotan entre todas
+  extraHerds?: HerdExtraConfig[];
   // % de asistentes que al azar quedan sin mensajes (grupo de control); 0 = sin experimento
   holdoutPercent?: number;
   accentColor?: string;
@@ -82,6 +94,7 @@ export type EventHerdConfig = {
 /** Grupo (opción del campo) tal como lo espeja el backend */
 export type HerdGroup = {
   key: string;
+  fieldId?: string; // solo en las manadas adicionales
   value: string;
   optionLabel: string;
   label: string; // plural
@@ -99,6 +112,8 @@ export type HerdLiveConfig = {
   accentColor?: string;
   privateMessage?: HerdPrivateMessageConfig;
   publicMessage?: HerdPublicMessageConfig;
+  // Manadas en orden (la principal con prefix ""); configs anteriores no lo traen
+  herds?: Array<HerdNamePattern & { fieldId: string; prefix: string }>;
   groups?: HerdGroup[];
   // Claves (herdKey) de los grupos excluidos, también los que no son opción del formulario
   excludedKeys?: string[];
@@ -106,11 +121,14 @@ export type HerdLiveConfig = {
   greeting?: HerdGreetingConfig;
 };
 
-/** Grupo propio del asistente y su orden de llegada en él (1 = el primero) */
-export type HerdMember = HerdGroupRef & {
-  position?: number;
-  muted?: boolean; // grupo excluido o grupo de control: no ve mensajes
-  greet?: boolean; // su anuncio individual trae el botón «👋 Saludar»
+/** Grupo propio y orden de llegada en él (1 = el primero) */
+export type HerdOwnGroup = HerdGroupRef & { position?: number };
+
+/** Grupo principal del asistente, publicado por el backend, y los de sus otras manadas */
+export type HerdMember = HerdOwnGroup & {
+  muted?: boolean; // todos sus grupos excluidos o grupo de control: no ve mensajes
+  greet?: boolean; // sus anuncios individuales traen el botón «👋 Saludar»
+  others?: HerdOwnGroup[];
 };
 
 /** Saludo recibido de un colega del mismo grupo */
@@ -306,6 +324,25 @@ export function herdGroupForms(
   };
 }
 
+/**
+ * Nombre de un grupo (réplica de herdGroupName del backend): lo escrito para
+ * la opción manda; si no, el patrón de la manada con {valor} = etiqueta de la
+ * opción (o el texto libre); si no, la etiqueta tal cual.
+ */
+export function herdGroupName(
+  custom: { label?: string; singular?: string } | undefined,
+  pattern: HerdNamePattern | undefined,
+  value: string,
+): { plural: string; singular: string } {
+  if (custom?.label?.trim() || custom?.singular?.trim()) return herdGroupForms(custom, value);
+  if (!pattern?.labelPattern?.trim() && !pattern?.singularPattern?.trim()) {
+    return { plural: value, singular: value };
+  }
+  const forms = herdGroupForms({ label: pattern.labelPattern, singular: pattern.singularPattern }, value);
+  const put = (s: string) => s.replace(/\{valor\}/gi, value);
+  return { plural: put(forms.plural), singular: put(forms.singular) };
+}
+
 // ── Claves de grupo ───────────────────────────────────────────────────────
 // Réplica exacta de norm/herdKey del backend: si cambian allá, cambiar aquí.
 const norm = (s: unknown) =>
@@ -322,24 +359,38 @@ export const herdKey = (s: unknown) =>
     .slice(0, 100) || "_";
 
 /**
- * Grupo del asistente a partir de su registrationData: canoniza el valor
- * guardado (valor o etiqueta de la opción) igual que el backend.
+ * Grupos del asistente a partir de su registrationData, uno por manada en la
+ * que tiene valor: canoniza el valor guardado (valor o etiqueta de la opción)
+ * igual que el backend. Incluye los excluidos (quien llama los filtra).
  */
-export function findOwnHerdGroup(
+export function findOwnHerdGroups(
   config: HerdLiveConfig,
   registrationData: Record<string, unknown> | null | undefined,
-): HerdGroupRef | null {
-  if (!config.fieldId || !registrationData) return null;
-  const rawValue = registrationData[config.fieldId];
-  const raw = Array.isArray(rawValue) ? rawValue[0] : rawValue;
-  if (raw == null || typeof raw === "object" || !String(raw).trim()) return null;
+): HerdGroupRef[] {
+  if (!registrationData) return [];
+  // Configs anteriores no traen `herds`: solo la principal
+  const herds = config.herds ?? (config.fieldId ? [{ fieldId: config.fieldId, prefix: "" }] : []);
+  const result: HerdGroupRef[] = [];
+  for (const herd of herds) {
+    const rawValue = registrationData[herd.fieldId];
+    const raw = Array.isArray(rawValue) ? rawValue[0] : rawValue;
+    if (raw == null || typeof raw === "object" || !String(raw).trim()) continue;
 
-  const n = norm(raw);
-  const group = (config.groups ?? []).find(
-    (g) => norm(g.value) === n || norm(g.optionLabel) === n,
-  );
-  if (group) return { key: group.key, label: group.label, singular: group.singular };
-  return { key: herdKey(raw), label: String(raw).trim(), singular: String(raw).trim() };
+    const n = norm(raw);
+    const group = (config.groups ?? []).find(
+      (g) =>
+        (g.fieldId ?? config.fieldId) === herd.fieldId &&
+        (norm(g.value) === n || norm(g.optionLabel) === n),
+    );
+    if (group) {
+      result.push({ key: group.key, label: group.label, singular: group.singular });
+      continue;
+    }
+    const text = String(raw).trim();
+    const forms = herdGroupName(undefined, herd, text);
+    result.push({ key: herd.prefix + herdKey(raw), label: forms.plural, singular: forms.singular });
+  }
+  return result;
 }
 
 /** Sustituye las variables de la plantilla */
@@ -486,14 +537,24 @@ export function subscribeHerdGreetReplies(
 export type HerdGreetingSource = "welcome" | "repeat" | "manual";
 
 /** Registra que vio su anuncio individual (para medir la tasa de saludo) */
-export async function reportHerdImpression(eventId: string, source: HerdGreetingSource, name?: string) {
-  const { data } = await api.post(`/events/${eventId}/herd/greetings`, { action: "impression", source, name });
+export async function reportHerdImpression(
+  eventId: string,
+  source: HerdGreetingSource,
+  groupKey: string,
+  name?: string,
+) {
+  const { data } = await api.post(`/events/${eventId}/herd/greetings`, { action: "impression", source, groupKey, name });
   return data as { ok: boolean; hasButton: boolean };
 }
 
-/** Saluda a los conectados de su grupo */
-export async function sendHerdGreeting(eventId: string, source: HerdGreetingSource, name?: string) {
-  const { data } = await api.post(`/events/${eventId}/herd/greetings`, { action: "greet", source, name });
+/** Saluda a los conectados de su grupo `groupKey` (uno de los suyos) */
+export async function sendHerdGreeting(
+  eventId: string,
+  source: HerdGreetingSource,
+  groupKey: string,
+  name?: string,
+) {
+  const { data } = await api.post(`/events/${eventId}/herd/greetings`, { action: "greet", source, groupKey, name });
   return data as { ok: boolean; greetingId: string; recipients: number; name: string };
 }
 

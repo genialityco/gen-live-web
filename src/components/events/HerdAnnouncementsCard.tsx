@@ -40,7 +40,7 @@ import {
   HERD_MAX_FIRST,
   HERD_POSITIONS,
   herdBannerStyle,
-  herdGroupForms,
+  herdGroupName,
   herdKey,
   herdOrdinal,
   pluralizeEs,
@@ -52,6 +52,7 @@ import {
   type HerdCounts,
   type HerdExperimentArm,
   type HerdExperimentReport,
+  type HerdFieldConfig,
   type HerdGreetingConfig,
   type HerdGreetingReport,
   type HerdMessageConfig,
@@ -98,6 +99,9 @@ function withDefaults(event: EventItem, fields: FormField[]): EventHerdConfig {
     fieldId: c?.fieldId ?? guessField(fields)?.id,
     groupLabels: c?.groupLabels ?? [],
     excludedGroups: c?.excludedGroups ?? [],
+    labelPattern: c?.labelPattern ?? "",
+    singularPattern: c?.singularPattern ?? "",
+    extraHerds: c?.extraHerds ?? [],
     holdoutPercent: c?.holdoutPercent ?? 0,
     // El color de acento global de versiones anteriores pasa al estilo de cada mensaje
     accentColor: c?.accentColor,
@@ -105,6 +109,35 @@ function withDefaults(event: EventItem, fields: FormField[]): EventHerdConfig {
     publicMessage: { ...publicMessage, style: messageStyle(publicMessage, c?.accentColor) },
     greeting: { ...DEFAULT_HERD_GREETING, ...(c?.greeting ?? {}) },
   };
+}
+
+// Manadas adicionales como máximo (además de la principal); igual que el backend
+const MAX_EXTRA_HERDS = 5;
+
+/** Manadas de la config con el prefijo de sus claves: la principal y las adicionales */
+function herdList(config: EventHerdConfig): Array<{ herd: HerdFieldConfig; prefix: string }> {
+  if (!config.fieldId) return [];
+  return [
+    { herd: config, prefix: "" },
+    ...(config.extraHerds ?? [])
+      .filter((h) => h.fieldId && h.fieldId !== config.fieldId)
+      .map((h) => ({ herd: h, prefix: `${h.fieldId}~` })),
+  ];
+}
+
+/** Nombre (plural) de cada grupo de todas las manadas, por clave, y claves excluidas */
+function herdGroupIndex(config: EventHerdConfig, formFields: FormField[]) {
+  const labels = new Map<string, string>();
+  const excluded = new Set<string>();
+  for (const { herd, prefix } of herdList(config)) {
+    const field = formFields.find((f) => f.id === herd.fieldId);
+    for (const o of field?.options ?? []) {
+      const custom = herd.groupLabels?.find((g) => g.value === o.value);
+      labels.set(prefix + herdKey(o.value), herdGroupName(custom, herd, o.label).plural);
+    }
+    for (const v of herd.excludedGroups ?? []) excluded.add(prefix + herdKey(v));
+  }
+  return { labels, excluded };
 }
 
 const positionLabel = (p?: HerdPosition) =>
@@ -132,9 +165,10 @@ export function HerdAnnouncementsCard({
   const [saving, setSaving] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
   const saved = useMemo(() => withDefaults(event, formFields), [event, formFields]);
-  const field = formFields.find((f) => f.id === saved.fieldId);
-  const optionCount = field?.type === "select" ? field.options?.length ?? 0 : 0;
-  const excludedCount = saved.excludedGroups?.length ?? 0;
+  // Resumen de todas las manadas: campos y grupos anunciados de los de selección
+  const herds = herdList(saved).map(({ herd }) => ({ herd, field: formFields.find((f) => f.id === herd.fieldId) }));
+  const optionCount = herds.reduce((n, { field }) => n + (field?.type === "select" ? field.options?.length ?? 0 : 0), 0);
+  const excludedCount = herds.reduce((n, { herd }) => n + (herd.excludedGroups?.length ?? 0), 0);
 
   const save = async (config: EventHerdConfig) => {
     setSaving(true);
@@ -182,7 +216,8 @@ export function HerdAnnouncementsCard({
         {saved.enabled && (
           <Stack gap={4}>
             <Text size="xs">
-              Agrupa por: <b>{field?.label ?? "—"}</b>
+              {herds.length > 1 ? "Manadas" : "Agrupa por"}:{" "}
+              <b>{herds.map(({ herd, field }) => field?.label ?? herd.fieldId).join(" + ") || "—"}</b>
             </Text>
             <Text size="xs" c="dimmed">
               Individual {saved.privateMessage?.enabled ? `(${positionLabel(saved.privateMessage.position)})` : "desactivado"}
@@ -206,7 +241,7 @@ export function HerdAnnouncementsCard({
         )}
 
         {saved.enabled && saved.fieldId && (
-          <HerdQuickAnnounce eventId={event._id} config={saved} field={field} />
+          <HerdQuickAnnounce eventId={event._id} config={saved} formFields={formFields} />
         )}
 
         <Group justify="flex-end">
@@ -298,11 +333,11 @@ export function HerdAnnouncementsCard({
 function HerdQuickAnnounce({
   eventId,
   config,
-  field,
+  formFields,
 }: {
   eventId: string;
   config: EventHerdConfig;
-  field?: FormField;
+  formFields: FormField[];
 }) {
   const [type, setType] = useState<"public" | "private">("public");
   const [groupKey, setGroupKey] = useState<string | null>(null);
@@ -312,13 +347,9 @@ function HerdQuickAnnounce({
 
   useEffect(() => subscribeHerdCounts(eventId, setCounts), [eventId]);
 
-  // Nombre de cada grupo conectado: el configurado en plural, o la opción del formulario
-  const labelByKey = new Map<string, string>();
-  for (const o of field?.options ?? []) {
-    const custom = config.groupLabels?.find((g) => g.value === o.value);
-    labelByKey.set(herdKey(o.value), herdGroupForms(custom, o.label).plural);
-  }
-  const excludedKeys = new Set((config.excludedGroups ?? []).map(herdKey));
+  // Nombre de cada grupo conectado (de todas las manadas): el configurado en
+  // plural, el del patrón o la opción del formulario
+  const { labels: labelByKey, excluded: excludedKeys } = herdGroupIndex(config, formFields);
   const groups = Object.entries(counts?.counts ?? {})
     .filter(([key, n]) => n > 0 && !excludedKeys.has(key))
     .sort(([, a], [, b]) => b - a)
@@ -394,6 +425,203 @@ function HerdQuickAnnounce({
   );
 }
 
+/**
+ * Una manada: campo del formulario, patrón de nombre y, si es de selección,
+ * nombre de cada opción y cuáles anuncia. `keyPrefix` ubica sus grupos en los
+ * conteos ("" en la principal, "campo~" en las adicionales).
+ */
+function HerdFieldEditor({
+  title,
+  herd,
+  keyPrefix,
+  formFields,
+  fieldOptions,
+  counts,
+  onChange,
+  onRemove,
+}: {
+  title?: string;
+  herd: HerdFieldConfig;
+  keyPrefix: string;
+  formFields: FormField[];
+  fieldOptions: Array<{ value: string; label: string }>;
+  counts: HerdCounts | null;
+  onChange: (patch: Partial<HerdFieldConfig>) => void;
+  onRemove?: () => void;
+}) {
+  const field = formFields.find((f) => f.id === herd.fieldId);
+  const options = field?.type === "select" ? field.options ?? [] : [];
+  const customFor = (value: string) => herd.groupLabels?.find((g) => g.value === value);
+  const excluded = new Set(herd.excludedGroups ?? []);
+
+  const setIncluded = (values: string[], included: boolean) => {
+    const next = new Set(herd.excludedGroups ?? []);
+    for (const v of values) {
+      if (included) next.delete(v);
+      else next.add(v);
+    }
+    onChange({ excludedGroups: [...next] });
+  };
+
+  // label = plural; singular aparte. La forma vacía se deduce de la otra.
+  const setGroupLabel = (value: string, patch: { label?: string; singular?: string }) => {
+    const prev = customFor(value);
+    onChange({
+      groupLabels: [
+        ...(herd.groupLabels ?? []).filter((g) => g.value !== value),
+        { value, label: prev?.label ?? "", singular: prev?.singular ?? "", ...patch },
+      ],
+    });
+  };
+
+  // Formas deducidas del patrón (en gris si no se escribe la otra)
+  const typedPattern = herd.labelPattern?.trim() ?? "";
+  const typedSingularPattern = herd.singularPattern?.trim() ?? "";
+  const example = options[0]?.label ?? "Bogotá";
+  const exampleForms = herdGroupName(undefined, herd, example);
+
+  return (
+    <Stack
+      gap="sm"
+      {...(title ? { p: "sm", style: { border: "1px solid var(--mantine-color-default-border)", borderRadius: 8 } } : {})}
+    >
+      {title && (
+        <Group justify="space-between">
+          <Text size="sm" fw={600}>{title}</Text>
+          {onRemove && (
+            <Button size="compact-xs" variant="subtle" color="red" onClick={onRemove}>
+              Quitar
+            </Button>
+          )}
+        </Group>
+      )}
+
+      <Select
+        label="Agrupar asistentes por"
+        description="Campo del formulario de registro que define la manada (especialidad, sociedad, ciudad…)"
+        data={fieldOptions}
+        value={herd.fieldId ?? null}
+        // Las exclusiones y nombres son opciones del campo anterior: se descartan
+        onChange={(v) => v !== herd.fieldId && onChange({ fieldId: v ?? undefined, excludedGroups: [], groupLabels: [] })}
+        allowDeselect={!onRemove}
+        searchable
+      />
+
+      {herd.fieldId && (
+        <div>
+          <Group grow align="flex-start">
+            <TextInput
+              size="xs"
+              label="Nombre de los grupos — singular (opcional)"
+              placeholder={typedPattern ? singularizeEs(typedPattern) : "colega de {valor}"}
+              value={herd.singularPattern ?? ""}
+              onChange={(e) => onChange({ singularPattern: e.currentTarget.value.slice(0, 80) })}
+            />
+            <TextInput
+              size="xs"
+              label="Plural (opcional)"
+              placeholder={typedSingularPattern ? pluralizeEs(typedSingularPattern) : "colegas de {valor}"}
+              value={herd.labelPattern ?? ""}
+              onChange={(e) => onChange({ labelPattern: e.currentTarget.value.slice(0, 80) })}
+            />
+          </Group>
+          <Text size="xs" c="dimmed" mt={4}>
+            {"{valor}"} es la respuesta del asistente. Se usa en los grupos sin nombre
+            propio{options.length > 0 ? " (abajo)" : ""}.
+            {(typedPattern || typedSingularPattern) &&
+              ` Ejemplo: «${exampleForms.singular}» / «${exampleForms.plural}».`}
+          </Text>
+        </div>
+      )}
+
+      {options.length > 0 && (
+        <div>
+          <Group justify="space-between" align="flex-end">
+            <Text size="sm" fw={500}>Grupos y nombre de cada uno en los mensajes</Text>
+            <Group gap={4}>
+              <Text size="xs" c="dimmed">
+                Anuncia a {options.filter((o) => !excluded.has(o.value)).length} de {options.length}
+              </Text>
+              <Button size="compact-xs" variant="subtle" onClick={() => setIncluded(options.map((o) => o.value), true)}>
+                Todos
+              </Button>
+              <Button size="compact-xs" variant="subtle" onClick={() => setIncluded(options.map((o) => o.value), false)}>
+                Ninguno
+              </Button>
+            </Group>
+          </Group>
+          <Text size="xs" c="dimmed" mb={6}>
+            Desmarca «Anunciar» para que nadie reciba mensajes de ese grupo y el
+            grupal nunca hable de él. Quien tenga todos sus grupos sin anunciar
+            no ve ningún mensaje.{" "}
+            Opcional. Escribe una sola forma (singular o plural) y la otra
+            se completa sola (en gris); escríbela solo si la sugerencia no
+            queda bien. «Endocrinología» → «endocrinólogo» / «endocrinólogos».
+            En los mensajes, {"{grupo}"} usa el singular con 1 conectado y el plural con más.
+          </Text>
+          <ScrollArea.Autosize mah={320}>
+            <Table verticalSpacing={4} withTableBorder>
+              <Table.Thead>
+                <Table.Tr>
+                  <Table.Th w={70}>Anunciar</Table.Th>
+                  <Table.Th>Opción del formulario</Table.Th>
+                  <Table.Th>Singular (1)</Table.Th>
+                  <Table.Th>Plural (2 o más)</Table.Th>
+                  <Table.Th w={110}>Conectados / inscritos</Table.Th>
+                </Table.Tr>
+              </Table.Thead>
+              <Table.Tbody>
+                {options.map((o) => {
+                  const custom = customFor(o.value);
+                  const typedSingular = custom?.singular?.trim() ?? "";
+                  const typedPlural = custom?.label?.trim() ?? "";
+                  // Sin nombre propio: el del patrón (o la opción)
+                  const fallback = herdGroupName(undefined, herd, o.label);
+                  const key = keyPrefix + herdKey(o.value);
+                  return (
+                    <Table.Tr key={o.value} style={{ opacity: excluded.has(o.value) ? 0.5 : 1 }}>
+                      <Table.Td>
+                        <Checkbox
+                          size="xs"
+                          checked={!excluded.has(o.value)}
+                          onChange={(e) => setIncluded([o.value], e.currentTarget.checked)}
+                          aria-label={`Anunciar a ${o.label}`}
+                        />
+                      </Table.Td>
+                      <Table.Td><Text size="xs">{o.label}</Text></Table.Td>
+                      <Table.Td>
+                        <TextInput
+                          size="xs"
+                          placeholder={typedPlural ? singularizeEs(typedPlural) : fallback.singular}
+                          value={custom?.singular ?? ""}
+                          onChange={(e) => setGroupLabel(o.value, { singular: e.currentTarget.value })}
+                        />
+                      </Table.Td>
+                      <Table.Td>
+                        <TextInput
+                          size="xs"
+                          placeholder={typedSingular ? pluralizeEs(typedSingular) : fallback.plural}
+                          value={custom?.label ?? ""}
+                          onChange={(e) => setGroupLabel(o.value, { label: e.currentTarget.value })}
+                        />
+                      </Table.Td>
+                      <Table.Td>
+                        <Badge variant="light" size="sm">
+                          {counts?.counts[key] ?? 0} / {counts?.registered[key] ?? 0}
+                        </Badge>
+                      </Table.Td>
+                    </Table.Tr>
+                  );
+                })}
+              </Table.Tbody>
+            </Table>
+          </ScrollArea.Autosize>
+        </div>
+      )}
+    </Stack>
+  );
+}
+
 function HerdConfigForm({
   eventId,
   initial,
@@ -418,32 +646,13 @@ function HerdConfigForm({
   const pub = { ...DEFAULT_HERD_PUBLIC, ...config.publicMessage };
   const field = formFields.find((f) => f.id === config.fieldId);
   const options = field?.type === "select" ? field.options ?? [] : [];
+  const extras = config.extraHerds ?? [];
 
-  const customFor = (value: string) => config.groupLabels?.find((g) => g.value === value);
-
-  const excluded = new Set(config.excludedGroups ?? []);
-  const setIncluded = (values: string[], included: boolean) =>
-    setConfig((c) => {
-      const next = new Set(c.excludedGroups ?? []);
-      for (const v of values) {
-        if (included) next.delete(v);
-        else next.add(v);
-      }
-      return { ...c, excludedGroups: [...next] };
-    });
-
-  // label = plural; singular aparte. La forma vacía se deduce de la otra.
-  const setGroupLabel = (value: string, patch: { label?: string; singular?: string }) =>
-    setConfig((c) => {
-      const prev = c.groupLabels?.find((g) => g.value === value);
-      return {
-        ...c,
-        groupLabels: [
-          ...(c.groupLabels ?? []).filter((g) => g.value !== value),
-          { value, label: prev?.label ?? "", singular: prev?.singular ?? "", ...patch },
-        ],
-      };
-    });
+  const setExtra = (i: number, patch: Partial<HerdFieldConfig>) =>
+    setConfig((c) => ({
+      ...c,
+      extraHerds: (c.extraHerds ?? []).map((h, j) => (j === i ? { ...h, ...patch, fieldId: patch.fieldId ?? h.fieldId } : h)),
+    }));
 
   const setPriv = (patch: Partial<HerdPrivateMessageConfig>) =>
     setConfig((c) => ({ ...c, privateMessage: { ...priv, ...patch } }));
@@ -456,7 +665,7 @@ function HerdConfigForm({
   // Vista previa con el primer grupo (o uno de ejemplo)
   const sample = options[0];
   const sampleForms = sample
-    ? herdGroupForms(customFor(sample.value), sample.label)
+    ? herdGroupName(config.groupLabels?.find((g) => g.value === sample.value), config, sample.label)
     : { plural: "endocrinólogos", singular: "endocrinólogo" };
   const sampleGroup = sampleForms.plural;
   const sampleSingular = sampleForms.singular;
@@ -464,6 +673,13 @@ function HerdConfigForm({
   const fieldOptions = formFields
     .filter((f) => f.type === "select" || f.type === "text")
     .map((f) => ({ value: f.id, label: f.label || f.id }));
+  // Cada campo solo puede ser una manada
+  const usedFields = new Set([config.fieldId, ...extras.map((h) => h.fieldId)].filter(Boolean));
+  const fieldOptionsFor = (own?: string) =>
+    fieldOptions.filter((o) => o.value === own || !usedFields.has(o.value));
+  // Las adicionales usan el id del campo en sus claves: solo letras, números, _ y -
+  const extraFieldOptionsFor = (own?: string) => fieldOptionsFor(own).filter((o) => /^[\w-]+$/.test(o.value));
+  const freeFields = extraFieldOptionsFor();
 
   return (
     <Stack gap="md">
@@ -502,96 +718,55 @@ function HerdConfigForm({
               </Alert>
             )}
 
-            <Select
-              label="Agrupar asistentes por"
-              description="Campo del formulario de registro que define la manada (especialidad, sociedad…)"
-              data={fieldOptions}
-              value={config.fieldId ?? null}
-              // Las exclusiones son opciones del campo anterior: se descartan
-              onChange={(v) => setConfig((c) => ({ ...c, fieldId: v ?? undefined, excludedGroups: [] }))}
-              searchable
+            <HerdFieldEditor
+              title={extras.length ? "Manada principal" : undefined}
+              herd={config}
+              keyPrefix=""
+              formFields={formFields}
+              fieldOptions={fieldOptionsFor(config.fieldId)}
+              counts={counts}
+              onChange={(patch) => setConfig((c) => ({ ...c, ...patch }))}
             />
 
-            {options.length > 0 && (
-              <div>
-                <Group justify="space-between" align="flex-end">
-                  <Text size="sm" fw={500}>Grupos y nombre de cada uno en los mensajes</Text>
-                  <Group gap={4}>
-                    <Text size="xs" c="dimmed">
-                      Anuncia a {options.filter((o) => !excluded.has(o.value)).length} de {options.length}
-                    </Text>
-                    <Button size="compact-xs" variant="subtle" onClick={() => setIncluded(options.map((o) => o.value), true)}>
-                      Todos
-                    </Button>
-                    <Button size="compact-xs" variant="subtle" onClick={() => setIncluded(options.map((o) => o.value), false)}>
-                      Ninguno
-                    </Button>
-                  </Group>
-                </Group>
-                <Text size="xs" c="dimmed" mb={6}>
-                  Desmarca «Anunciar» para que los asistentes de ese grupo no vean
-                  ningún mensaje (ni individual ni grupal) y para que el grupal
-                  nunca hable de ese grupo.{" "}
-                  Opcional. Escribe una sola forma (singular o plural) y la otra
-                  se completa sola (en gris); escríbela solo si la sugerencia no
-                  queda bien. «Endocrinología» → «endocrinólogo» / «endocrinólogos».
-                  En los mensajes, {"{grupo}"} usa el singular con 1 conectado y el plural con más.
+            {config.fieldId &&
+              extras.map((h, i) => (
+                <HerdFieldEditor
+                  key={`${i}-${h.fieldId}`}
+                  title={`Manada ${i + 2}`}
+                  herd={h}
+                  keyPrefix={`${h.fieldId}~`}
+                  formFields={formFields}
+                  fieldOptions={extraFieldOptionsFor(h.fieldId)}
+                  counts={counts}
+                  onChange={(patch) => setExtra(i, patch)}
+                  onRemove={() =>
+                    setConfig((c) => ({ ...c, extraHerds: (c.extraHerds ?? []).filter((_, j) => j !== i) }))
+                  }
+                />
+              ))}
+
+            {config.fieldId && (
+              <Group justify="space-between" align="center">
+                <Text size="xs" c="dimmed" maw={640}>
+                  Con varias manadas, cada asistente pertenece a un grupo por campo
+                  (p. ej. su especialidad y su ciudad). Al conectarse ve un mensaje
+                  individual por manada, uno tras otro; la repetición y el grupal
+                  rotan entre todas.
                 </Text>
-                <ScrollArea.Autosize mah={320}>
-                  <Table verticalSpacing={4} withTableBorder>
-                    <Table.Thead>
-                      <Table.Tr>
-                        <Table.Th w={70}>Anunciar</Table.Th>
-                        <Table.Th>Opción del formulario</Table.Th>
-                        <Table.Th>Singular (1)</Table.Th>
-                        <Table.Th>Plural (2 o más)</Table.Th>
-                        <Table.Th w={110}>Conectados / inscritos</Table.Th>
-                      </Table.Tr>
-                    </Table.Thead>
-                    <Table.Tbody>
-                      {options.map((o) => {
-                        const custom = customFor(o.value);
-                        const typedSingular = custom?.singular?.trim() ?? "";
-                        const typedPlural = custom?.label?.trim() ?? "";
-                        return (
-                          <Table.Tr key={o.value} style={{ opacity: excluded.has(o.value) ? 0.5 : 1 }}>
-                            <Table.Td>
-                              <Checkbox
-                                size="xs"
-                                checked={!excluded.has(o.value)}
-                                onChange={(e) => setIncluded([o.value], e.currentTarget.checked)}
-                                aria-label={`Anunciar a ${o.label}`}
-                              />
-                            </Table.Td>
-                            <Table.Td><Text size="xs">{o.label}</Text></Table.Td>
-                            <Table.Td>
-                              <TextInput
-                                size="xs"
-                                placeholder={typedPlural ? singularizeEs(typedPlural) : o.label}
-                                value={custom?.singular ?? ""}
-                                onChange={(e) => setGroupLabel(o.value, { singular: e.currentTarget.value })}
-                              />
-                            </Table.Td>
-                            <Table.Td>
-                              <TextInput
-                                size="xs"
-                                placeholder={typedSingular ? pluralizeEs(typedSingular) : o.label}
-                                value={custom?.label ?? ""}
-                                onChange={(e) => setGroupLabel(o.value, { label: e.currentTarget.value })}
-                              />
-                            </Table.Td>
-                            <Table.Td>
-                              <Badge variant="light" size="sm">
-                                {counts?.counts[herdKey(o.value)] ?? 0} / {counts?.registered[herdKey(o.value)] ?? 0}
-                              </Badge>
-                            </Table.Td>
-                          </Table.Tr>
-                        );
-                      })}
-                    </Table.Tbody>
-                  </Table>
-                </ScrollArea.Autosize>
-              </div>
+                <Button
+                  size="xs"
+                  variant="light"
+                  disabled={!freeFields.length || extras.length >= MAX_EXTRA_HERDS}
+                  onClick={() =>
+                    setConfig((c) => ({
+                      ...c,
+                      extraHerds: [...(c.extraHerds ?? []), { fieldId: freeFields[0].value }],
+                    }))
+                  }
+                >
+                  ➕ Agregar otra manada
+                </Button>
+              </Group>
             )}
 
             <Stack gap={6} p="sm" style={{ border: "1px solid var(--mantine-color-default-border)", borderRadius: 8 }}>

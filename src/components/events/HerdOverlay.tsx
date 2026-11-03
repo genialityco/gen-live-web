@@ -6,7 +6,7 @@ import {
   DEFAULT_HERD_GREETING,
   DEFAULT_HERD_PRIVATE,
   DEFAULT_HERD_PUBLIC,
-  findOwnHerdGroup,
+  findOwnHerdGroups,
   herdBannerStyle,
   herdOrdinal,
   renderHerdTemplate,
@@ -26,6 +26,7 @@ import {
   type HerdLiveConfig,
   type HerdMember,
   type HerdMessageConfig,
+  type HerdOwnGroup,
 } from "../../api/herd";
 import { AnnouncementBanner } from "../studio/AnnouncementBanner";
 import { EXIT_MS } from "../studio/announcement-templates";
@@ -38,6 +39,8 @@ const PRIVATE_DELAY_MS = 6000;
 // orden de llegada ("eres la primera…"); si no llega, sale la genérica.
 const MEMBER_RETRY_MS = 3000;
 const MEMBER_MAX_RETRIES = 3;
+// Con varias manadas, pausa entre la salida de un mensaje individual y el siguiente
+const SEQUENCE_GAP_MS = 2000;
 
 // Inscritos de ejemplo para la demo cuando el backend aún no los publica
 const DEMO_REGISTERED = 50;
@@ -126,9 +129,11 @@ function useHerdBanners() {
     );
     // Clave única: cada mensaje entra con su animación aunque el texto se repita
     const id = now * 1000 + (seq.current++ % 1000);
+    const ms = Math.max(2, durationSec) * 1000;
+    // Si espera turno, el tipo queda ocupado desde ya (freeIn lo tiene en cuenta)
+    if (wait) busy.current[kind] = { slot, until: now + wait + ms };
 
     const start = () => {
-      const ms = Math.max(2, durationSec) * 1000;
       const banner: BannerState = {
         visible: true,
         text,
@@ -159,7 +164,10 @@ function useHerdBanners() {
   const bannersRef = useRef(banners);
   bannersRef.current = banners;
 
-  return { banners, show, edit, isShowing };
+  /** Milisegundos hasta que el banner de este tipo termine (0 = libre) */
+  const freeIn = (kind: Kind) => Math.max(0, (busy.current[kind]?.until ?? 0) - Date.now());
+
+  return { banners, show, edit, isShowing, freeIn };
 }
 
 /** "Ana" · "Ana y Carlos" · "Ana, Carlos y Laura" · "Ana, Carlos y 3 colegas más" */
@@ -196,7 +204,7 @@ export function HerdOverlay({
   const [memberGroup, setMemberGroup] = useState<HerdMember | null>(null);
   const countsRef = useRef<HerdCounts | null>(null);
   countsRef.current = counts;
-  const { banners, show, edit, isShowing } = useHerdBanners();
+  const { banners, show, edit, isShowing, freeIn } = useHerdBanners();
 
   const active = enabled && !!eventId;
   const on = active && !!config?.enabled;
@@ -231,20 +239,24 @@ export function HerdOverlay({
   // ── Mensaje privado: bienvenida una vez por sesión del navegador y evento,
   // y luego cada repeatEverySec con los conteos del momento ──────────────
   const priv = { ...DEFAULT_HERD_PRIVATE, ...(config?.privateMessage ?? {}) };
-  // El grupo que publica el backend manda; el registrationData local es respaldo
-  const ownGroup =
-    memberGroup ?? (config ? findOwnHerdGroup(config, registrationData) : null);
+  // Grupos excluidos según excludedKeys (cubre valores que no son opción del
+  // formulario); groups[].excluded queda para configs anteriores
+  const isExcluded = (key: string) =>
+    !!config?.excludedKeys?.includes(key) || !!config?.groups?.find((g) => g.key === key)?.excluded;
+  // Grupos propios, uno por manada: los que publica el backend mandan (el
+  // principal y `others`, ya sin excluidos); el registrationData local es respaldo
+  const localGroups = config ? findOwnHerdGroups(config, registrationData) : [];
+  const ownGroups: HerdOwnGroup[] = memberGroup
+    ? [memberGroup, ...(memberGroup.others ?? [])]
+    : localGroups.filter((g) => !isExcluded(g.key));
+  const ownGroup = ownGroups[0] ?? null;
+  const ownGroupKeys = ownGroups.map((g) => g.key).join("|");
 
-  // Silenciado (grupo excluido o grupo de control): no ve ningún mensaje. Lo
-  // decide el backend; sin su respuesta y con experimento activo no se sabe
-  // si cayó en control, así que se calla para no contaminar la medición.
-  // Mientras tanto, excluidos según excludedKeys (cubre valores que no son
-  // opción del formulario); groups[].excluded queda para configs anteriores
+  // Silenciado (todos sus grupos excluidos o grupo de control): no ve ningún
+  // mensaje. Lo decide el backend; sin su respuesta y con experimento activo
+  // no se sabe si cayó en control, así que se calla para no contaminar la medición.
   const experiment = (config?.holdoutPercent ?? 0) > 0;
-  const excluded =
-    !!ownGroup &&
-    (!!config?.excludedKeys?.includes(ownGroup.key) ||
-      !!config?.groups?.find((g) => g.key === ownGroup.key)?.excluded);
+  const excluded = localGroups.length > 0 && !ownGroup;
   const muted = memberGroup ? !!memberGroup.muted : experiment || excluded;
 
   useEffect(() => {
@@ -252,47 +264,53 @@ export function HerdOverlay({
     console.info("[herd]", {
       configEnabled: config?.enabled ?? null,
       fieldId: config?.fieldId ?? null,
-      ownGroup,
+      ownGroups,
       fromBackend: !!memberGroup,
       muted,
       counts,
     });
-  }, [active, config?.enabled, config?.fieldId, ownGroup?.key, !!memberGroup, muted, counts]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [active, config?.enabled, config?.fieldId, ownGroupKeys, !!memberGroup, muted, counts]); // eslint-disable-line react-hooks/exhaustive-deps
   const firstName = (name ?? "").trim().split(/\s+/)[0] ?? "";
   const privateReady = on && priv.enabled && !!ownGroup && counts !== null;
 
-  // Grupo para la demostración: el propio si lo hay; si no (p. ej. el admin sin
-  // registro), el primero del formulario
-  const firstGroup = config?.groups?.[0];
-  const sampleGroup = ownGroup ?? (firstGroup ? { key: firstGroup.key, label: firstGroup.label, singular: firstGroup.singular } : DEMO_GROUP);
+  // Grupos para la demostración: los propios si los hay; si no (p. ej. el
+  // admin sin registro), la primera opción con mensajes de cada manada
+  const sampleGroups: HerdGroupRef[] = ownGroups.length
+    ? ownGroups
+    : (config?.herds ?? [{ fieldId: config?.fieldId ?? "" }]).flatMap((h) => {
+        const g = config?.groups?.find((x) => (x.fieldId ?? config?.fieldId) === h.fieldId && !x.excluded);
+        return g ? [{ key: g.key, label: g.label, singular: g.singular }] : [];
+      });
+  const sampleGroup = sampleGroups[0] ?? DEMO_GROUP;
 
   // Saludo entre colegas: el botón lo decide el backend (member.greet); en la
   // demostración se muestra siempre para poder revisarlo
   const greetCfg = { ...DEFAULT_HERD_GREETING, ...(config?.greeting ?? {}) };
   const canGreet = greetCfg.enabled && (demo || !!memberGroup?.greet);
 
-  const privateArgs = useRef({ priv, ownGroup, memberGroup, sampleGroup, firstName, muted, accent: config?.accentColor, greetCfg, canGreet });
-  privateArgs.current = { priv, ownGroup, memberGroup, sampleGroup, firstName, muted, accent: config?.accentColor, greetCfg, canGreet };
+  const privateArgs = useRef({ priv, ownGroup, ownGroups, memberGroup, sampleGroup, firstName, muted, accent: config?.accentColor, greetCfg, canGreet });
+  privateArgs.current = { priv, ownGroup, ownGroups, memberGroup, sampleGroup, firstName, muted, accent: config?.accentColor, greetCfg, canGreet };
 
   /**
    * Arma y muestra el mensaje privado con el grupo y conteo actuales:
    * - welcome: los primeros N del grupo ven firstTemplate ("eres la segunda…")
    * - repeat: repeatTemplate (o la plantilla normal)
    * - manual: el texto lanzado desde el admin (o la plantilla normal)
-   * `demo` simula el orden de llegada sin depender del backend.
+   * `group` elige la manada (por defecto, la principal). `demo` simula el
+   * orden de llegada sin depender del backend.
    */
   const firePrivate = (
     mode: "welcome" | "repeat" | "manual",
     textOverride?: string,
     demo?: { position?: number },
+    group?: HerdOwnGroup,
   ) => {
-    const { priv: p, ownGroup, memberGroup: member, sampleGroup: sample, firstName: nombre, muted, accent } =
-      privateArgs.current;
+    const { priv: p, ownGroup, sampleGroup: sample, firstName: nombre, muted, accent } = privateArgs.current;
     if (muted && !demo) return false;
-    const g = ownGroup ?? (demo ? sample : null);
+    const g: HerdOwnGroup | null = group ?? ownGroup ?? (demo ? sample : null);
     if (!g) return false;
     const c = countsRef.current;
-    const position = demo ? demo.position : member?.key === g.key ? member.position : undefined;
+    const position = demo ? demo.position : g.position;
     const isFirst =
       mode === "welcome" &&
       !!position &&
@@ -335,7 +353,7 @@ export function HerdOverlay({
     );
     if (!demo) {
       // Para medir la tasa de saludo: cuántos vieron el anuncio (con o sin botón)
-      void reportHerdImpression(eventId!, source, nombre).catch(() => {});
+      void reportHerdImpression(eventId!, source, g.key, nombre).catch(() => {});
       trackEvent("herd_announcement_shown", {
         event_id: eventId,
         herd_group: g.key,
@@ -358,7 +376,7 @@ export function HerdOverlay({
       return;
     }
     try {
-      const r = await sendHerdGreeting(eventId!, source, privateArgs.current.firstName);
+      const r = await sendHerdGreeting(eventId!, source, g.key, privateArgs.current.firstName);
       edit("private", bannerId, { text: sent(r.recipients), action: null }, CONFIRM_MS);
       trackEvent("herd_greeting_sent", {
         event_id: eventId,
@@ -377,6 +395,33 @@ export function HerdOverlay({
     }
   };
 
+  // Bienvenida con varias manadas: un mensaje por grupo, cada uno cuando sale
+  // el anterior (si saluda, la confirmación alarga el banner y el siguiente espera)
+  const sequenceTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const clearSequence = () => {
+    sequenceTimers.current.forEach(clearTimeout);
+    sequenceTimers.current = [];
+  };
+  useEffect(() => clearSequence, []);
+
+  const fireSequence = (groups: HerdOwnGroup[], demoMode = false) => {
+    clearSequence();
+    const step = (i: number) => {
+      const wait = freeIn("private");
+      if (i > 0 && wait > 0) {
+        sequenceTimers.current.push(setTimeout(() => step(i), wait + EXIT_MS + SEQUENCE_GAP_MS));
+        return;
+      }
+      firePrivate("welcome", undefined, demoMode ? { position: groups[i].position } : undefined, groups[i]);
+      if (i + 1 < groups.length) {
+        sequenceTimers.current.push(
+          setTimeout(() => step(i + 1), freeIn("private") + EXIT_MS + SEQUENCE_GAP_MS),
+        );
+      }
+    };
+    if (groups.length) step(0);
+  };
+
   const privateRepeatMs = Math.max(0, priv.repeatEverySec) * 1000;
 
   useEffect(() => {
@@ -385,6 +430,8 @@ export function HerdOverlay({
     const last = readLastPrivate(storageKey);
     let timer: ReturnType<typeof setTimeout> | undefined;
     let retries = 0;
+    // La repetición rota entre las manadas, empezando por la segunda
+    let turn = 1;
 
     const run = () => {
       const welcome = readLastPrivate(storageKey) === null;
@@ -392,7 +439,15 @@ export function HerdOverlay({
         timer = setTimeout(run, MEMBER_RETRY_MS);
         return;
       }
-      if (firePrivate(welcome ? "welcome" : "repeat")) writeLastPrivate(storageKey, Date.now());
+      const { ownGroups: groups, muted: isMuted } = privateArgs.current;
+      if (welcome) {
+        if (!isMuted && groups.length) {
+          fireSequence(groups);
+          writeLastPrivate(storageKey, Date.now());
+        }
+      } else if (groups.length && firePrivate("repeat", undefined, undefined, groups[turn++ % groups.length])) {
+        writeLastPrivate(storageKey, Date.now());
+      }
       if (privateRepeatMs) timer = setTimeout(run, privateRepeatMs);
     };
 
@@ -402,7 +457,10 @@ export function HerdOverlay({
     else if (privateRepeatMs) {
       timer = setTimeout(run, Math.max(PRIVATE_DELAY_MS, last + privateRepeatMs - Date.now()));
     }
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+      clearSequence();
+    };
     // show es estable en la práctica (solo usa setState y refs)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [privateReady, eventId, privateRepeatMs]);
@@ -448,14 +506,16 @@ export function HerdOverlay({
       if (!t?.at || t.at === lastAt) return;
       const first = lastAt === null;
       lastAt = t.at;
-      const { priv: p, ownGroup: g } = privateArgs.current;
+      const { priv: p, ownGroups: groups } = privateArgs.current;
       // Al cargar la página llega el último disparo guardado: solo si sigue vigente
       if (first && getServerNow() - t.at > p.durationSec * 1000) return;
-      if (t.key && g?.key !== t.key) {
-        console.info("[herd] privado manual para otro grupo", { para: t.key, miGrupo: g?.key ?? null });
+      // Para un grupo: el mensaje de esa manada, si es uno de los suyos; sin grupo, el principal
+      const g = t.key ? groups.find((x) => x.key === t.key) : undefined;
+      if (t.key && !g) {
+        console.info("[herd] privado manual para otro grupo", { para: t.key, misGrupos: groups.map((x) => x.key) });
         return;
       }
-      const shown = firePrivate("manual", t.text);
+      const shown = firePrivate("manual", t.text, undefined, g);
       console.info("[herd] privado manual", shown ? "mostrado" : "sin grupo propio, no se muestra", t);
     });
     return () => unsub();
@@ -463,9 +523,14 @@ export function HerdOverlay({
   }, [on, eventId]);
 
   // ── Saludo entre colegas: recibidos del propio grupo y devoluciones ──────
-  // Saludos del banner en pantalla: varios seguidos se agrupan en uno
-  const incoming = useRef<{ bannerId: number | null; items: Array<{ id: string; name: string }> }>({
+  // Saludos del banner en pantalla: varios seguidos del mismo grupo se agrupan en uno
+  const incoming = useRef<{
+    bannerId: number | null;
+    groupKey: string | null;
+    items: Array<{ id: string; name: string }>;
+  }>({
     bannerId: null,
+    groupKey: null,
     items: [],
   });
 
@@ -481,7 +546,8 @@ export function HerdOverlay({
     const { greetingMsg: msg, greetCfg: gc } = greetingArgs.current;
     const accent = privateArgs.current.accent;
     const cur = incoming.current;
-    const stillShowing = isShowing("greeting", cur.bannerId);
+    // Uno de otra manada reemplaza al banner en pantalla (el texto nombra el grupo)
+    const stillShowing = isShowing("greeting", cur.bannerId) && cur.groupKey === group.key;
     const items = stillShowing ? [...cur.items.filter((i) => i.id !== from.id), from] : [from];
     const names = items.map((i) => i.name).reverse(); // el más reciente primero
     const text =
@@ -493,10 +559,10 @@ export function HerdOverlay({
       : null;
     if (stillShowing && cur.bannerId !== null) {
       edit("greeting", cur.bannerId, { text, action }, gc.durationSec * 1000);
-      incoming.current = { bannerId: cur.bannerId, items };
+      incoming.current = { bannerId: cur.bannerId, groupKey: group.key, items };
     } else {
       const id = show("greeting", text, msg(), gc.durationSec, accent, action);
-      incoming.current = { bannerId: id, items };
+      incoming.current = { bannerId: id, groupKey: group.key, items };
     }
   };
 
@@ -514,26 +580,29 @@ export function HerdOverlay({
       trackEvent("herd_greeting_reply_sent", { event_id: eventId, herd_group: group.key, replies: ok });
     }
     edit("greeting", bannerId, { text: `🙌 Le devolviste el saludo a ${names}`, action: null }, CONFIRM_MS);
-    incoming.current = { bannerId: null, items: [] };
+    incoming.current = { bannerId: null, groupKey: null, items: [] };
   };
 
   const ownGroupKey = ownGroup?.key ?? null;
   const greetingOn = on && greetCfg.enabled && !muted && !!ownGroupKey;
 
+  // Saludos de cada uno de sus grupos (uno por manada)
   useEffect(() => {
     if (!greetingOn || !uid) return;
     // Al suscribirse llegan los últimos guardados: solo cuentan los recientes
     const since = getServerNow() - 3000;
-    const unsub = subscribeHerdGreetings(eventId!, ownGroupKey!, (gr) => {
-      if (gr.at < since || gr.fromUid === uid) return;
-      const group = privateArgs.current.ownGroup;
-      if (!group) return;
-      showGreetingReceived({ id: gr.id, name: gr.name }, group);
-      trackEvent("herd_greeting_received", { event_id: eventId, herd_group: group.key });
-    });
-    return () => unsub();
+    const unsubs = ownGroupKeys.split("|").map((key) =>
+      subscribeHerdGreetings(eventId!, key, (gr) => {
+        if (gr.at < since || gr.fromUid === uid) return;
+        const group = privateArgs.current.ownGroups.find((g) => g.key === key);
+        if (!group) return;
+        showGreetingReceived({ id: gr.id, name: gr.name }, group);
+        trackEvent("herd_greeting_received", { event_id: eventId, herd_group: group.key });
+      }),
+    );
+    return () => unsubs.forEach((u) => u());
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [greetingOn, eventId, ownGroupKey, uid]);
+  }, [greetingOn, eventId, ownGroupKeys, uid]);
 
   useEffect(() => {
     if (!greetingOn || !uid) return;
@@ -578,8 +647,10 @@ export function HerdOverlay({
           herdEnabled={!!config?.enabled}
           priv={priv}
           publicEnabled={config?.publicMessage?.enabled ?? DEFAULT_HERD_PUBLIC.enabled}
-          groupLabel={sampleGroup.label}
+          groupLabel={sampleGroups.map((g) => g.label).join(" · ") || sampleGroup.label}
           onPrivate={(mode, position) => firePrivate(mode, undefined, { position })}
+          herdCount={sampleGroups.length}
+          onSequence={() => fireSequence(sampleGroups, true)}
           onPublic={fireDemoPublic}
           greetingEnabled={greetCfg.enabled}
           onGreeting={(kind) => {
@@ -608,6 +679,8 @@ function HerdDemoPanel({
   publicEnabled,
   groupLabel,
   onPrivate,
+  herdCount,
+  onSequence,
   onPublic,
   greetingEnabled,
   onGreeting,
@@ -617,6 +690,8 @@ function HerdDemoPanel({
   publicEnabled: boolean;
   groupLabel: string;
   onPrivate: (mode: "welcome" | "repeat", position?: number) => void;
+  herdCount: number;
+  onSequence: () => void;
   onPublic: (repeat: boolean) => void;
   greetingEnabled: boolean;
   onGreeting: (kind: "received" | "reply") => void;
@@ -672,6 +747,11 @@ function HerdDemoPanel({
             Repetición
           </Button>
         </Group>
+        {herdCount > 1 && (
+          <Button size="compact-xs" variant="light" onClick={onSequence}>
+            Bienvenida completa ({herdCount} manadas, una tras otra)
+          </Button>
+        )}
 
         <Text size="xs" fw={600} mt={4}>
           👥 Grupal {!publicEnabled && <Text span size="xs" c="orange">(apagado)</Text>}
