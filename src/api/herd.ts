@@ -85,11 +85,23 @@ export type EventHerdConfig = HerdFieldConfig & {
   extraHerds?: HerdExtraConfig[];
   // % de asistentes que al azar quedan sin mensajes (grupo de control); 0 = sin experimento
   holdoutPercent?: number;
+  // Tratamiento formal antes de {nombre} ("Dr(a). Ana") según una opción del formulario
+  formalTitle?: HerdFormalTitleConfig;
   accentColor?: string;
   privateMessage?: HerdPrivateMessageConfig;
   publicMessage?: HerdPublicMessageConfig;
   greeting?: HerdGreetingConfig;
 };
+
+/** Tratamiento formal: quienes tienen en `fieldId` una de las opciones `values` */
+export type HerdFormalTitleConfig = {
+  fieldId?: string;
+  values?: string[];
+  text?: string; // "Dr(a)." por defecto
+};
+
+/** Igual que DEFAULT_FORMAL_TITLE del backend */
+export const DEFAULT_HERD_FORMAL_TITLE = "Dr(a).";
 
 /** Grupo (opción del campo) tal como lo espeja el backend */
 export type HerdGroup = {
@@ -119,6 +131,8 @@ export type HerdLiveConfig = {
   excludedKeys?: string[];
   holdoutPercent?: number;
   greeting?: HerdGreetingConfig;
+  // Tratamiento formal; accepted = valor y etiqueta normalizados de las opciones que lo llevan
+  formalTitle?: { fieldId: string; text: string; accepted: string[] };
 };
 
 /** Grupo propio y orden de llegada en él (1 = el primero) */
@@ -126,6 +140,7 @@ export type HerdOwnGroup = HerdGroupRef & { position?: number };
 
 /** Grupo principal del asistente, publicado por el backend, y los de sus otras manadas */
 export type HerdMember = HerdOwnGroup & {
+  title?: string; // tratamiento formal ("Dr(a).") antes de su nombre
   muted?: boolean; // todos sus grupos excluidos o grupo de control: no ve mensajes
   greet?: boolean; // sus anuncios individuales traen el botón «👋 Saludar»
   others?: HerdOwnGroup[];
@@ -357,6 +372,26 @@ export const herdKey = (s: unknown) =>
   norm(s)
     .replace(/[.#$/[\]]/g, "_")
     .slice(0, 100) || "_";
+
+/**
+ * Tratamiento formal del asistente a partir de su registrationData (respaldo
+ * mientras el backend no publica su `title`); "" = ninguno
+ */
+export function findOwnHerdTitle(
+  config: HerdLiveConfig,
+  registrationData: Record<string, unknown> | null | undefined,
+): string {
+  const t = config.formalTitle;
+  if (!t?.fieldId || !registrationData) return "";
+  const raw = registrationData[t.fieldId];
+  const v = Array.isArray(raw) ? raw[0] : raw;
+  if (v == null || typeof v === "object") return "";
+  return t.accepted.includes(norm(v)) ? t.text : "";
+}
+
+/** "Dr(a). Ana"; sin nombre no se pone el tratamiento solo */
+export const withHerdTitle = (title: string | undefined, name: string) =>
+  title?.trim() && name.trim() ? `${title.trim()} ${name.trim()}` : name;
 
 /**
  * Grupos del asistente a partir de su registrationData, uno por manada en la

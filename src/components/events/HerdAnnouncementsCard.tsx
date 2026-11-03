@@ -11,6 +11,7 @@ import {
   Group,
   Loader,
   Modal,
+  MultiSelect,
   NumberInput,
   ScrollArea,
   SegmentedControl,
@@ -31,6 +32,7 @@ import type { FormField } from "../../types";
 import type { AnnouncementStyle } from "../../api/live-stage-service";
 import {
   announceHerd,
+  DEFAULT_HERD_FORMAL_TITLE,
   DEFAULT_HERD_GREETING,
   DEFAULT_HERD_PRIVATE,
   DEFAULT_HERD_PUBLIC,
@@ -53,6 +55,7 @@ import {
   type HerdExperimentArm,
   type HerdExperimentReport,
   type HerdFieldConfig,
+  type HerdFormalTitleConfig,
   type HerdGreetingConfig,
   type HerdGreetingReport,
   type HerdMessageConfig,
@@ -103,6 +106,7 @@ function withDefaults(event: EventItem, fields: FormField[]): EventHerdConfig {
     singularPattern: c?.singularPattern ?? "",
     extraHerds: c?.extraHerds ?? [],
     holdoutPercent: c?.holdoutPercent ?? 0,
+    formalTitle: c?.formalTitle,
     // El color de acento global de versiones anteriores pasa al estilo de cada mensaje
     accentColor: c?.accentColor,
     privateMessage: { ...privateMessage, style: messageStyle(privateMessage, c?.accentColor) },
@@ -622,6 +626,77 @@ function HerdFieldEditor({
   );
 }
 
+/**
+ * Tratamiento formal antes de {nombre}: el admin elige un campo de selección
+ * (p. ej. Perfil) y las opciones que lo llevan (Médico General, Residente…).
+ * Sin opciones elegidas no se aplica.
+ */
+function HerdFormalTitleEditor({
+  value,
+  formFields,
+  onChange,
+}: {
+  value: HerdFormalTitleConfig | undefined;
+  formFields: FormField[];
+  onChange: (v: HerdFormalTitleConfig | undefined) => void;
+}) {
+  // El backend usa el id del campo como ruta en Mongo: solo letras, números, _ y -
+  const selectFields = formFields.filter((f) => f.type === "select" && /^[\w-]+$/.test(f.id));
+  const field = selectFields.find((f) => f.id === value?.fieldId);
+  const options = (field?.options ?? []).map((o) => ({ value: o.value, label: o.label || o.value }));
+  const text = value?.text ?? DEFAULT_HERD_FORMAL_TITLE;
+  const active = !!field && !!value?.values?.length;
+
+  return (
+    <Stack gap={6} p="sm" style={{ border: "1px solid var(--mantine-color-default-border)", borderRadius: 8 }}>
+      <Group gap="xs">
+        <Text size="sm" fw={600}>🩺 Tratamiento formal</Text>
+        {active && <Badge size="xs" variant="light">{text.trim() || DEFAULT_HERD_FORMAL_TITLE}</Badge>}
+      </Group>
+      <Text size="xs" c="dimmed">
+        Antepone un tratamiento al nombre en los mensajes individuales y en el
+        saludo entre colegas («¡Hola {text.trim() || DEFAULT_HERD_FORMAL_TITLE} Ana!»), solo para
+        quienes eligieron alguna de las opciones indicadas al registrarse.
+      </Text>
+      <Grid gutter="xs">
+        <Grid.Col span={{ base: 12, sm: 4 }}>
+          <Select
+            label="Según el campo"
+            placeholder="Sin tratamiento"
+            clearable
+            data={selectFields.map((f) => ({ value: f.id, label: f.label || f.id }))}
+            value={field ? field.id : null}
+            onChange={(fieldId) =>
+              onChange(fieldId ? { fieldId, values: [], text: value?.text } : undefined)
+            }
+          />
+        </Grid.Col>
+        <Grid.Col span={{ base: 12, sm: 5 }}>
+          <MultiSelect
+            label="Opciones que lo llevan"
+            placeholder={field ? "Elige una o varias" : "Primero elige el campo"}
+            disabled={!field}
+            data={options}
+            value={value?.values ?? []}
+            onChange={(values) => onChange({ ...value, values })}
+            searchable
+          />
+        </Grid.Col>
+        <Grid.Col span={{ base: 12, sm: 3 }}>
+          <TextInput
+            label="Tratamiento"
+            placeholder={DEFAULT_HERD_FORMAL_TITLE}
+            disabled={!field}
+            value={value?.text ?? ""}
+            maxLength={20}
+            onChange={(e) => onChange({ ...value, text: e.currentTarget.value })}
+          />
+        </Grid.Col>
+      </Grid>
+    </Stack>
+  );
+}
+
 function HerdConfigForm({
   eventId,
   initial,
@@ -769,6 +844,12 @@ function HerdConfigForm({
               </Group>
             )}
 
+            <HerdFormalTitleEditor
+              value={config.formalTitle}
+              formFields={formFields}
+              onChange={(formalTitle) => setConfig((c) => ({ ...c, formalTitle }))}
+            />
+
             <Stack gap={6} p="sm" style={{ border: "1px solid var(--mantine-color-default-border)", borderRadius: 8 }}>
               <Text size="sm" fw={600}>🧪 Experimento: grupo de control</Text>
               <Text size="xs" c="dimmed">
@@ -817,7 +898,9 @@ function HerdConfigForm({
             msg={priv}
             onChange={setPriv}
             previewText={renderHerdTemplate(priv.template, {
-              nombre: "Ana",
+              nombre: config.formalTitle?.values?.length
+                ? `${config.formalTitle.text?.trim() || DEFAULT_HERD_FORMAL_TITLE} Ana`
+                : "Ana",
               cantidad: 34,
               grupo: sampleGroup,
               grupoSingular: sampleSingular,

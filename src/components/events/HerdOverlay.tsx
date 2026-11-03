@@ -7,6 +7,8 @@ import {
   DEFAULT_HERD_PRIVATE,
   DEFAULT_HERD_PUBLIC,
   findOwnHerdGroups,
+  findOwnHerdTitle,
+  withHerdTitle,
   herdBannerStyle,
   herdOrdinal,
   renderHerdTemplate,
@@ -271,6 +273,15 @@ export function HerdOverlay({
     });
   }, [active, config?.enabled, config?.fieldId, ownGroupKeys, !!memberGroup, muted, counts]); // eslint-disable-line react-hooks/exhaustive-deps
   const firstName = (name ?? "").trim().split(/\s+/)[0] ?? "";
+  // Tratamiento formal ("Dr(a)."): el que publica el backend manda; el
+  // registrationData local es respaldo. En la demostración se muestra si está
+  // configurado, para poder revisarlo.
+  const ownTitle = memberGroup
+    ? memberGroup.title ?? ""
+    : config
+      ? findOwnHerdTitle(config, registrationData)
+      : "";
+  const title = ownTitle || (demo ? config?.formalTitle?.text ?? "" : "");
   const privateReady = on && priv.enabled && !!ownGroup && counts !== null;
 
   // Grupos para la demostración: los propios si los hay; si no (p. ej. el
@@ -288,8 +299,8 @@ export function HerdOverlay({
   const greetCfg = { ...DEFAULT_HERD_GREETING, ...(config?.greeting ?? {}) };
   const canGreet = greetCfg.enabled && (demo || !!memberGroup?.greet);
 
-  const privateArgs = useRef({ priv, ownGroup, ownGroups, memberGroup, sampleGroup, firstName, muted, accent: config?.accentColor, greetCfg, canGreet });
-  privateArgs.current = { priv, ownGroup, ownGroups, memberGroup, sampleGroup, firstName, muted, accent: config?.accentColor, greetCfg, canGreet };
+  const privateArgs = useRef({ priv, ownGroup, ownGroups, memberGroup, sampleGroup, firstName, title, muted, accent: config?.accentColor, greetCfg, canGreet });
+  privateArgs.current = { priv, ownGroup, ownGroups, memberGroup, sampleGroup, firstName, title, muted, accent: config?.accentColor, greetCfg, canGreet };
 
   /**
    * Arma y muestra el mensaje privado con el grupo y conteo actuales:
@@ -305,7 +316,7 @@ export function HerdOverlay({
     demo?: { position?: number },
     group?: HerdOwnGroup,
   ) => {
-    const { priv: p, ownGroup, sampleGroup: sample, firstName: nombre, muted, accent } = privateArgs.current;
+    const { priv: p, ownGroup, sampleGroup: sample, firstName: nombre, title, muted, accent } = privateArgs.current;
     if (muted && !demo) return false;
     const g: HerdOwnGroup | null = group ?? ownGroup ?? (demo ? sample : null);
     if (!g) return false;
@@ -327,7 +338,7 @@ export function HerdOverlay({
     const cantidad = Math.max(demo?.position ?? 1, c?.counts[g.key] ?? 0);
     const total = Math.max(1, c?.total ?? 0);
     const text = renderHerdTemplate(template, {
-      nombre,
+      nombre: withHerdTitle(title, nombre),
       grupo: g.label,
       grupoSingular: g.singular,
       cantidad,
