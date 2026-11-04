@@ -80,6 +80,7 @@ import { resolveStreams } from "../../components/events/streamUtils";
 import { AttendAnnouncementOverlay } from "../../components/studio/AnnouncementBanner";
 import { HerdOverlay } from "../../components/events/HerdOverlay";
 import { MilestoneOverlay } from "../../components/events/MilestoneOverlay";
+import { OverlayErrorBoundary } from "../../components/events/OverlayErrorBoundary";
 import { VideoNetworkGuard } from "../../components/events/VideoNetworkGuard";
 import { Track } from "livekit-client";
 import { trackEvent } from "../../lib/utmTracking";
@@ -1127,14 +1128,16 @@ export default function EventAttendGcore() {
   // La instancia del vivo ya trae el panel; en cualquier otro estado se monta una solo para la demo
   const herdLiveOverlay = status === "live" && mode !== "studio" && !!playbackUrl && !emergency.active;
   const herdDemoOverlay = herdDemo && !herdLiveOverlay && (
-    <HerdOverlay
-      eventId={event?._id}
-      enabled
-      uid={user?.uid}
-      registrationData={attendeeData}
-      name={effectiveChatName}
-      demo
-    />
+    <OverlayErrorBoundary name="manada">
+      <HerdOverlay
+        eventId={event?._id}
+        enabled
+        uid={user?.uid}
+        registrationData={attendeeData}
+        name={effectiveChatName}
+        demo
+      />
+    </OverlayErrorBoundary>
   );
 
   return (
@@ -1246,23 +1249,29 @@ export default function EventAttendGcore() {
                           </Stack>
                         </Center>
                       )}
-                      <AttendAnnouncementOverlay
-                        eventSlug={eventSlugToUse}
-                        enabled={mode !== "studio" && !!playbackUrl}
-                      />
-                      <HerdOverlay
-                        eventId={event?._id}
-                        enabled={mode !== "studio" && !!playbackUrl && !emergency.active}
-                        uid={user?.uid}
-                        registrationData={attendeeData}
-                        name={effectiveChatName}
-                        demo={herdDemo}
-                      />
-                      <MilestoneOverlay
-                        eventId={event?._id}
-                        enabled={mode !== "studio" && !!playbackUrl && !emergency.active}
-                        uid={user?.uid}
-                      />
+                      <OverlayErrorBoundary name="anuncios">
+                        <AttendAnnouncementOverlay
+                          eventSlug={eventSlugToUse}
+                          enabled={mode !== "studio" && !!playbackUrl}
+                        />
+                      </OverlayErrorBoundary>
+                      <OverlayErrorBoundary name="manada">
+                        <HerdOverlay
+                          eventId={event?._id}
+                          enabled={mode !== "studio" && !!playbackUrl && !emergency.active}
+                          uid={user?.uid}
+                          registrationData={attendeeData}
+                          name={effectiveChatName}
+                          demo={herdDemo}
+                        />
+                      </OverlayErrorBoundary>
+                      <OverlayErrorBoundary name="logros">
+                        <MilestoneOverlay
+                          eventId={event?._id}
+                          enabled={mode !== "studio" && !!playbackUrl && !emergency.active}
+                          uid={user?.uid}
+                        />
+                      </OverlayErrorBoundary>
                     </Box>
                   ) : status === "replay" && replayStreamList.length > 0 ? (
                     <Box style={{ position: "absolute", inset: 0 }}>
@@ -1542,23 +1551,29 @@ export default function EventAttendGcore() {
                                 </Stack>
                               </Center>
                             )}
-                            <AttendAnnouncementOverlay
-                              eventSlug={eventSlugToUse}
-                              enabled={mode !== "studio" && !!playbackUrl}
-                            />
-                            <HerdOverlay
-                              eventId={event?._id}
-                              enabled={mode !== "studio" && !!playbackUrl && !emergency.active}
-                              uid={user?.uid}
-                              registrationData={attendeeData}
-                              name={effectiveChatName}
-                              demo={herdDemo}
-                            />
-                            <MilestoneOverlay
-                              eventId={event?._id}
-                              enabled={mode !== "studio" && !!playbackUrl && !emergency.active}
-                              uid={user?.uid}
-                            />
+                            <OverlayErrorBoundary name="anuncios">
+                              <AttendAnnouncementOverlay
+                                eventSlug={eventSlugToUse}
+                                enabled={mode !== "studio" && !!playbackUrl}
+                              />
+                            </OverlayErrorBoundary>
+                            <OverlayErrorBoundary name="manada">
+                              <HerdOverlay
+                                eventId={event?._id}
+                                enabled={mode !== "studio" && !!playbackUrl && !emergency.active}
+                                uid={user?.uid}
+                                registrationData={attendeeData}
+                                name={effectiveChatName}
+                                demo={herdDemo}
+                              />
+                            </OverlayErrorBoundary>
+                            <OverlayErrorBoundary name="logros">
+                              <MilestoneOverlay
+                                eventId={event?._id}
+                                enabled={mode !== "studio" && !!playbackUrl && !emergency.active}
+                                uid={user?.uid}
+                              />
+                            </OverlayErrorBoundary>
                           </Box>
                         ) : status === "replay" && replayStreamList.length > 0 ? (
                           <Box style={{ position: "absolute", inset: 0 }}>
