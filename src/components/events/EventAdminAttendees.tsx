@@ -89,6 +89,7 @@ export default function EventAdminAttendees({
   event,
 }: EventAdminAttendeesProps) {
   const [loading, setLoading] = useState(true);
+  const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [registrationForm, setRegistrationForm] =
     useState<RegistrationForm | null>(null);
@@ -194,13 +195,46 @@ export default function EventAdminAttendees({
   // ============================
   // EXPORTAR EXCEL (3 HOJAS)
   // ============================
-  const handleExportExcel = () => {
+  const handleExportExcel = async () => {
+    setExporting(true);
     try {
       const allFields = registrationForm?.fields ?? [];
 
       const inscritos = [...eventUsers];
-      const asistentes = [...liveAttendees];
-      const diferidos = [...deferredUsers];
+
+      // Hojas "Asistentes" y "Diferidos": cifra COMPLETA de conectados (vivo:
+      // mismo criterio que "Total de Asistentes" en métricas), reprodujeran o no.
+      // La columna "Reprodujo el video" distingue a quienes sí lo vieron.
+      // Si falla la petición, se usa la lista de la pestaña (solo reproducción).
+      const fetchPresence = async (
+        kind: "live-attendees" | "replay-attendees",
+        fallback: LiveAttendee[]
+      ): Promise<LiveAttendee[]> => {
+        try {
+          const { data } = await api.get(
+            `/event-users/event/${event._id}/${kind}`,
+            { params: { criteria: "presence" } }
+          );
+          const seen = new Set<string>();
+          return (data as LiveAttendee[]).filter((eu) => {
+            const attendee = getAttendeeObj(eu.attendeeId);
+            if (!attendee) return false;
+            const key = getAttendeeKey(attendee) || null;
+            if (!key) return true;
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+          });
+        } catch (err) {
+          console.error(`Error obteniendo conectados (${kind}):`, err);
+          return [...fallback];
+        }
+      };
+
+      const [asistentes, diferidos] = await Promise.all([
+        fetchPresence("live-attendees", liveAttendees),
+        fetchPresence("replay-attendees", deferredUsers),
+      ]);
 
       const commonHeader: (string | number)[] = [
         "Tipo",
@@ -210,7 +244,8 @@ export default function EventAdminAttendees({
         "Último acceso",
         "Check-in en vivo",
         "Firebase UID",
-        "Tiempo en vivo (min)",
+        "Tiempo reproducido (min)",
+        "Reprodujo el video",
         "Última actividad (heartbeat)",
       ];
 
@@ -248,7 +283,8 @@ export default function EventAdminAttendees({
             lastLoginStr,
             eu.checkedIn ? "Sí" : "No",
             eu.firebaseUID ?? "",
-            "", // Tiempo en vivo (min)
+            "", // Tiempo reproducido (min)
+            "", // Reprodujo el video
             "", // Última actividad (heartbeat)
           ];
         });
@@ -293,6 +329,7 @@ export default function EventAdminAttendees({
             eu.checkedIn ? "Sí" : "No",
             "", // Firebase UID no viene aquí
             liveMinutes,
+            (eu.viewingStats?.liveWatchTimeSeconds ?? 0) > 0 ? "Sí" : "No",
             lastHeartbeatStr,
           ];
         });
@@ -337,6 +374,7 @@ export default function EventAdminAttendees({
             eu.checkedIn ? "Sí" : "No",
             "", // Firebase UID no viene aquí
             replayMinutes,
+            (eu.viewingStats?.replayWatchTimeSeconds ?? 0) > 0 ? "Sí" : "No",
             lastHeartbeatStr,
           ];
         });
@@ -382,6 +420,8 @@ export default function EventAdminAttendees({
       XLSX.writeFile(wb, `asistentes_${safeTitle}.xlsx`);
     } catch (err) {
       console.error("Error exporting to Excel:", err);
+    } finally {
+      setExporting(false);
     }
   };
 
@@ -575,6 +615,7 @@ export default function EventAdminAttendees({
           variant="light"
           leftSection={<IconFileSpreadsheet size={16} />}
           onClick={handleExportExcel}
+          loading={exporting}
         >
           Exportar a Excel
         </Button>
