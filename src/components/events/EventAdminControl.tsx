@@ -51,6 +51,7 @@ import { resolveStreams } from "./streamUtils";
 import { useEventEmergency } from "../../hooks/useEventEmergency";
 import type { FormField } from "../../types";
 import { HerdAnnouncementsCard } from "./HerdAnnouncementsCard";
+import { MilestonesCard } from "./MilestonesCard";
 import { NetworkBlocksCard } from "./NetworkBlocksCard";
 
 const STATUS_OPTIONS = [
@@ -1048,6 +1049,9 @@ export default function EventAdminControl({
                   formFields={formFields}
                   onEventUpdate={onEventUpdate}
                 />
+
+                {/* Logros del asistente: felicitaciones al cumplir hitos */}
+                <MilestonesCard event={event} onEventUpdate={onEventUpdate} />
               </Stack>
             </Tabs.Panel>
 

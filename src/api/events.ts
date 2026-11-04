@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { api } from "../core/api";
 import type { EventHerdConfig } from "./herd";
+import type { EventMilestonesConfig } from "./milestones";
 
 // Tipos de branding para eventos
 export interface EventBrandingColors {
@@ -63,6 +64,7 @@ export type EventItem = {
   branding?: EventBrandingConfig; // Campo de branding del evento
   certificatesConfig?: EventCertificatesConfig; // Toggle de certificados de asistencia
   herdConfig?: EventHerdConfig; // Anuncios de manada sobre el video del asistente
+  milestonesConfig?: EventMilestonesConfig; // Logros del asistente (felicitaciones al cumplir hitos)
   hidden?: boolean;
   createdAt?: string;
   startDate?: string; // Para compatibilidad

@@ -79,6 +79,7 @@ import { VimeoPlayer } from "../viewer/VimeoPlayer";
 import { resolveStreams } from "../../components/events/streamUtils";
 import { AttendAnnouncementOverlay } from "../../components/studio/AnnouncementBanner";
 import { HerdOverlay } from "../../components/events/HerdOverlay";
+import { MilestoneOverlay } from "../../components/events/MilestoneOverlay";
 import { VideoNetworkGuard } from "../../components/events/VideoNetworkGuard";
 import { Track } from "livekit-client";
 import { trackEvent } from "../../lib/utmTracking";
@@ -1257,6 +1258,11 @@ export default function EventAttendGcore() {
                         name={effectiveChatName}
                         demo={herdDemo}
                       />
+                      <MilestoneOverlay
+                        eventId={event?._id}
+                        enabled={mode !== "studio" && !!playbackUrl && !emergency.active}
+                        uid={user?.uid}
+                      />
                     </Box>
                   ) : status === "replay" && replayStreamList.length > 0 ? (
                     <Box style={{ position: "absolute", inset: 0 }}>
@@ -1547,6 +1553,11 @@ export default function EventAttendGcore() {
                               registrationData={attendeeData}
                               name={effectiveChatName}
                               demo={herdDemo}
+                            />
+                            <MilestoneOverlay
+                              eventId={event?._id}
+                              enabled={mode !== "studio" && !!playbackUrl && !emergency.active}
+                              uid={user?.uid}
                             />
                           </Box>
                         ) : status === "replay" && replayStreamList.length > 0 ? (
