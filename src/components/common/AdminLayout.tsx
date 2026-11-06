@@ -54,6 +54,12 @@ export default function AdminLayout({ children, org }: AdminLayoutProps) {
       description: "Gestionar usuarios registrados",
     },
     {
+      label: "Análisis de permanencia",
+      icon: "📈",
+      href: `/org/${slug}/admin/engagement`,
+      description: "¿Los mensajes retienen? Con vs. sin",
+    },
+    {
       label: "Formulario de registro",
       icon: "📝",
       href: `/org/${slug}/admin/registration-form`,

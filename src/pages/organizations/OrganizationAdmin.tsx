@@ -8,6 +8,7 @@ import AdminDashboardView from "./AdminDashboardView";
 import AdminEventsView from "./AdminEventsView";
 import AdminAttendeesView from "./AdminAttendeesView";
 import SuppressedEmailsView from "./SuppressedEmailsView";
+import AdminEngagementView from "./AdminEngagementView";
 import BrandingSettings from "../../components/organizations/BrandingSettings";
 import RegistrationFormBuilder from "../../components/organizations/RegistrationFormBuilder";
 
@@ -71,6 +72,8 @@ export default function OrganizationAdmin() {
       return <BrandingSettings org={org} onUpdate={loadOrganizationData} />;
     } else if (path.endsWith("/suppressed-emails")) {
       return <SuppressedEmailsView orgId={org._id} />;
+    } else if (path.endsWith("/engagement")) {
+      return <AdminEngagementView orgId={org._id} />;
     } else {
       // Vista por defecto (dashboard)
       return <AdminDashboardView orgId={org._id} orgName={org.name} />;

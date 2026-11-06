@@ -148,6 +148,14 @@ export const routes = [
         ),
       },
       {
+        path: "/org/:slug/admin/engagement",
+        element: (
+          <Layout>
+            <OrganizationAdmin />
+          </Layout>
+        ),
+      },
+      {
         path: "/org/:slug/admin/registration-form",
         element: (
           <Layout>
