@@ -29,6 +29,8 @@ import { notifications } from "@mantine/notifications";
 import type { EventItem } from "../../api/events";
 import { HERD_POSITIONS, type HerdPosition } from "../../api/herd";
 import {
+  DEFAULT_MILESTONE_HOLDOUT,
+  DEFAULT_MILESTONE_ITEMS,
   DEFAULT_MILESTONE_PRIVATE,
   DEFAULT_MILESTONE_PUBLIC,
   awardMilestone,
@@ -70,11 +72,12 @@ function withDefaults(event: EventItem): EventMilestonesConfig {
   const c = event.milestonesConfig;
   return {
     enabled: !!c?.enabled,
-    holdoutPercent: c?.holdoutPercent ?? 0,
+    // Sin hitos guardados se precargan los de por defecto (apagados hasta activar)
+    holdoutPercent: c ? (c.holdoutPercent ?? 0) : DEFAULT_MILESTONE_HOLDOUT,
     accentColor: c?.accentColor,
     privateMessage: { ...DEFAULT_MILESTONE_PRIVATE, ...(c?.privateMessage ?? {}) },
     publicMessage: { ...DEFAULT_MILESTONE_PUBLIC, ...(c?.publicMessage ?? {}) },
-    items: c?.items ?? [],
+    items: c?.items ?? DEFAULT_MILESTONE_ITEMS.map((i) => ({ ...i })),
   };
 }
 

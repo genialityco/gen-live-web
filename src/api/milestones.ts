@@ -9,7 +9,7 @@ import { limitToLast, onChildAdded, onValue, query, ref } from "firebase/databas
 import { api } from "../core/api";
 import { rtdb } from "../core/firebase";
 import type { EventItem } from "./events";
-import type { HerdMessageConfig } from "./herd";
+import { HERD_MESSAGE_DEFAULT_STYLE, type HerdMessageConfig } from "./herd";
 
 export type MilestoneType =
   | "watchMinutes"
@@ -150,8 +150,14 @@ export const MILESTONE_DELIVERIES: Array<{ value: MilestoneDelivery; label: stri
   { value: "both", label: "Ambos" },
 ];
 
+// Valores por defecto: los del evento isglt2-boehringer (acewebinarco)
 export const DEFAULT_MILESTONE_PRIVATE: Required<Pick<MilestoneChannel, "position" | "durationSec">> &
-  MilestoneChannel = { position: "top-center", durationSec: 8, label: "¡LOGRO!" };
+  MilestoneChannel = {
+  position: "top-center",
+  durationSec: 8,
+  label: "¡LOGRO!",
+  style: HERD_MESSAGE_DEFAULT_STYLE,
+};
 
 export const DEFAULT_MILESTONE_PUBLIC: Required<Pick<MilestoneChannel, "position" | "durationSec">> &
   MilestoneChannel & { minIntervalSec: number; maxNames: number } = {
@@ -160,7 +166,88 @@ export const DEFAULT_MILESTONE_PUBLIC: Required<Pick<MilestoneChannel, "position
   label: "FELICITACIONES",
   minIntervalSec: 30,
   maxNames: 3,
+  style: HERD_MESSAGE_DEFAULT_STYLE,
 };
+
+/** % del grupo de control con que arranca un evento sin hitos configurados */
+export const DEFAULT_MILESTONE_HOLDOUT = 20;
+
+/** Hitos con que arranca un evento que aún no tiene hitos configurados */
+export const DEFAULT_MILESTONE_ITEMS: MilestoneDef[] = [
+  {
+    id: "primeros-20",
+    enabled: true,
+    type: "firstToConnect",
+    threshold: 20,
+    delivery: "both",
+    privateTemplate:
+      "¡{nombre}, fuiste de las primeras {umbral} personas en conectarte! Gracias por llegar puntual",
+    publicTemplate: "¡Gracias a {nombres} por estar entre los primeros en conectarse!",
+  },
+  {
+    id: "seguidos-30",
+    enabled: true,
+    type: "watchMinutes",
+    threshold: 30,
+    delivery: "private",
+    privateTemplate:
+      "¡{nombre}, llevas {umbral} minutos seguidos con nosotros! Gracias por acompañarnos en esta sesión",
+  },
+  {
+    id: "seguidos-60",
+    enabled: true,
+    type: "watchMinutes",
+    threshold: 60,
+    delivery: "private",
+    privateTemplate:
+      "¡{nombre}, ya son {umbral} minutos seguidos de actualización! Tu compromiso con tus pacientes se nota",
+  },
+  {
+    id: "total-80",
+    enabled: true,
+    type: "totalMinutes",
+    threshold: 80,
+    delivery: "both",
+    privateTemplate:
+      "¡{nombre}, ya sumas {umbral} minutos de actualización médica con nosotros! Gracias por quedarte",
+    publicTemplate: "¡Felicitamos a {nombres} por acompañarnos más de {umbral} minutos!",
+  },
+  {
+    id: "frecuente-3",
+    enabled: true,
+    type: "frequentAttendee",
+    threshold: 3,
+    delivery: "private",
+    privateTemplate: "¡{nombre}, este es tu evento número {valor} con nosotros! Gracias por tu fidelidad",
+  },
+  {
+    id: "frecuente-5",
+    enabled: true,
+    type: "frequentAttendee",
+    threshold: 5,
+    delivery: "public",
+    publicTemplate:
+      "¡{nombres} ya nos {ha|han} acompañado en {umbral} o más eventos! Gracias por su fidelidad",
+  },
+  {
+    id: "saludos-2",
+    enabled: true,
+    type: "greetingsSent",
+    threshold: 2,
+    delivery: "private",
+    privateTemplate:
+      "¡{nombre}, ya saludaste a tus colegas {umbral} veces! Gracias por darle vida a la comunidad",
+  },
+  {
+    id: "mejor-pregunta",
+    enabled: true,
+    type: "manual",
+    threshold: 1,
+    delivery: "both",
+    privateTemplate: "¡{nombre}, tu pregunta fue elegida como una de las mejores de la sesión!",
+    publicTemplate: "¡Felicitamos a {nombres} por {su|sus} excelentes preguntas!",
+  },
+];
 
 export function milestoneTypeInfo(type: MilestoneType) {
   return MILESTONE_TYPES.find((t) => t.value === type) ?? MILESTONE_TYPES[0];

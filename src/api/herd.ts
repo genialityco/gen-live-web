@@ -57,11 +57,11 @@ export type HerdGreetingConfig = {
 
 // Debe coincidir con DEFAULT_HERD_CONFIG.greeting del backend
 export const DEFAULT_HERD_GREETING: Required<HerdGreetingConfig> = {
-  enabled: false,
+  enabled: true,
   position: "bottom-right",
   durationSec: 6,
   cooldownSec: 60,
-  holdoutPercent: 0,
+  holdoutPercent: 20,
 };
 
 /** Nombre de los grupos sin nombre propio: "colegas de {valor}" (plural) y/o singular */
@@ -185,11 +185,25 @@ export type HerdPrivateTrigger = {
 export type HerdMessageResolved = Required<Omit<HerdMessageConfig, "label" | "style">> &
   Pick<HerdMessageConfig, "label" | "style">;
 
-// Deben coincidir con DEFAULT_HERD_CONFIG del backend (events/herd.service.ts)
+/** Estilo por defecto de cada mensaje (igual a HERD_DEFAULT_STYLE del backend) */
+export const HERD_MESSAGE_DEFAULT_STYLE: AnnouncementStyle = {
+  template: "lowerThird",
+  mode: "static",
+  size: "sm",
+  animation: "slide",
+  font: "montserrat",
+  bgColor: "rgba(255, 255, 255, 0.96)",
+  textColor: "#0f172a",
+  accentColor: "#2563eb",
+};
+
+// Deben coincidir con DEFAULT_HERD_CONFIG del backend (events/herd.service.ts);
+// son los del evento isglt2-boehringer (acewebinarco)
 export const DEFAULT_HERD_PRIVATE: HerdMessageResolved &
   Required<Pick<HerdPrivateMessageConfig, "firstCount" | "firstTemplate" | "ordinalGender">> = {
   enabled: true,
-  template: "¡Hola {nombre}! Contigo ya son {cantidad} {grupo} conectados",
+  template:
+    "¡Hola {nombre}! Contigo {está|están} conectados {inscritos} profesionales de {grupo_plural} apostándole a la excelencia médica",
   position: "top-left",
   durationSec: 8,
   repeatEverySec: 0,
@@ -197,19 +211,22 @@ export const DEFAULT_HERD_PRIVATE: HerdMessageResolved &
   firstCount: 5,
   firstTemplate: "¡Hola {nombre}! Eres la {posicion} persona de {grupo_plural} en conectarse",
   ordinalGender: "f",
+  style: HERD_MESSAGE_DEFAULT_STYLE,
 };
 
 export const DEFAULT_HERD_PUBLIC: HerdMessageResolved &
   Required<Pick<HerdPublicMessageConfig, "announceOnGrowth" | "minIntervalSec" | "milestoneEvery">> = {
   enabled: true,
-  template: "¡Ya son {cantidad} {grupo} conectados!",
+  template: "¡Se conectó un nuevo profesional de {grupo}!",
   position: "bottom-left",
   durationSec: 6,
   announceOnGrowth: true,
   minIntervalSec: 20,
-  milestoneEvery: 1,
+  milestoneEvery: 10,
   repeatEverySec: 0,
   repeatTemplate: "",
+  label: "Bienvenido",
+  style: HERD_MESSAGE_DEFAULT_STYLE,
 };
 
 /** Máximo de "primeros" personalizables (hay ordinales hasta décimo) */
