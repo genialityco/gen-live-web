@@ -73,7 +73,7 @@ export default function OrganizationAdmin() {
     } else if (path.endsWith("/suppressed-emails")) {
       return <SuppressedEmailsView orgId={org._id} />;
     } else if (path.endsWith("/engagement")) {
-      return <AdminEngagementView orgId={org._id} />;
+      return <AdminEngagementView orgId={org._id} orgName={org.name} />;
     } else {
       // Vista por defecto (dashboard)
       return <AdminDashboardView orgId={org._id} orgName={org.name} />;

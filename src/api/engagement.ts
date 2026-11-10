@@ -30,13 +30,38 @@ export type EngagementEvent = {
     awards: number;
     awardsShown: number;
   };
+  /** Saludo entre colegas (botón «👋 Saludar» de los anuncios de manada) */
+  greeting: {
+    enabled: boolean;
+    holdoutPercent: number;
+    withButton: number; // personas que vieron el anuncio con botón
+    noButton: number; // personas del control sin botón
+    greets: number;
+    replies: number;
+  };
   liveViewers: number;
   hasPlayback: boolean;
   refMin: number; // duración de referencia del vivo (p95 de lo visto)
 };
 
-/** [índice del evento, minutos en vivo, hasta el final (1/0), estado] */
-export type EngagementVisit = [number, number, number, ExposureStatus];
+/**
+ * Saludo del asistente en un evento: [botón (1 vio el anuncio con botón ·
+ * 0 control sin botón · null no vio anuncio individual), saludos enviados,
+ * saludos que devolvió, devoluciones que recibió]
+ */
+export type GreetingVisit = [1 | 0 | null, number, number, number];
+
+/**
+ * [índice del evento, minutos en vivo, hasta el final (1/0), estado,
+ * saludo (null o ausente si no hay registros de saludo)]
+ */
+export type EngagementVisit = [
+  number,
+  number,
+  number,
+  ExposureStatus,
+  (GreetingVisit | null)?,
+];
 
 export type EngagementAttendee = {
   id: string;

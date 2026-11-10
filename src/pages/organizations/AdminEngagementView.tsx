@@ -3,11 +3,13 @@ import {
   Alert,
   Badge,
   Box,
+  Button,
   Card,
   Center,
   Checkbox,
   Group,
   Loader,
+  Menu,
   Modal,
   Pagination,
   SegmentedControl,
@@ -32,6 +34,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { IconDownload } from "@tabler/icons-react";
 import dayjs from "dayjs";
 import "dayjs/locale/es";
 import {
@@ -39,19 +42,14 @@ import {
   type EngagementAttendee,
   type EngagementData,
   type EngagementEvent,
-  type EngagementKind,
   type ExposureStatus,
+  type GreetingVisit,
 } from "../../api/engagement";
+
+import { exportEngagementExcel, KIND_LABEL, STATUS_LABEL } from "./engagementExport";
 
 // ── Textos y colores ──────────────────────────────────────────────────────────
 
-const STATUS_LABEL: Record<ExposureStatus, string> = {
-  T: "Recibió mensajes",
-  C: "Control sorteado",
-  X: "Grupo excluido",
-  N: "Sin mensajes personales",
-  B: "Evento sin funciones",
-};
 const STATUS_COLOR: Record<ExposureStatus, string> = {
   T: "blue",
   C: "orange",
@@ -59,13 +57,6 @@ const STATUS_COLOR: Record<ExposureStatus, string> = {
   N: "gray",
   B: "teal",
 };
-const KIND_LABEL: Record<EngagementKind, string> = {
-  base: "Sin funciones",
-  herd: "Anuncios",
-  milestones: "Logros",
-  both: "Anuncios + logros",
-};
-
 // Paleta categórica validada (slots 1 y 2)
 const COLOR_WITH = "#2a78d6";
 const COLOR_WITHOUT = "#eb6834";
@@ -88,6 +79,18 @@ const cellBackground = (s: ExposureStatus) =>
     : s === "C"
       ? "var(--mantine-color-orange-1)"
       : undefined;
+/** Texto del saludo entre colegas para el título de una celda */
+const greetLabel = (g: GreetingVisit | null) => {
+  if (!g) return "";
+  const parts = [
+    g[0] === 1 ? "vio el botón de saludo" : g[0] === 0 ? "control sin botón de saludo" : "",
+    g[1] ? `saludó ${g[1]} vez/veces` : "",
+    g[2] ? `devolvió ${g[2]} saludo(s)` : "",
+    g[3] ? `le devolvieron ${g[3]} saludo(s)` : "",
+  ].filter(Boolean);
+  return parts.length ? ` · ${parts.join(" · ")}` : "";
+};
+
 const MIN_N = 10; // por debajo, la muestra no permite concluir
 
 type Metric = "pct" | "min";
@@ -152,6 +155,7 @@ type Row = {
   pct: number;
   untilEnd: boolean;
   status: ExposureStatus;
+  greet: GreetingVisit | null;
 };
 
 const storageKey = (orgId: string) => `engagement-analysis:${orgId}`;
@@ -206,9 +210,10 @@ function StatusBadge({ s }: { s: ExposureStatus }) {
 
 interface Props {
   orgId: string;
+  orgName?: string;
 }
 
-export default function AdminEngagementView({ orgId }: Props) {
+export default function AdminEngagementView({ orgId, orgName }: Props) {
   const [data, setData] = useState<EngagementData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -231,6 +236,7 @@ export default function AdminEngagementView({ orgId }: Props) {
   const [gridGroup, setGridGroup] = useState<string | null>(null);
   const [gridSearch, setGridSearch] = useState("");
   const [gridPage, setGridPage] = useState(1);
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -271,7 +277,7 @@ export default function AdminEngagementView({ orgId }: Props) {
     if (!data) return [];
     const out: Row[] = [];
     for (const a of data.attendees) {
-      for (const [idx, min, untilEnd, status] of a.visits) {
+      for (const [idx, min, untilEnd, status, greet] of a.visits) {
         const event = data.events[idx];
         if (!event || !included.has(event.id)) continue;
         out.push({
@@ -282,6 +288,7 @@ export default function AdminEngagementView({ orgId }: Props) {
           untilEnd: untilEnd === 1,
           // Evento marcado a mano como "sin funciones"
           status: prefs.asBase.includes(event.id) ? "B" : status,
+          greet: greet ?? null,
         });
       }
     }
@@ -569,9 +576,53 @@ export default function AdminEngagementView({ orgId }: Props) {
             { value: "min", label: "Minutos" },
           ]}
         />
-        <Text size="sm" c="dimmed">
-          {included.size} evento(s) en el análisis · {rows.length} asistencias
-        </Text>
+        <Group gap="sm">
+          <Text size="sm" c="dimmed">
+            {included.size} evento(s) en el análisis · {rows.length} asistencias
+          </Text>
+          <Menu position="bottom-end" withinPortal>
+            <Menu.Target>
+              <Button
+                size="xs"
+                variant="light"
+                leftSection={<IconDownload size={16} />}
+                loading={exporting}
+                disabled={!rows.length}
+              >
+                Exportar Excel
+              </Button>
+            </Menu.Target>
+            <Menu.Dropdown>
+              {[
+                { anonymous: false, label: "Con nombre y correo" },
+                { anonymous: true, label: "Anónimo (sin nombre ni correo)" },
+              ].map((o) => (
+                <Menu.Item
+                  key={o.label}
+                  onClick={async () => {
+                    setExporting(true);
+                    try {
+                      await exportEngagementExcel({
+                        data,
+                        rows,
+                        included,
+                        prefs,
+                        anonymous: o.anonymous,
+                        orgName,
+                      });
+                    } catch (e) {
+                      console.error("Error exportando el análisis:", e);
+                    } finally {
+                      setExporting(false);
+                    }
+                  }}
+                >
+                  {o.label}
+                </Menu.Item>
+              ))}
+            </Menu.Dropdown>
+          </Menu>
+        </Group>
       </Group>
 
       <Tabs defaultValue="grid" keepMounted={false}>
@@ -629,7 +680,7 @@ export default function AdminEngagementView({ orgId }: Props) {
                 <Text size="xs">Sin mensaje</Text>
               </Group>
               <Text size="xs" c="dimmed">
-                · vacío = no asistió · ✓ = se quedó hasta el final
+                · vacío = no asistió · ✓ = se quedó hasta el final · 👋 = saludó a colegas
               </Text>
             </Group>
 
@@ -684,12 +735,13 @@ export default function AdminEngagementView({ orgId }: Props) {
                               style={{ background: cellBackground(r.status) }}
                               title={`${STATUS_LABEL[r.status]} · ${r.min.toFixed(0)} min (${r.pct.toFixed(0)} % del vivo)${
                                 r.event.endedAt ? (r.untilEnd ? " · se quedó hasta el final" : "") : ""
-                              }`}
+                              }${greetLabel(r.greet)}`}
                             >
                               <Text size="xs" fw={600} span>
                                 {r.status === "T" && "✉ "}
                                 {metric === "pct" ? `${r.pct.toFixed(0)} %` : `${r.min.toFixed(0)} min`}
                                 {r.untilEnd && " ✓"}
+                                {(r.greet?.[1] ?? 0) > 0 && " 👋"}
                               </Text>
                             </Table.Td>
                           );
@@ -1055,6 +1107,13 @@ export default function AdminEngagementView({ orgId }: Props) {
                           {(e.herd.holdoutPercent > 0 || e.milestones.holdoutPercent > 0) && (
                             <Text size="xs" c="dimmed">
                               control {Math.max(e.herd.holdoutPercent, e.milestones.holdoutPercent)} %
+                            </Text>
+                          )}
+                          {(e.greeting?.enabled || (e.greeting?.withButton ?? 0) > 0) && (
+                            <Text size="xs" c="dimmed">
+                              👋 {e.greeting?.greets} saludo(s) · {e.greeting?.replies} devuelto(s)
+                              {(e.greeting?.holdoutPercent ?? 0) > 0 &&
+                                ` · control ${e.greeting?.holdoutPercent} %`}
                             </Text>
                           )}
                         </Table.Td>
