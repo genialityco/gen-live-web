@@ -55,6 +55,9 @@ export type HerdGreetingConfig = {
   holdoutPercent?: number; // % al azar sin botón (experimento)
 };
 
+// Grupo de control por defecto de los anuncios (DEFAULT_HOLDOUT_PERCENT del backend)
+export const DEFAULT_HERD_HOLDOUT = 20;
+
 // Debe coincidir con DEFAULT_HERD_CONFIG.greeting del backend
 export const DEFAULT_HERD_GREETING: Required<HerdGreetingConfig> = {
   enabled: true,

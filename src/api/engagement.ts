@@ -13,6 +13,17 @@ export type EngagementKind = "base" | "herd" | "milestones" | "both";
  */
 export type ExposureStatus = "T" | "C" | "X" | "N" | "B";
 
+export type LiveEndSource = "recorded" | "status" | "estimated";
+
+/** Mensajes mostrados en un evento según el registro de entregas */
+export type DeliveryTotals = {
+  herdPrivate: number;
+  herdPublic: number;
+  milestone: number;
+  greeting: number;
+  attendees: number; // personas que vieron al menos un mensaje
+};
+
 export type EngagementEvent = {
   id: string;
   title: string;
@@ -20,7 +31,19 @@ export type EngagementEvent = {
   status: string;
   hidden: boolean;
   date: string;
+  /** Cierre del vivo usado para "hasta el final" (ver liveEndSource) */
   endedAt: string | null;
+  /**
+   * De dónde sale el cierre: recorded = registrado al salir de vivo ·
+   * status = cuando se marcó como terminado · estimated = salida masiva de
+   * la audiencia (eventos anteriores, o marcados como terminados tarde)
+   */
+  liveEndSource?: LiveEndSource | null;
+  liveStartedAt?: string | null;
+  /** Duración real del vivo (min), solo con inicio y cierre registrados */
+  liveDurationMin?: number | null;
+  /** Mensajes efectivamente mostrados; null = el evento no tiene registro */
+  delivered?: DeliveryTotals | null;
   kind: EngagementKind;
   herd: { enabled: boolean; holdoutPercent: number; announcements: number };
   milestones: {
@@ -53,7 +76,9 @@ export type GreetingVisit = [1 | 0 | null, number, number, number];
 
 /**
  * [índice del evento, minutos en vivo, hasta el final (1/0), estado,
- * saludo (null o ausente si no hay registros de saludo)]
+ * saludo (null o ausente si no hay registros de saludo), mensajes personales
+ * mostrados (null o ausente si el evento no tiene registro de entregas),
+ * sorteo de anuncios, sorteo de logros]
  */
 export type EngagementVisit = [
   number,
@@ -61,7 +86,17 @@ export type EngagementVisit = [
   number,
   ExposureStatus,
   (GreetingVisit | null)?,
+  (number | null)?,
+  ExperimentArm?,
+  ExperimentArm?,
 ];
+
+/**
+ * Brazo de un sorteo: 1 ve los mensajes · 0 grupo de control · null sin
+ * sorteo (función apagada, control en 0, sin grupo o grupo excluido).
+ * Anuncios y logros se sortean por separado: se pueden cruzar 2×2.
+ */
+export type ExperimentArm = 1 | 0 | null;
 
 export type EngagementAttendee = {
   id: string;

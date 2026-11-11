@@ -34,6 +34,7 @@ import {
   announceHerd,
   DEFAULT_HERD_FORMAL_TITLE,
   DEFAULT_HERD_GREETING,
+  DEFAULT_HERD_HOLDOUT,
   DEFAULT_HERD_PRIVATE,
   DEFAULT_HERD_PUBLIC,
   DEFAULT_HERD_STYLE,
@@ -105,7 +106,7 @@ function withDefaults(event: EventItem, fields: FormField[]): EventHerdConfig {
     labelPattern: c?.labelPattern ?? "",
     singularPattern: c?.singularPattern ?? "",
     extraHerds: c?.extraHerds ?? [],
-    holdoutPercent: c?.holdoutPercent ?? 0,
+    holdoutPercent: c?.holdoutPercent ?? DEFAULT_HERD_HOLDOUT,
     formalTitle: c?.formalTitle,
     // El color de acento global de versiones anteriores pasa al estilo de cada mensaje
     accentColor: c?.accentColor,
@@ -239,6 +240,11 @@ export function HerdAnnouncementsCard({
                 {excludedCount > 0 && `Anuncia a ${optionCount - excludedCount} de ${optionCount} grupos`}
                 {excludedCount > 0 && !!saved.holdoutPercent && " · "}
                 {!!saved.holdoutPercent && `🧪 Grupo de control: ${saved.holdoutPercent}% sin mensajes`}
+              </Text>
+            )}
+            {!saved.holdoutPercent && (
+              <Text size="xs" c="orange">
+                ⚠️ Sin grupo de control: no se podrá medir si los anuncios retienen.
               </Text>
             )}
           </Stack>
@@ -882,11 +888,19 @@ function HerdConfigForm({
                   </Button>
                 ))}
               </Group>
-              {!!config.holdoutPercent && (
+              {config.holdoutPercent ? (
                 <Text size="xs" c="dimmed">
                   50% da la medición más rápida; 10–20% sacrifica menos audiencia
                   pero necesita más asistentes para concluir.
                 </Text>
+              ) : (
+                <Alert color="orange" variant="light" p="xs">
+                  <Text size="xs">
+                    Sin grupo de control no hay contra qué comparar: cualquier
+                    diferencia en la retención puede venir de la hora, el tema o
+                    el cansancio de la audiencia, no de los anuncios. Recomendado: 20%.
+                  </Text>
+                </Alert>
               )}
             </Stack>
           </Stack>
