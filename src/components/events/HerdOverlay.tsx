@@ -33,6 +33,7 @@ import {
 import { AnnouncementBanner } from "../studio/AnnouncementBanner";
 import { EXIT_MS } from "../studio/announcement-templates";
 import { trackEvent } from "../../lib/utmTracking";
+import { reportDelivery } from "../../api/deliveries";
 
 // Espera tras entrar antes del mensaje privado: el backend agrupa la presencia
 // en ventanas de 2-5 s, así el conteo ya incluye a quien acaba de llegar.
@@ -365,6 +366,7 @@ export function HerdOverlay({
     if (!demo) {
       // Para medir la tasa de saludo: cuántos vieron el anuncio (con o sin botón)
       void reportHerdImpression(eventId!, source, g.key, nombre).catch(() => {});
+      reportDelivery(eventId!, { feature: "herd", channel: "private", source, groupKey: g.key });
       trackEvent("herd_announcement_shown", {
         event_id: eventId,
         herd_group: g.key,
@@ -504,6 +506,13 @@ export function HerdOverlay({
         inscritosTotal: Math.max(e.total, e.registeredTotal ?? 0),
       });
       show("public", text, p, p.durationSec, pubRef.current.accent);
+      reportDelivery(eventId!, {
+        feature: "herd",
+        channel: "public",
+        source: e.manual ? "manual" : e.repeat ? "repeat" : "growth",
+        groupKey: e.key,
+        refId: `pub-${e.at}`,
+      });
     });
     return () => unsub();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -608,6 +617,13 @@ export function HerdOverlay({
         const group = privateArgs.current.ownGroups.find((g) => g.key === key);
         if (!group) return;
         showGreetingReceived({ id: gr.id, name: gr.name }, group);
+        reportDelivery(eventId!, {
+          feature: "greeting",
+          channel: "private",
+          source: "received",
+          groupKey: group.key,
+          refId: gr.id,
+        });
         trackEvent("herd_greeting_received", { event_id: eventId, herd_group: group.key });
       }),
     );
@@ -621,6 +637,7 @@ export function HerdOverlay({
     const unsub = subscribeHerdGreetReplies(eventId!, uid, (r) => {
       if (r.at < since) return;
       show("greeting", `🙌 ${r.name} te devolvió el saludo`, greetingArgs.current.greetingMsg(), 5, privateArgs.current.accent);
+      reportDelivery(eventId!, { feature: "greeting", channel: "private", source: "reply", refId: r.id });
       trackEvent("herd_greeting_reply_received", { event_id: eventId, herd_group: ownGroupKey });
     });
     return () => unsub();

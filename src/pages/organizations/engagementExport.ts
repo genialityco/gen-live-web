@@ -8,8 +8,10 @@ import type {
   EngagementData,
   EngagementEvent,
   EngagementKind,
+  ExperimentArm,
   ExposureStatus,
   GreetingVisit,
+  LiveEndSource,
 } from "../../api/engagement";
 
 export const STATUS_LABEL: Record<ExposureStatus, string> = {
@@ -35,6 +37,17 @@ export type ExportRow = {
   untilEnd: boolean;
   status: ExposureStatus;
   greet: GreetingVisit | null;
+  shown: number | null;
+  herdArm: ExperimentArm;
+  milestoneArm: ExperimentArm;
+};
+
+const ARM_LABEL = (a: ExperimentArm) => (a === 1 ? "Con mensajes" : a === 0 ? "Control" : null);
+
+const LIVE_END_LABEL: Record<LiveEndSource, string> = {
+  recorded: "Registrado",
+  status: "Marcado como terminado",
+  estimated: "Estimado (salida de la audiencia)",
 };
 
 type Options = {
@@ -113,6 +126,12 @@ export async function exportEngagementExcel({
       Funciones: KIND_LABEL[e.kind],
       "Tratado como sin funciones": prefs.asBase.includes(e.id) ? "Sí" : "No",
       "Anuncios de manada enviados": e.herd.announcements,
+      "Registro de entregas": e.delivered ? "Sí" : "No",
+      "Personas que vieron algún mensaje": e.delivered?.attendees ?? null,
+      "Anuncios privados mostrados": e.delivered?.herdPrivate ?? null,
+      "Anuncios públicos mostrados": e.delivered?.herdPublic ?? null,
+      "Logros mostrados (registro)": e.delivered?.milestone ?? null,
+      "Saludos recibidos mostrados": e.delivered?.greeting ?? null,
       "Control manada %": e.herd.holdoutPercent,
       "Logros configurados": e.milestones.items,
       "Logros otorgados": e.milestones.awards,
@@ -133,6 +152,9 @@ export async function exportEngagementExcel({
       "Espectadores en vivo": e.liveViewers,
       "Duración de referencia (min)": e.refMin,
       Finalizado: e.endedAt ? "Sí" : "No",
+      "Cierre del vivo": e.endedAt ? dayjs(e.endedAt).format("YYYY-MM-DD HH:mm") : null,
+      "Origen del cierre": e.liveEndSource ? LIVE_END_LABEL[e.liveEndSource] : null,
+      "Duración real del vivo (min)": e.liveDurationMin ?? null,
       "Asistencias analizadas": list.length,
       "Recibieron mensajes (n)": t.length,
       "No recibieron (n)": noT.length,
@@ -166,6 +188,9 @@ export async function exportEngagementExcel({
     "Estado (código)": r.status,
     Estado: STATUS_LABEL[r.status],
     "Recibió mensaje": r.status === "T" ? 1 : 0,
+    "Mensajes personales mostrados": r.shown,
+    "Sorteo anuncios": ARM_LABEL(r.herdArm),
+    "Sorteo logros": ARM_LABEL(r.milestoneArm),
     "Minutos en vivo": r1(r.min),
     "% del vivo": r1(r.pct),
     "Duración de referencia (min)": r.event.refMin,
@@ -175,6 +200,40 @@ export async function exportEngagementExcel({
     "Saludos que devolvió": r.greet?.[2] ?? 0,
     "Devoluciones recibidas": r.greet?.[3] ?? 0,
   }));
+
+  // ── Experimento 2×2: sorteo de anuncios × sorteo de logros ────────────────
+  // Por evento y con todos los eventos juntos (más asistentes por celda)
+  const armRows = sortedRows.filter((r) => r.herdArm !== null || r.milestoneArm !== null);
+  const cellsOf = (list: ExportRow[], label: string, id: string | null) => {
+    const cells = new Map<string, ExportRow[]>();
+    for (const r of list) {
+      const k = `${r.herdArm ?? "-"}|${r.milestoneArm ?? "-"}`;
+      cells.set(k, [...(cells.get(k) ?? []), r]);
+    }
+    return [...cells.entries()]
+      .sort(([a], [b]) => b.localeCompare(a))
+      .map(([, rs]) => ({
+        Evento: label,
+        "Evento ID": id,
+        "Sorteo anuncios": ARM_LABEL(rs[0].herdArm) ?? "Sin sorteo",
+        "Sorteo logros": ARM_LABEL(rs[0].milestoneArm) ?? "Sin sorteo",
+        Asistencias: rs.length,
+        "Prom. % del vivo": avg(rs.map((r) => r.pct)),
+        "Prom. min en vivo": avg(rs.map((r) => r.min)),
+        "% hasta el final": pctUntilEnd(rs),
+      }));
+  };
+  // Solo entre asistencias de eventos con cierre conocido
+  function pctUntilEnd(rs: ExportRow[]) {
+    const withEnd = rs.filter((r) => r.event.endedAt);
+    return withEnd.length ? r1((withEnd.filter((r) => r.untilEnd).length / withEnd.length) * 100) : null;
+  }
+  const armByEvent = new Map<string, ExportRow[]>();
+  for (const r of armRows) armByEvent.set(r.event.id, [...(armByEvent.get(r.event.id) ?? []), r]);
+  const factorialSheet = [
+    ...cellsOf(armRows, "Todos los eventos incluidos", null),
+    ...[...armByEvent.values()].flatMap((rs) => cellsOf(rs, eventCode(rs[0].event), rs[0].event.id)),
+  ];
 
   // ── Asistentes (resumen por persona) ───────────────────────────────────────
   const byPerson = new Map<string, { a: EngagementAttendee; list: ExportRow[] }>();
@@ -237,8 +296,10 @@ export async function exportEngagementExcel({
     ["Objetivo", "Medir si los anuncios de manada y los logros (mensajes) hacen que los asistentes se queden más tiempo en los eventos en vivo."],
     ["Métrica", "Tiempo de REPRODUCCIÓN en vivo: solo cuenta mientras el video se reproduce con el evento en vivo (no cuenta cuenta regresiva, pausas ni pestañas en segundo plano). Solo hay datos desde el 23-jun-2026."],
     ["% del vivo", "Minutos vistos / duración de referencia del evento × 100 (tope 100). La duración de referencia es el percentil 95 de lo que vieron los asistentes, para comparar eventos largos y cortos."],
-    ["Hasta el final", "1 si su última señal fue a menos de 5 minutos del cierre del evento. Vacío si el evento no tiene hora de cierre."],
-    ["Estado T", STATUS_LABEL.T + ": se le enviaron anuncios de manada o se le entregó un logro en privado."],
+    ["Hasta el final", "1 si su última señal fue a menos de 5 minutos del cierre del vivo. Vacío si no se conoce el cierre."],
+    ["Cierre del vivo", "Registrado: hora exacta en que el evento salió de vivo (desde nov-2026). Marcado como terminado: hora en que se marcó el evento como terminado. Estimado: eventos sin cierre registrado, o marcados como terminados mucho después; se toma la salida masiva de la audiencia."],
+    ["Estado T", STATUS_LABEL.T + ": en el sorteo quedó para recibir anuncios de manada, o se le entregó un logro en privado. Indica que era elegible, no que vio el mensaje: ver «Mensajes personales mostrados»."],
+    ["Mensajes personales mostrados", "Cuántos anuncios privados, logros y saludos se le mostraron en pantalla según el registro de entregas. 0 = el evento tiene registro y no vio ninguno. Vacío = el evento no tiene registro de entregas (anterior a nov-2026)."],
     ["Estado C", STATUS_LABEL.C + ": grupo de control elegido al azar; no recibió mensajes a propósito. Es la comparación más confiable contra T."],
     ["Estado X", STATUS_LABEL.X + ": su grupo de especialistas está excluido de los anuncios."],
     ["Estado N", STATUS_LABEL.N + ": el evento tuvo funciones, pero esta persona no tenía grupo/mensajes personales."],
@@ -250,6 +311,8 @@ export async function exportEngagementExcel({
     ["Historial de mensajes", "El historial de anuncios y logros se guarda desde el 4-nov-2026; en eventos anteriores la clasificación T/C puede estar incompleta."],
     ["Hoja Eventos", "Una fila por evento con espectadores en vivo, incluido o no en el análisis, con sus totales."],
     ["Hoja Asistencias", "Una fila por asistente × evento incluido. Es la hoja principal para el análisis estadístico."],
+    ["Sorteo anuncios / Sorteo logros", "Cada función se sortea por separado y de forma independiente. Con mensajes = el sorteo le asignó ver los mensajes · Control = sorteado para no verlos · vacío = sin sorteo (función apagada, control en 0 %, o sin grupo de especialidad en el caso de los anuncios). El sorteo de logros vale para todos los asistentes, cumplieran o no algún hito: es la comparación por intención de tratar."],
+    ["Hoja Experimento 2x2", "Cruce del sorteo de anuncios con el de logros: asistencias, % del vivo promedio y % hasta el final por celda, primero con todos los eventos incluidos y luego por evento. Comparar «Con mensajes» contra «Control» dentro de la misma columna separa el efecto de cada función."],
     ["Hoja Asistentes", "Resumen por persona: promedios con y sin mensaje y su diferencia."],
     ["Hoja Matriz", "Personas × eventos con el % del vivo; ✉ indica que recibió mensaje y 👋 que saludó a colegas. Vacío = no asistió."],
     ["Anonimizado", anonymous ? "Sí: los asistentes solo se identifican con un código (A00001…)." : "No: incluye nombre y correo."],
@@ -265,6 +328,7 @@ export async function exportEngagementExcel({
   add("Léeme", readmeSheet);
   add("Eventos", XLSX.utils.json_to_sheet(eventsSheet));
   add("Asistencias", XLSX.utils.json_to_sheet(visitsSheet));
+  if (factorialSheet.length) add("Experimento 2x2", XLSX.utils.json_to_sheet(factorialSheet));
   add("Asistentes", XLSX.utils.json_to_sheet(peopleSheet));
   add("Matriz % del vivo", XLSX.utils.json_to_sheet(matrixSheet));
 

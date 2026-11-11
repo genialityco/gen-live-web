@@ -13,6 +13,7 @@ import {
 import { AnnouncementBanner } from "../studio/AnnouncementBanner";
 import { EXIT_MS } from "../studio/announcement-templates";
 import { trackEvent } from "../../lib/utmTracking";
+import { reportDelivery } from "../../api/deliveries";
 
 // Una felicitación más vieja que esto no se muestra (recargas, llegar tarde)
 const PRIVATE_FRESH_MS = 60_000;
@@ -20,7 +21,8 @@ const PUBLIC_FRESH_MS = 15_000;
 // Pausa entre una felicitación y la siguiente
 const GAP_MS = 600;
 
-type Item = { kind: "private" | "public"; text: string; milestoneId: string };
+// refId: identifica el mensaje en el registro de entregas
+type Item = { kind: "private" | "public"; text: string; milestoneId: string; refId: string };
 
 /**
  * Felicitaciones por logros sobre el reproductor del asistente. El backend
@@ -80,6 +82,7 @@ export function MilestoneOverlay({
       milestone_id: next.milestoneId,
       kind: next.kind,
     });
+    reportDelivery(eventId!, { feature: "milestone", channel: next.kind, refId: next.refId });
     timers.current.push(
       setTimeout(() => {
         setBanner(null);
@@ -106,7 +109,7 @@ export function MilestoneOverlay({
       if (seen.has(n.id) || !n.text) return;
       seen.add(n.id);
       if (getServerNow() - Number(n.at) > PRIVATE_FRESH_MS) return;
-      enqueue({ kind: "private", text: n.text, milestoneId: n.milestoneId });
+      enqueue({ kind: "private", text: n.text, milestoneId: n.milestoneId, refId: n.id });
     });
     return () => unsub();
   }, [on, eventId, uid]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -119,7 +122,7 @@ export function MilestoneOverlay({
       if (!n?.text || Number(n.at) === lastAt) return;
       lastAt = Number(n.at);
       if (getServerNow() - lastAt > PUBLIC_FRESH_MS) return;
-      enqueue({ kind: "public", text: n.text, milestoneId: n.milestoneId });
+      enqueue({ kind: "public", text: n.text, milestoneId: n.milestoneId, refId: `pub-${lastAt}` });
     });
     return () => unsub();
   }, [on, eventId]); // eslint-disable-line react-hooks/exhaustive-deps

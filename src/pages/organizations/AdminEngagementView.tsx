@@ -42,6 +42,7 @@ import {
   type EngagementAttendee,
   type EngagementData,
   type EngagementEvent,
+  type ExperimentArm,
   type ExposureStatus,
   type GreetingVisit,
 } from "../../api/engagement";
@@ -156,6 +157,9 @@ type Row = {
   untilEnd: boolean;
   status: ExposureStatus;
   greet: GreetingVisit | null;
+  shown: number | null;
+  herdArm: ExperimentArm;
+  milestoneArm: ExperimentArm;
 };
 
 const storageKey = (orgId: string) => `engagement-analysis:${orgId}`;
@@ -277,7 +281,7 @@ export default function AdminEngagementView({ orgId, orgName }: Props) {
     if (!data) return [];
     const out: Row[] = [];
     for (const a of data.attendees) {
-      for (const [idx, min, untilEnd, status, greet] of a.visits) {
+      for (const [idx, min, untilEnd, status, greet, shown, herdArm, milestoneArm] of a.visits) {
         const event = data.events[idx];
         if (!event || !included.has(event.id)) continue;
         out.push({
@@ -289,6 +293,9 @@ export default function AdminEngagementView({ orgId, orgName }: Props) {
           // Evento marcado a mano como "sin funciones"
           status: prefs.asBase.includes(event.id) ? "B" : status,
           greet: greet ?? null,
+          shown: shown ?? null,
+          herdArm: herdArm ?? null,
+          milestoneArm: milestoneArm ?? null,
         });
       }
     }

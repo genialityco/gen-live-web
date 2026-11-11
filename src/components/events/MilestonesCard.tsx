@@ -157,6 +157,17 @@ export function MilestonesCard({
           </Text>
         )}
 
+        {saved.enabled &&
+          (saved.holdoutPercent ? (
+            <Text size="xs" c="dimmed">
+              🧪 Grupo de control: {saved.holdoutPercent}% cumple los hitos sin ver la felicitación
+            </Text>
+          ) : (
+            <Text size="xs" c="orange">
+              ⚠️ Sin grupo de control: no se podrá medir si los logros retienen.
+            </Text>
+          ))}
+
         <Group gap="xs">
           <Button size="xs" variant="light" onClick={() => setOpen(true)}>
             Configurar hitos
@@ -350,6 +361,14 @@ function MilestonesEditor({
         onChange={(v) => setConfig((c) => ({ ...c, holdoutPercent: Number(v) || 0 }))}
         w={360}
       />
+      {!config.holdoutPercent && (
+        <Alert color="orange" variant="light" p="xs" maw={560}>
+          <Text size="xs">
+            Sin grupo de control no hay contra qué comparar: cualquier diferencia en la retención puede venir de la
+            hora, el tema o el cansancio de la audiencia, no de los logros. Recomendado: {DEFAULT_MILESTONE_HOLDOUT}%.
+          </Text>
+        </Alert>
+      )}
 
       <Group justify="flex-end">
         <Button variant="default" onClick={onCancel}>
