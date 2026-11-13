@@ -31,6 +31,7 @@ import type { EventItem } from "../../api/events";
 import type { FormField } from "../../types";
 import type { AnnouncementStyle } from "../../api/live-stage-service";
 import { setRegistrationFieldRequired } from "../../api/orgs";
+import { getOrgContactConsent, updateOrgContactConsent } from "../../api/contacts";
 import {
   announceHerd,
   fetchHerdCoverage,
@@ -303,6 +304,7 @@ export function HerdAnnouncementsCard({
         {open && (
           <HerdConfigForm
             eventId={event._id}
+            orgSlug={orgSlug}
             initial={openEnabling ? { ...saved, enabled: true } : saved}
             formFields={formFields}
             saving={saving}
@@ -854,6 +856,7 @@ function HerdFormalTitleEditor({
 
 function HerdConfigForm({
   eventId,
+  orgSlug,
   initial,
   formFields,
   saving,
@@ -861,6 +864,7 @@ function HerdConfigForm({
   onSave,
 }: {
   eventId: string;
+  orgSlug: string;
   initial: EventHerdConfig;
   formFields: FormField[];
   saving: boolean;
@@ -1188,6 +1192,7 @@ function HerdConfigForm({
             privateEnabled={priv.enabled}
             privateRepeats={!!priv.repeatEverySec}
             sampleGroup={sampleGroup}
+            orgSlug={orgSlug}
           />
         </Tabs.Panel>
       </Tabs>
@@ -1503,6 +1508,7 @@ function HerdGreetingForm({
   privateEnabled,
   privateRepeats,
   sampleGroup,
+  orgSlug,
 }: {
   greet: Required<HerdGreetingConfig>;
   privMsg: HerdMessageConfig; // el saludo usa el diseño del mensaje individual
@@ -1510,6 +1516,7 @@ function HerdGreetingForm({
   privateEnabled: boolean;
   privateRepeats: boolean;
   sampleGroup: string;
+  orgSlug: string;
 }) {
   const examples = [
     ["Quien lo ve en su anuncio individual", "👋 Saludar a mis colegas (botón)"],
@@ -1648,6 +1655,21 @@ function HerdGreetingForm({
       </Group>
 
       <Stack gap={6}>
+        <Text size="sm" fw={600}>🤝 Intercambio de contactos</Text>
+        <Switch
+          label="Quienes se saludan pueden intercambiar contacto"
+          description="Al devolver un saludo, ambos ven al otro en la pestaña «🤝 Contactos». Cada uno elige si comparte su correo y/o WhatsApp, y los datos solo se ven cuando los dos aceptan."
+          checked={greet.contactExchange}
+          onChange={(e) => {
+            const contactExchange = e.currentTarget.checked;
+            onChange({ contactExchange });
+          }}
+          disabled={!greet.enabled}
+        />
+        {greet.enabled && greet.contactExchange && <OrgContactConsentEditor orgSlug={orgSlug} />}
+      </Stack>
+
+      <Stack gap={6}>
         <Text size="sm" fw={600}>🧪 Experimento: ¿el botón aumenta la permanencia?</Text>
         <Text size="xs" c="dimmed">
           Un porcentaje al azar de quienes reciben mensajes no ve el botón (ni puede devolver saludos). En
@@ -1677,6 +1699,69 @@ function HerdGreetingForm({
           ))}
         </Group>
       </Stack>
+    </Stack>
+  );
+}
+
+/**
+ * Texto de autorización (habeas data) que acepta el asistente antes de
+ * compartir su contacto. Es de la organización: se guarda aparte del evento.
+ */
+function OrgContactConsentEditor({ orgSlug }: { orgSlug: string }) {
+  const [text, setText] = useState("");
+  const [saved, setSaved] = useState("");
+  const [defaultText, setDefaultText] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    getOrgContactConsent(orgSlug)
+      .then((r) => {
+        if (cancelled) return;
+        setText(r.consentText);
+        setSaved(r.consentText);
+        setDefaultText(r.defaultText);
+      })
+      .catch(() => notifications.show({ message: "No se pudo cargar el texto de autorización", color: "red" }))
+      .finally(() => !cancelled && setLoading(false));
+    return () => {
+      cancelled = true;
+    };
+  }, [orgSlug]);
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      const r = await updateOrgContactConsent(orgSlug, text);
+      setText(r.consentText);
+      setSaved(r.consentText);
+      notifications.show({ message: "Texto de autorización guardado", color: "green" });
+    } catch {
+      notifications.show({ message: "No se pudo guardar el texto", color: "red" });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) return <Loader size="xs" />;
+  return (
+    <Stack gap={6}>
+      <Textarea
+        label="Texto de autorización (de la organización)"
+        description="Lo acepta cada asistente antes de compartir sus datos. Aplica a todos los eventos de la organización. Vacío = texto por defecto."
+        placeholder={defaultText}
+        value={text}
+        onChange={(e) => setText(e.currentTarget.value)}
+        autosize
+        minRows={3}
+        maxLength={2000}
+      />
+      <Group justify="flex-end">
+        <Button size="xs" variant="light" loading={saving} disabled={text === saved} onClick={() => void save()}>
+          Guardar texto
+        </Button>
+      </Group>
     </Stack>
   );
 }

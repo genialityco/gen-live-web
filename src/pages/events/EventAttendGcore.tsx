@@ -82,6 +82,8 @@ import { HerdOverlay } from "../../components/events/HerdOverlay";
 import { MilestoneOverlay } from "../../components/events/MilestoneOverlay";
 import { MyMilestonesPanel, MyMilestonesTabLabel } from "../../components/events/MyMilestonesPanel";
 import { useMyMilestones } from "../../hooks/useMyMilestones";
+import { MyContactsPanel, MyContactsTabLabel } from "../../components/events/MyContactsPanel";
+import { useMyContacts } from "../../hooks/useMyContacts";
 import { OverlayErrorBoundary } from "../../components/events/OverlayErrorBoundary";
 import { VideoNetworkGuard } from "../../components/events/VideoNetworkGuard";
 import { Track } from "livekit-client";
@@ -454,10 +456,27 @@ export default function EventAttendGcore() {
     enabled: (isRegistered || isOwner) && !emergency.active,
     active: sideTab === "milestones",
   });
+  const myContacts = useMyContacts({
+    eventId: event?._id,
+    uid: user?.uid,
+    enabled: (isRegistered || isOwner) && !emergency.active,
+    active: sideTab === "contacts",
+  });
   // Si deja de estar disponible (admin la apaga) se vuelve al chat
   useEffect(() => {
     if (!myMilestones.visible && sideTab === "milestones") setSideTab("chat");
-  }, [myMilestones.visible, sideTab]);
+    if (!myContacts.visible && sideTab === "contacts") setSideTab("chat");
+  }, [myMilestones.visible, myContacts.visible, sideTab]);
+  const contactsPanel = (height: number | string) =>
+    myContacts.data && event?._id ? (
+      <MyContactsPanel
+        eventId={event._id}
+        data={myContacts.data}
+        refresh={myContacts.refresh}
+        color={brand.primary}
+        height={height}
+      />
+    ) : null;
   const milestonesPanel = (height: number | string) =>
     myMilestones.data && event?._id ? (
       <MyMilestonesPanel
@@ -1403,10 +1422,20 @@ export default function EventAttendGcore() {
                           <MyMilestonesTabLabel unseen={myMilestones.unseen} short />
                         </Tabs.Tab>
                       )}
+                      {myContacts.visible && (
+                        <Tabs.Tab value="contacts">
+                          <MyContactsTabLabel pending={myContacts.pending} />
+                        </Tabs.Tab>
+                      )}
                     </Tabs.List>
                     {myMilestones.visible && (
                       <Tabs.Panel value="milestones" style={{ flex: 1, minHeight: 0, overflow: "hidden" }}>
                         {milestonesPanel("100%")}
+                      </Tabs.Panel>
+                    )}
+                    {myContacts.visible && (
+                      <Tabs.Panel value="contacts" style={{ flex: 1, minHeight: 0, overflow: "hidden" }}>
+                        {contactsPanel("100%")}
                       </Tabs.Panel>
                     )}
                     <Tabs.Panel value="chat" style={{ flex: 1, minHeight: 0, overflow: "hidden" }}>
@@ -1783,7 +1812,28 @@ export default function EventAttendGcore() {
                                   <MyMilestonesTabLabel unseen={myMilestones.unseen} />
                                 </Tabs.Tab>
                               )}
+                              {myContacts.visible && (
+                                <Tabs.Tab value="contacts">
+                                  <MyContactsTabLabel pending={myContacts.pending} />
+                                </Tabs.Tab>
+                              )}
                             </Tabs.List>
+
+                            {myContacts.visible && (
+                              <Tabs.Panel value="contacts" pt="md">
+                                <Box
+                                  style={{
+                                    height: chatHeight,
+                                    borderRadius: 12,
+                                    overflow: "hidden",
+                                    border: "1px solid var(--mantine-color-gray-3)",
+                                    background: "white",
+                                  }}
+                                >
+                                  {contactsPanel("100%")}
+                                </Box>
+                              </Tabs.Panel>
+                            )}
 
                             {myMilestones.visible && (
                               <Tabs.Panel value="milestones" pt="md">

@@ -30,6 +30,7 @@ import {
   type HerdMessageConfig,
   type HerdOwnGroup,
 } from "../../api/herd";
+import { CONTACTS_REFRESH_EVENT } from "../../api/contacts";
 import { AnnouncementBanner } from "../studio/AnnouncementBanner";
 import { EXIT_MS } from "../studio/announcement-templates";
 import { trackEvent } from "../../lib/utmTracking";
@@ -298,6 +299,9 @@ export function HerdOverlay({
   // Saludo entre colegas: el botón lo decide el backend (member.greet); en la
   // demostración se muestra siempre para poder revisarlo
   const greetCfg = { ...DEFAULT_HERD_GREETING, ...(config?.greeting ?? {}) };
+  // Intercambio de contactos activo (para sugerirlo tras saludo + devolución)
+  const contactHint = useRef(false);
+  contactHint.current = !!greetCfg.contactExchange;
   const canGreet = greetCfg.enabled && (demo || !!memberGroup?.greet);
 
   const privateArgs = useRef({ priv, ownGroup, ownGroups, memberGroup, sampleGroup, firstName, title, muted, accent: config?.accentColor, greetCfg, canGreet });
@@ -608,8 +612,11 @@ export function HerdOverlay({
       );
       const ok = results.filter((r) => r.status === "fulfilled").length;
       trackEvent("herd_greeting_reply_sent", { event_id: eventId, herd_group: group.key, replies: ok });
+      // Saludo + devolución: nace el par en «🤝 Contactos»
+      if (ok) window.dispatchEvent(new Event(CONTACTS_REFRESH_EVENT));
     }
-    edit("greeting", bannerId, { text: `🙌 Le devolviste el saludo a ${names}`, action: null }, CONFIRM_MS);
+    const hint = greetCfg.contactExchange ? " · Intercambien contacto en «🤝 Contactos»" : "";
+    edit("greeting", bannerId, { text: `🙌 Le devolviste el saludo a ${names}${hint}`, action: null }, CONFIRM_MS);
     incoming.current = { bannerId: null, groupKey: null, items: [] };
   };
 
@@ -646,7 +653,8 @@ export function HerdOverlay({
     const since = getServerNow() - 3000;
     const unsub = subscribeHerdGreetReplies(eventId!, uid, (r) => {
       if (r.at < since) return;
-      show("greeting", `🙌 ${r.name} te devolvió el saludo`, greetingArgs.current.greetingMsg(), 5, privateArgs.current.accent);
+      const hint = contactHint.current ? " · Intercambien contacto en «🤝 Contactos»" : "";
+      show("greeting", `🙌 ${r.name} te devolvió el saludo${hint}`, greetingArgs.current.greetingMsg(), 5, privateArgs.current.accent);
       reportDelivery(eventId!, { feature: "greeting", channel: "private", source: "reply", refId: r.id });
       trackEvent("herd_greeting_reply_received", { event_id: eventId, herd_group: ownGroupKey });
     });

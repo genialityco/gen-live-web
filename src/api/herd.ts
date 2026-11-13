@@ -54,6 +54,7 @@ export type HerdGreetingConfig = {
   cooldownSec?: number; // espera entre saludos de una misma persona
   minConnected?: number; // conectados del grupo (con quien saluda) para mostrar el botón
   holdoutPercent?: number; // % al azar sin botón (experimento)
+  contactExchange?: boolean; // quienes se saludan pueden intercambiar contacto
 };
 
 // Grupo de control por defecto de los anuncios (DEFAULT_HOLDOUT_PERCENT del backend)
@@ -67,6 +68,7 @@ export const DEFAULT_HERD_GREETING: Required<HerdGreetingConfig> = {
   cooldownSec: 60,
   minConnected: 3,
   holdoutPercent: 20,
+  contactExchange: false,
 };
 
 /** Nombre de los grupos sin nombre propio: "colegas de {valor}" (plural) y/o singular */
