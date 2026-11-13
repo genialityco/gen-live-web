@@ -75,6 +75,7 @@ function withDefaults(event: EventItem): EventMilestonesConfig {
     // Sin hitos guardados se precargan los de por defecto (apagados hasta activar)
     holdoutPercent: c ? (c.holdoutPercent ?? 0) : DEFAULT_MILESTONE_HOLDOUT,
     accentColor: c?.accentColor,
+    showToAttendee: !!c?.showToAttendee,
     privateMessage: { ...DEFAULT_MILESTONE_PRIVATE, ...(c?.privateMessage ?? {}) },
     publicMessage: { ...DEFAULT_MILESTONE_PUBLIC, ...(c?.publicMessage ?? {}) },
     items: c?.items ?? DEFAULT_MILESTONE_ITEMS.map((i) => ({ ...i })),
@@ -154,6 +155,12 @@ export function MilestonesCard({
         ) : (
           <Text size="sm" c="dimmed">
             Aún no hay hitos configurados.
+          </Text>
+        )}
+
+        {saved.enabled && saved.showToAttendee && (
+          <Text size="xs" c="dimmed">
+            🏆 Los asistentes ven la lista de hitos y su avance en la pestaña «Mis logros».
           </Text>
         )}
 
@@ -258,7 +265,19 @@ function MilestonesEditor({
       <Switch
         label="Logros activos"
         checked={config.enabled}
-        onChange={(e) => setConfig((c) => ({ ...c, enabled: e.currentTarget.checked }))}
+        onChange={(e) => {
+          const enabled = e.currentTarget.checked;
+          setConfig((c) => ({ ...c, enabled }));
+        }}
+      />
+      <Switch
+        label="Mostrar «Mis logros» al asistente"
+        description="Pestaña junto al chat con los hitos del evento, su avance y los que ya consiguió. El grupo de control no la ve."
+        checked={!!config.showToAttendee}
+        onChange={(e) => {
+          const showToAttendee = e.currentTarget.checked;
+          setConfig((c) => ({ ...c, showToAttendee }));
+        }}
       />
 
       <Text size="sm" fw={600}>

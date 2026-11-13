@@ -80,6 +80,8 @@ import { resolveStreams } from "../../components/events/streamUtils";
 import { AttendAnnouncementOverlay } from "../../components/studio/AnnouncementBanner";
 import { HerdOverlay } from "../../components/events/HerdOverlay";
 import { MilestoneOverlay } from "../../components/events/MilestoneOverlay";
+import { MyMilestonesPanel, MyMilestonesTabLabel } from "../../components/events/MyMilestonesPanel";
+import { useMyMilestones } from "../../hooks/useMyMilestones";
 import { OverlayErrorBoundary } from "../../components/events/OverlayErrorBoundary";
 import { VideoNetworkGuard } from "../../components/events/VideoNetworkGuard";
 import { Track } from "livekit-client";
@@ -442,6 +444,32 @@ export default function EventAttendGcore() {
   }, [slug, user, authLoading]);
 
   const isOwner = ownerVerified === true || !!(user && org && org.ownerUid === user.uid);
+
+  // Pestaña activa del panel lateral (chat / preguntas / mis logros)
+  const [sideTab, setSideTab] = useState<string | null>("chat");
+  const myMilestones = useMyMilestones({
+    eventId: event?._id,
+    uid: user?.uid,
+    // El dueño la ve como vista previa aunque no esté inscrito (sin avance propio)
+    enabled: (isRegistered || isOwner) && !emergency.active,
+    active: sideTab === "milestones",
+  });
+  // Si deja de estar disponible (admin la apaga) se vuelve al chat
+  useEffect(() => {
+    if (!myMilestones.visible && sideTab === "milestones") setSideTab("chat");
+  }, [myMilestones.visible, sideTab]);
+  const milestonesPanel = (height: number | string) =>
+    myMilestones.data && event?._id ? (
+      <MyMilestonesPanel
+        eventId={event._id}
+        data={myMilestones.data}
+        fetchedAt={myMilestones.fetchedAt}
+        fresh={myMilestones.fresh}
+        onCelebrated={myMilestones.clearFresh}
+        height={height}
+        color={brand.primary}
+      />
+    ) : null;
 
   // Branding: evento tiene prioridad sobre org; se recalcula cuando event carga.
   // En modo emergencia sale del cache RTDB (orgBranding/eventBranding), no de Mongo.
@@ -1361,7 +1389,8 @@ export default function EventAttendGcore() {
                   }}
                 >
                   <Tabs
-                    defaultValue="chat"
+                    value={sideTab}
+                    onChange={setSideTab}
                     keepMounted={false}
                     style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}
                     styles={{ panel: { flex: 1, minHeight: 0, overflow: "hidden" } }}
@@ -1369,7 +1398,17 @@ export default function EventAttendGcore() {
                     <Tabs.List grow px="sm" pt={4}>
                       <Tabs.Tab value="chat">Chat</Tabs.Tab>
                       <Tabs.Tab value="questions">Preguntas</Tabs.Tab>
+                      {myMilestones.visible && (
+                        <Tabs.Tab value="milestones">
+                          <MyMilestonesTabLabel unseen={myMilestones.unseen} short />
+                        </Tabs.Tab>
+                      )}
                     </Tabs.List>
+                    {myMilestones.visible && (
+                      <Tabs.Panel value="milestones" style={{ flex: 1, minHeight: 0, overflow: "hidden" }}>
+                        {milestonesPanel("100%")}
+                      </Tabs.Panel>
+                    )}
                     <Tabs.Panel value="chat" style={{ flex: 1, minHeight: 0, overflow: "hidden" }}>
                       <iframe
                         key="chat-mobile"
@@ -1735,11 +1774,32 @@ export default function EventAttendGcore() {
                         </Group>
 
                         {effectiveEventId ? (
-                          <Tabs defaultValue="chat" keepMounted={false}>
+                          <Tabs value={sideTab} onChange={setSideTab} keepMounted={false}>
                             <Tabs.List grow>
                               <Tabs.Tab value="chat">Chat</Tabs.Tab>
                               <Tabs.Tab value="questions">Preguntas</Tabs.Tab>
+                              {myMilestones.visible && (
+                                <Tabs.Tab value="milestones">
+                                  <MyMilestonesTabLabel unseen={myMilestones.unseen} />
+                                </Tabs.Tab>
+                              )}
                             </Tabs.List>
+
+                            {myMilestones.visible && (
+                              <Tabs.Panel value="milestones" pt="md">
+                                <Box
+                                  style={{
+                                    height: chatHeight,
+                                    borderRadius: 12,
+                                    overflow: "hidden",
+                                    border: "1px solid var(--mantine-color-gray-3)",
+                                    background: "white",
+                                  }}
+                                >
+                                  {milestonesPanel("100%")}
+                                </Box>
+                              </Tabs.Panel>
+                            )}
 
                             <Tabs.Panel value="chat" pt="md">
                               <Box

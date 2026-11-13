@@ -38,6 +38,8 @@ export type EventMilestonesConfig = {
   enabled: boolean;
   holdoutPercent?: number;
   accentColor?: string;
+  // El asistente ve la lista de hitos y su avance («Mis logros»)
+  showToAttendee?: boolean;
   privateMessage?: MilestoneChannel;
   publicMessage?: MilestoneChannel & { minIntervalSec?: number; maxNames?: number };
   items: MilestoneDef[];
@@ -47,8 +49,10 @@ export type EventMilestonesConfig = {
 export type MilestonesLiveConfig = {
   enabled: boolean;
   accentColor?: string;
+  showToAttendee?: boolean;
   privateMessage?: MilestoneChannel;
   publicMessage?: MilestoneChannel;
+  updatedAt?: number;
 };
 
 export type MilestoneNotice = { milestoneId: string; text: string; count?: number; at: number };
@@ -356,6 +360,80 @@ export async function awardMilestone(
   const { data } = await api.post(`/events/${eventId}/milestones/award`, { milestoneId, attendeeIds });
   return data;
 }
+
+/** Un hito tal como lo ve el asistente en «Mis logros» */
+export type MyMilestone = {
+  id: string;
+  type: MilestoneType;
+  threshold: number;
+  achieved: boolean;
+  achievedAt: string | null;
+  // Avance hacia el umbral; null = sin avance medible (posición o manual)
+  progress: number | null;
+  // Felicitación personal (solo si lo consiguió)
+  text: string | null;
+};
+
+export type MyMilestones =
+  | { visible: false }
+  | { visible: true; live: boolean; accentColor: string | null; items: MyMilestone[] };
+
+export async function getMyMilestones(eventId: string): Promise<MyMilestones> {
+  const { data } = await api.get(`/events/${eventId}/milestones/mine`);
+  return data;
+}
+
+/** Nombre, ícono y reto de cada tipo, como lo lee el asistente */
+export const MILESTONE_ATTENDEE_INFO: Record<
+  MilestoneType,
+  { title: string; emoji: string; goal: (n: number) => string; unit?: string }
+> = {
+  watchMinutes: {
+    title: "Maratonista",
+    emoji: "⏱️",
+    goal: (n) => `Quédate ${n} minutos seguidos en la transmisión`,
+    unit: "min",
+  },
+  totalMinutes: {
+    title: "Compromiso total",
+    emoji: "📺",
+    goal: (n) => `Suma ${n} minutos conectado en vivo`,
+    unit: "min",
+  },
+  firstToConnect: {
+    title: "Madrugador",
+    emoji: "🌅",
+    goal: (n) => `Sé de las primeras ${n} personas en conectarte`,
+  },
+  frequentAttendee: {
+    title: "Asistente fiel",
+    emoji: "💎",
+    goal: (n) => `Acompáñanos en ${n} eventos`,
+    unit: "eventos",
+  },
+  pollsAnswered: {
+    title: "Voz activa",
+    emoji: "🗳️",
+    goal: (n) => `Responde ${n} ${n === 1 ? "encuesta" : "encuestas"}`,
+    unit: "encuestas",
+  },
+  pollFirst: {
+    title: "Respuesta relámpago",
+    emoji: "⚡",
+    goal: (n) => `Sé de los primeros ${n} en responder una encuesta`,
+  },
+  greetingsSent: {
+    title: "Buen colega",
+    emoji: "👋",
+    goal: (n) => `Saluda a tus colegas ${n} ${n === 1 ? "vez" : "veces"}`,
+    unit: "saludos",
+  },
+  manual: {
+    title: "Logro sorpresa",
+    emoji: "🎁",
+    goal: () => "Lo entrega el equipo del evento a quien se destaque",
+  },
+};
 
 export async function getMilestonesReport(eventId: string): Promise<MilestonesReport> {
   const { data } = await api.get(`/events/${eventId}/milestones/report`);
