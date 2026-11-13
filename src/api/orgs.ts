@@ -126,6 +126,15 @@ export async function updateRegistrationForm(
   return data as Org;
 }
 
+/** Marca un campo del formulario como obligatorio (o no) sin reenviar todo el formulario */
+export async function setRegistrationFieldRequired(slug: string, fieldId: string, required: boolean) {
+  const { data } = await api.patch(
+    `/orgs/slug/${slug}/registration-form/fields/${encodeURIComponent(fieldId)}/required`,
+    { required }
+  );
+  return data as { ok: boolean; fieldId: string; required: boolean };
+}
+
 export async function fetchRegistrationForm(slug: string) {
   const { data } = await api.get(`/orgs/slug/${slug}/registration-form`);
   return data as RegistrationForm;

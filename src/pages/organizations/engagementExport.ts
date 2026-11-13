@@ -11,6 +11,7 @@ import type {
   ExperimentArm,
   ExposureStatus,
   GreetingVisit,
+  GroupStatus,
   LiveEndSource,
 } from "../../api/engagement";
 
@@ -42,7 +43,15 @@ export type ExportRow = {
   milestoneArm: ExperimentArm;
 };
 
-const ARM_LABEL = (a: ExperimentArm) => (a === 1 ? "Con mensajes" : a === 0 ? "Control" : null);
+const GROUP_STATUS_LABEL: Record<GroupStatus, string> = {
+  grouped: "Con grupo",
+  excluded: "Grupo excluido",
+  missing: "No respondió",
+  notApplicable: "No aplica (campo oculto)",
+};
+const groupStatusLabel = (s: GroupStatus | null | undefined) => (s ? GROUP_STATUS_LABEL[s] : null);
+
+const ARM_LABEL =(a: ExperimentArm) => (a === 1 ? "Con mensajes" : a === 0 ? "Control" : null);
 
 const LIVE_END_LABEL: Record<LiveEndSource, string> = {
   recorded: "Registrado",
@@ -179,6 +188,7 @@ export async function exportEngagementExcel({
   const visitsSheet = sortedRows.map((r) => ({
     ...who(r.attendee),
     Grupo: r.attendee.group ?? NO_GROUP,
+    "Estado del grupo": groupStatusLabel(r.attendee.groupStatus),
     "Fecha evento": day(r.event.date),
     Evento: r.event.title,
     "Evento ID": r.event.id,
@@ -253,6 +263,7 @@ export async function exportEngagementExcel({
       return {
         ...who(a),
         Grupo: a.group ?? NO_GROUP,
+        "Estado del grupo": groupStatusLabel(a.groupStatus),
         "Eventos asistidos": list.length,
         "Eventos con mensaje": t.length,
         "Eventos sin mensaje": noT.length,
@@ -308,6 +319,7 @@ export async function exportEngagementExcel({
     ["Botón de saludo", "1 = vio el anuncio individual con el botón · 0 = grupo de control sorteado al azar que vio el anuncio SIN botón · vacío = no vio ningún anuncio individual en ese evento. Comparar 1 vs 0 mide el efecto del botón en la permanencia."],
     ["Saludos enviados / devueltos", "Cantidad de veces que la persona saludó, que devolvió un saludo de un colega y que le devolvieron sus saludos. No se registra quién recibe cada saludo (llega a todos los conectados del grupo)."],
     ["Grupo", "Grupo de especialistas del asistente según su registro en la organización."],
+    ["Estado del grupo", "Por qué tiene o no grupo (según el campo de la manada del evento con anuncios más reciente). Con grupo · Grupo excluido: respondió una opción que no recibe anuncios · No respondió: el campo se le mostraba y lo dejó vacío (se corrige haciéndolo obligatorio) · No aplica: el campo no se le mostraba por su preselección en el registro, así que no tener grupo es lo esperado."],
     ["Historial de mensajes", "El historial de anuncios y logros se guarda desde el 4-nov-2026; en eventos anteriores la clasificación T/C puede estar incompleta."],
     ["Hoja Eventos", "Una fila por evento con espectadores en vivo, incluido o no en el análisis, con sus totales."],
     ["Hoja Asistencias", "Una fila por asistente × evento incluido. Es la hoja principal para el análisis estadístico."],

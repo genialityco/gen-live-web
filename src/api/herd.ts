@@ -52,6 +52,7 @@ export type HerdGreetingConfig = {
   position?: HerdPosition; // dónde aparece el saludo recibido
   durationSec?: number;
   cooldownSec?: number; // espera entre saludos de una misma persona
+  minConnected?: number; // conectados del grupo (con quien saluda) para mostrar el botón
   holdoutPercent?: number; // % al azar sin botón (experimento)
 };
 
@@ -64,6 +65,7 @@ export const DEFAULT_HERD_GREETING: Required<HerdGreetingConfig> = {
   position: "bottom-right",
   durationSec: 6,
   cooldownSec: 60,
+  minConnected: 3,
   holdoutPercent: 20,
 };
 
@@ -597,8 +599,15 @@ export async function reportHerdImpression(
   source: HerdGreetingSource,
   groupKey: string,
   name?: string,
+  buttonShown?: boolean,
 ) {
-  const { data } = await api.post(`/events/${eventId}/herd/greetings`, { action: "impression", source, groupKey, name });
+  const { data } = await api.post(`/events/${eventId}/herd/greetings`, {
+    action: "impression",
+    source,
+    groupKey,
+    name,
+    buttonShown,
+  });
   return data as { ok: boolean; hasButton: boolean };
 }
 
@@ -662,6 +671,34 @@ export async function announceHerd(
 ): Promise<{ type: string; key: string | null; label?: string; count: number }> {
   const { data } = await api.post(`/events/${eventId}/herd/announce`, payload);
   return data;
+}
+
+/** Asistentes según si tienen grupo de manada y, si no, por qué */
+export type HerdCoverageCounts = {
+  total: number;
+  grouped: number; // con grupo que recibe mensajes
+  excluded: number; // respondió una opción excluida
+  missing: number; // el campo se le mostraba y lo dejó vacío
+  notApplicable: number; // el campo no se le mostraba por su preselección
+  offOptions: number; // con grupo, pero fuera de las opciones (texto libre)
+};
+
+export type HerdCoverage = {
+  field: {
+    id: string;
+    label: string;
+    type: string;
+    required: boolean;
+    conditional: boolean; // se muestra según otra respuesta
+    hasOptions: boolean;
+  };
+  registered: HerdCoverageCounts;
+  live: HerdCoverageCounts | null;
+} | null;
+
+export async function fetchHerdCoverage(eventId: string): Promise<HerdCoverage> {
+  const { data } = await api.get(`/events/${eventId}/herd/coverage`);
+  return data || null;
 }
 
 export type HerdExperimentArm = {

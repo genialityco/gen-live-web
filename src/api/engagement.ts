@@ -98,12 +98,21 @@ export type EngagementVisit = [
  */
 export type ExperimentArm = 1 | 0 | null;
 
+/**
+ * grouped con grupo · excluded grupo excluido · missing el campo se le
+ * mostraba y no respondió · notApplicable el campo no se le mostraba por su
+ * preselección en el registro
+ */
+export type GroupStatus = "grouped" | "excluded" | "missing" | "notApplicable";
+
 export type EngagementAttendee = {
   id: string;
   name: string;
   email: string;
   groupKey: string | null;
   group: string | null;
+  /** Por qué tiene o no grupo (null sin manada de referencia) */
+  groupStatus?: GroupStatus | null;
   visits: EngagementVisit[];
 };
 

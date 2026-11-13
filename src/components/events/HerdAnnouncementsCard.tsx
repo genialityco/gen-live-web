@@ -30,8 +30,11 @@ import { notifications } from "@mantine/notifications";
 import type { EventItem } from "../../api/events";
 import type { FormField } from "../../types";
 import type { AnnouncementStyle } from "../../api/live-stage-service";
+import { setRegistrationFieldRequired } from "../../api/orgs";
 import {
   announceHerd,
+  fetchHerdCoverage,
+  type HerdCoverage,
   DEFAULT_HERD_FORMAL_TITLE,
   DEFAULT_HERD_GREETING,
   DEFAULT_HERD_HOLDOUT,
@@ -250,6 +253,8 @@ export function HerdAnnouncementsCard({
           </Stack>
         )}
 
+        {saved.enabled && saved.fieldId && <HerdCoverageNotice eventId={event._id} orgSlug={orgSlug} />}
+
         {saved.enabled && saved.fieldId && (
           <HerdQuickAnnounce eventId={event._id} config={saved} formFields={formFields} />
         )}
@@ -336,6 +341,128 @@ export function HerdAnnouncementsCard({
   );
 }
 
+// A partir de este % de "no respondió" vale la pena hacer obligatorio el campo
+const MISSING_ALERT_PCT = 10;
+
+const pctOf = (n: number, total: number) => (total ? Math.round((n / total) * 100) : 0);
+
+/**
+ * Cobertura de los grupos: cuántos inscritos (y espectadores en vivo) tienen
+ * grupo y, si no, por qué. "No aplica" es quien no veía el campo por su
+ * preselección: no tener grupo es lo esperado. Solo "no respondió" se
+ * corrige haciendo obligatorio el campo, que se exige únicamente a quien lo ve.
+ */
+function HerdCoverageNotice({ eventId, orgSlug }: { eventId: string; orgSlug: string }) {
+  const [coverage, setCoverage] = useState<HerdCoverage>(null);
+  const [loading, setLoading] = useState(true);
+  const [confirming, setConfirming] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const load = () => {
+    setLoading(true);
+    fetchHerdCoverage(eventId)
+      .then(setCoverage)
+      .catch((err) => console.error("Error cargando la cobertura de grupos:", err))
+      .finally(() => setLoading(false));
+  };
+  useEffect(load, [eventId]);
+
+  if (loading && !coverage) {
+    return (
+      <Text size="xs" c="dimmed">
+        Calculando cuántos inscritos tienen grupo…
+      </Text>
+    );
+  }
+  if (!coverage || !coverage.registered.total) return null;
+
+  const { field, registered: r, live } = coverage;
+  const missingPct = pctOf(r.missing, r.total);
+  const offPct = pctOf(r.offOptions, r.grouped);
+
+  const makeRequired = async () => {
+    setSaving(true);
+    try {
+      await setRegistrationFieldRequired(orgSlug, field.id, true);
+      notifications.show({ color: "green", message: `«${field.label}» ahora es obligatorio` });
+      setConfirming(false);
+      load();
+    } catch (err) {
+      console.error("Error actualizando el formulario de registro:", err);
+      notifications.show({ color: "red", message: "No se pudo actualizar el formulario de registro" });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const line = (c: NonNullable<typeof live>) =>
+    [
+      `${pctOf(c.grouped, c.total)} % con grupo`,
+      c.missing ? `${pctOf(c.missing, c.total)} % no respondió` : null,
+      c.notApplicable ? `${pctOf(c.notApplicable, c.total)} % no aplica` : null,
+      c.excluded ? `${pctOf(c.excluded, c.total)} % excluidos` : null,
+    ]
+      .filter(Boolean)
+      .join(" · ");
+
+  return (
+    <Stack gap={4}>
+      <Text size="xs" c="dimmed">
+        🎯 Inscritos ({r.total}): {line(r)}
+        {live && ` — En vivo (${live.total}): ${line(live)}`}
+      </Text>
+      {r.notApplicable > 0 && (
+        <Text size="xs" c="dimmed">
+          «No aplica»: no veían el campo «{field.label}» por su preselección en el registro; no reciben anuncios
+          por este grupo. Si quieres incluirlos, agrega su campo de preselección como otra manada.
+        </Text>
+      )}
+      {missingPct >= MISSING_ALERT_PCT && !field.required && (
+        <Alert color="orange" variant="light" p="xs">
+          <Stack gap={6}>
+            <Text size="xs">
+              El {missingPct} % de los inscritos tenía visible «{field.label}» y lo dejó vacío: no reciben anuncios ni
+              entran al experimento. Si lo haces obligatorio, se les pedirá una sola vez al entrar
+              {field.conditional ? ", y solo a quien lo vea según su preselección" : ""}.
+            </Text>
+            <Group gap="xs">
+              {confirming ? (
+                <>
+                  <Button size="xs" color="orange" loading={saving} onClick={() => void makeRequired()}>
+                    Sí, hacerlo obligatorio en la organización
+                  </Button>
+                  <Button size="xs" variant="default" onClick={() => setConfirming(false)}>
+                    Cancelar
+                  </Button>
+                </>
+              ) : (
+                <Button size="xs" variant="light" color="orange" onClick={() => setConfirming(true)}>
+                  Hacer obligatorio «{field.label}»
+                </Button>
+              )}
+            </Group>
+          </Stack>
+        </Alert>
+      )}
+      {missingPct >= MISSING_ALERT_PCT && field.required && (
+        <Text size="xs" c="dimmed">
+          «{field.label}» ya es obligatorio: quienes no lo tienen se registraron antes o fueron importados, y se les
+          pedirá al entrar al evento.
+        </Text>
+      )}
+      {(field.hasOptions ? offPct >= MISSING_ALERT_PCT : field.type === "text") && (
+        <Text size="xs" c="orange">
+          ⚠️ «{field.label}» {field.hasOptions ? `tiene un ${offPct} % de respuestas fuera de las opciones` : "es de texto libre"}:
+          cada forma de escribirlo crea un grupo distinto. Conviene usar una lista de opciones.
+        </Text>
+      )}
+    </Stack>
+  );
+}
+
+// Invitación del moderador: cada conectado ve su anuncio con el botón «Saludar»
+const GREET_INVITE_TEXT = "👋 {nombre}, {está|están} conectados {cantidad} {grupo_plural} contigo. ¡Salúdalos!";
+
 /**
  * Lanzar un anuncio ya, sin esperar al automático: grupal (todos ven el
  * conteo de un grupo) o individual (cada conectado ve otra vez el suyo).
@@ -365,22 +492,26 @@ function HerdQuickAnnounce({
     .sort(([, a], [, b]) => b - a)
     .map(([key, n]) => ({ value: key, label: `${labelByKey.get(key) ?? key} (${n})` }));
 
-  const handleSend = async () => {
+  const greetOn = { ...DEFAULT_HERD_GREETING, ...(config.greeting ?? {}) }.enabled;
+
+  const handleSend = async (invite = false) => {
     setSending(true);
     try {
+      const sendType = invite ? "private" : type;
       const r = await announceHerd(eventId, {
-        type,
+        type: sendType,
         key: groupKey ?? undefined,
-        text: text.trim() || undefined,
+        text: invite ? GREET_INVITE_TEXT : text.trim() || undefined,
       });
       notifications.show({
         color: "green",
-        message:
-          type === "public"
+        message: invite
+          ? `Invitación a saludarse enviada a ${r.count} conectado(s)`
+          : sendType === "public"
             ? `Mensaje grupal lanzado: ${r.label ?? r.key} (${r.count})`
             : `Mensaje individual enviado a ${r.count} conectado(s)`,
       });
-      setText("");
+      if (!invite) setText("");
     } catch (err) {
       const apiMsg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
       notifications.show({
@@ -431,6 +562,24 @@ function HerdQuickAnnounce({
       <Button size="xs" onClick={() => void handleSend()} loading={sending} disabled={!groups.length}>
         Lanzar {type === "public" ? "mensaje grupal" : "mensaje individual"}
       </Button>
+      {greetOn && (
+        <>
+          <Button
+            size="xs"
+            variant="light"
+            color="grape"
+            onClick={() => void handleSend(true)}
+            loading={sending}
+            disabled={!groups.length}
+          >
+            👋 Invitar a saludarse
+          </Button>
+          <Text size="xs" c="dimmed">
+            Cada conectado{groupKey ? " del grupo elegido" : ""} ve su anuncio con el botón «Saludar» (si hay
+            suficientes colegas conectados). Funciona mejor si el moderador lo menciona en vivo.
+          </Text>
+        </>
+      )}
     </Stack>
   );
 }
@@ -1485,6 +1634,15 @@ function HerdGreetingForm({
           max={3600}
           value={greet.cooldownSec}
           onChange={(v) => onChange({ cooldownSec: Math.min(3600, Math.max(10, Number(v) || 60)) })}
+          disabled={!greet.enabled}
+        />
+        <NumberInput
+          label="Mínimo de conectados"
+          description="Del grupo, para mostrar el botón"
+          min={1}
+          max={50}
+          value={greet.minConnected}
+          onChange={(v) => onChange({ minConnected: Math.min(50, Math.max(1, Number(v) || 3)) })}
           disabled={!greet.enabled}
         />
       </Group>

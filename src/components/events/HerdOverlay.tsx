@@ -349,7 +349,11 @@ export function HerdOverlay({
       inscritos: Math.max(cantidad, c?.registered[g.key] || (demo ? DEMO_REGISTERED : 0)),
       inscritosTotal: Math.max(total, c?.registeredTotal || (demo ? DEMO_REGISTERED_TOTAL : 0)),
     });
-    const { canGreet: withButton } = privateArgs.current;
+    // El botón solo con suficientes colegas conectados: saludar a nadie no
+    // genera respuesta (en la demostración, siempre)
+    const { canGreet, greetCfg: gc } = privateArgs.current;
+    const enoughColleagues = cantidad >= (gc.minConnected ?? 1);
+    const withButton = canGreet && (!!demo || enoughColleagues);
     const source: HerdGreetingSource = mode;
     // Con botón, el anuncio dura un poco más para dar tiempo a tocarlo
     const idRef = { current: 0 };
@@ -365,7 +369,7 @@ export function HerdOverlay({
     );
     if (!demo) {
       // Para medir la tasa de saludo: cuántos vieron el anuncio (con o sin botón)
-      void reportHerdImpression(eventId!, source, g.key, nombre).catch(() => {});
+      void reportHerdImpression(eventId!, source, g.key, nombre, withButton).catch(() => {});
       reportDelivery(eventId!, { feature: "herd", channel: "private", source, groupKey: g.key });
       trackEvent("herd_announcement_shown", {
         event_id: eventId,
@@ -398,11 +402,18 @@ export function HerdOverlay({
         recipients: r.recipients,
       });
     } catch (err) {
-      const retry = (err as { response?: { data?: { retryInSec?: number } } })?.response?.data?.retryInSec;
+      const data = (err as { response?: { data?: { retryInSec?: number; minConnected?: number } } })?.response?.data;
       edit(
         "private",
         bannerId,
-        { text: retry ? "Ya saludaste hace un momento 🙂" : "No se pudo enviar el saludo", action: null },
+        {
+          text: data?.retryInSec
+            ? "Ya saludaste hace un momento 🙂"
+            : data?.minConnected
+              ? "Aún hay pocos colegas conectados; inténtalo en un rato 🙂"
+              : "No se pudo enviar el saludo",
+          action: null,
+        },
         CONFIRM_MS,
       );
     }
@@ -574,9 +585,8 @@ export function HerdOverlay({
       items.length === 1
         ? `👋 ${names[0]} te saluda desde ${group.label}`
         : `👋 ${joinNames(names)} de ${group.label} te saludan`;
-    const action = privateArgs.current.canGreet
-      ? { label: "🙌 Devolver saludo", onClick: () => void replyGreetings(group) }
-      : null;
+    // Cualquiera del grupo puede devolver, tenga o no el botón para iniciar
+    const action = { label: "🙌 Devolver saludo", onClick: () => void replyGreetings(group) };
     if (stillShowing && cur.bannerId !== null) {
       edit("greeting", cur.bannerId, { text, action }, gc.durationSec * 1000);
       incoming.current = { bannerId: cur.bannerId, groupKey: group.key, items };
