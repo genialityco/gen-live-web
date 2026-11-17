@@ -49,6 +49,23 @@ export interface WaCampaignStats {
   totalClicks: number;
 }
 
+/**
+ * A quién se envía la campaña:
+ * - org_attendees: todos los asistentes de la organización con teléfono
+ * - event_registered: inscritos a este evento
+ * - event_no_show: inscritos que no vieron el evento (ni en vivo ni la grabación)
+ */
+export type WaAudience = 'org_attendees' | 'event_registered' | 'event_no_show';
+
+/** Envío automático al pasar el evento a diferido (grabación disponible) */
+export interface WaAutoSend {
+  trigger: 'on_replay';
+  delayMinutes: number;
+  dueAt: string | null;
+  firedAt: string | null;
+  lastError: string | null;
+}
+
 export interface WaCampaign {
   _id: string;
   orgId: string;
@@ -56,6 +73,9 @@ export interface WaCampaign {
   name: string;
   templateId: string;
   utmParams: WaUtmParam[] | null;
+  /** Ausente en campañas anteriores: equivale a org_attendees */
+  audience?: WaAudience;
+  autoSend?: WaAutoSend | null;
   status: WaCampaignStatus;
   stats: WaCampaignStats;
   startedAt: string | null;
@@ -113,6 +133,17 @@ export interface WaGeoCountryStat {
 export interface WaGeoAnalytics {
   byCountry: WaGeoCountryStat[];
   unknown: { clicks: number; uniqueClickers: number };
+}
+
+export const WA_AUDIENCE_LABELS: Record<WaAudience, string> = {
+  org_attendees: 'Todos los asistentes de la organización',
+  event_registered: 'Inscritos a este evento',
+  event_no_show: 'Inscritos que no vieron el evento',
+};
+
+/** Campaña automática que todavía no se ha disparado */
+export function isScheduledWaCampaign(c: WaCampaign): boolean {
+  return c.status === 'draft' && !!c.autoSend && !c.autoSend.firedAt;
 }
 
 // ─── Template API ─────────────────────────────────────────────────────────────
@@ -191,6 +222,8 @@ export async function createWaCampaign(data: {
   name: string;
   templateId: string;
   utmParams?: WaUtmParam[];
+  audience?: WaAudience;
+  autoSend?: { delayMinutes: number } | null;
 }): Promise<WaCampaign> {
   const res = await api.post('/wa-campaign', data);
   return res.data;

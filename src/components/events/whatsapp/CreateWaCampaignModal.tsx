@@ -1,13 +1,13 @@
 import { useState, useEffect } from "react";
 import {
   Modal, Stack, TextInput, Select, Button, Group, Text,
-  ActionIcon, Divider, Alert, Autocomplete,
+  ActionIcon, Divider, Alert, Autocomplete, Switch, NumberInput,
 } from "@mantine/core";
-import { IconPlus, IconTrash, IconAlertTriangle } from "@tabler/icons-react";
+import { IconPlus, IconTrash, IconAlertTriangle, IconClockPlay } from "@tabler/icons-react";
 import { notifications } from "@mantine/notifications";
 import {
-  createWaCampaign, listApprovedWaTemplates,
-  type WaTemplate, type WaCampaign, type WaUtmParam,
+  createWaCampaign, listApprovedWaTemplates, WA_AUDIENCE_LABELS,
+  type WaTemplate, type WaCampaign, type WaUtmParam, type WaAudience,
 } from "../../../api/wa-campaign";
 import type { AvailableVariable } from "../../../api/event-email";
 
@@ -190,6 +190,9 @@ export default function CreateWaCampaignModal({ opened, onClose, orgId, eventId,
   const [templateId, setTemplateId] = useState<string | null>(null);
   const [templates, setTemplates] = useState<WaTemplate[]>([]);
   const [utmRows, setUtmRows] = useState<UtmRow[]>(() => DEFAULT_UTM_ROWS.map((r) => ({ ...r })));
+  const [audience, setAudience] = useState<WaAudience>("org_attendees");
+  const [autoSend, setAutoSend] = useState(false);
+  const [delayMinutes, setDelayMinutes] = useState<number>(30);
   const [loading, setLoading] = useState(false);
   const [loadingTemplates, setLoadingTemplates] = useState(false);
 
@@ -222,6 +225,8 @@ export default function CreateWaCampaignModal({ opened, onClose, orgId, eventId,
         name: name.trim(),
         templateId,
         utmParams: buildUtmParams(utmRows),
+        audience,
+        autoSend: autoSend ? { delayMinutes } : null,
       });
       notifications.show({ title: "Campaña creada", message: campaign.name, color: "green" });
       onCreated(campaign);
@@ -241,7 +246,16 @@ export default function CreateWaCampaignModal({ opened, onClose, orgId, eventId,
     setName("");
     setTemplateId(null);
     setUtmRows(DEFAULT_UTM_ROWS.map((r) => ({ ...r })));
+    setAudience("org_attendees");
+    setAutoSend(false);
+    setDelayMinutes(30);
     onClose();
+  };
+
+  // Al activar el envío automático se sugiere la audiencia de "no asistieron"
+  const handleAutoSendChange = (checked: boolean) => {
+    setAutoSend(checked);
+    if (checked && audience === "org_attendees") setAudience("event_no_show");
   };
 
   const templateOptions = templates.map((t) => ({
@@ -276,6 +290,50 @@ export default function CreateWaCampaignModal({ opened, onClose, orgId, eventId,
           />
         )}
 
+        <Select
+          label="Destinatarios"
+          data={(Object.keys(WA_AUDIENCE_LABELS) as WaAudience[]).map((value) => ({
+            value,
+            label: WA_AUDIENCE_LABELS[value],
+          }))}
+          value={audience}
+          onChange={(v) => v && setAudience(v as WaAudience)}
+          description={
+            audience === "event_no_show"
+              ? "Se calcula al momento de enviar: inscritos sin sesión en el vivo ni en la grabación. Excluye a quien se dio de baja."
+              : undefined
+          }
+          allowDeselect={false}
+        />
+
+        <Stack gap="xs">
+          <Switch
+            label="Enviar automáticamente cuando el evento pase a diferido (grabación)"
+            checked={autoSend}
+            onChange={(e) => handleAutoSendChange(e.currentTarget.checked)}
+          />
+          {autoSend && (
+            <>
+              <NumberInput
+                label="Minutos de espera después de pasar a diferido"
+                description="Da tiempo a que la grabación quede lista antes de invitar a verla."
+                min={0}
+                max={10080}
+                step={5}
+                allowDecimal={false}
+                value={delayMinutes}
+                onChange={(v) => setDelayMinutes(typeof v === "number" ? v : 0)}
+                leftSection={<IconClockPlay size={16} />}
+              />
+              <Alert color="blue" variant="light">
+                La campaña queda programada. Se envía sola cuando el evento esté en estado
+                «diferido» y pasen los minutos indicados. Si el evento ya está en diferido,
+                se envía al cumplirse la espera. Puedes cancelarla antes desde el detalle.
+              </Alert>
+            </>
+          )}
+        </Stack>
+
         <Divider label="Parámetros UTM (opcional)" labelPosition="left" />
 
         <Text size="xs" c="dimmed">
@@ -309,7 +367,7 @@ export default function CreateWaCampaignModal({ opened, onClose, orgId, eventId,
         <Group justify="flex-end" mt="sm">
           <Button variant="default" onClick={handleClose} disabled={loading}>Cancelar</Button>
           <Button onClick={handleSubmit} loading={loading} disabled={!templateId}>
-            Crear campaña
+            {autoSend ? "Programar campaña" : "Crear campaña"}
           </Button>
         </Group>
       </Stack>

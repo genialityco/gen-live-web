@@ -4,12 +4,13 @@ import {
   Progress, Table, Select, Loader, Center, Pagination, ActionIcon,
   Divider, Tooltip,
 } from "@mantine/core";
-import { IconArrowLeft, IconPlayerPlay, IconX } from "@tabler/icons-react";
+import { IconArrowLeft, IconPlayerPlay, IconX, IconClockPlay } from "@tabler/icons-react";
 import { notifications } from "@mantine/notifications";
 import {
   getWaCampaign, sendWaCampaign, cancelWaCampaign, listWaDeliveries,
   previewWaRecipients, getWaCampaignAnalytics,
   getWaCountryReport, getWaGeoAnalytics, backfillWaGeo,
+  isScheduledWaCampaign, WA_AUDIENCE_LABELS,
   type WaCampaign, type WaDelivery, type WaCampaignStatus, type WaDeliveryStatus,
   type WaUtmParam, type WaCampaignAnalytics,
   type WaCountryReport, type WaGeoAnalytics,
@@ -81,6 +82,43 @@ const STATUS_FILTER_OPTIONS = [
 ];
 
 const LIMIT = 50;
+
+const fmtDateTime = (iso: string) =>
+  new Date(iso).toLocaleString("es", { dateStyle: "medium", timeStyle: "short" });
+
+/** Estado del envío automático (al pasar el evento a diferido) */
+function AutoSendCard({ campaign }: { campaign: WaCampaign }) {
+  const a = campaign.autoSend;
+  if (!a) return null;
+  const wait = a.delayMinutes > 0 ? `${a.delayMinutes} min después de` : "apenas";
+  let text: string;
+  let color = "violet";
+  if (a.lastError) {
+    text = `No se pudo enviar automáticamente: ${a.lastError}`;
+    color = "red";
+  } else if (a.firedAt) {
+    text = `Se envió automáticamente el ${fmtDateTime(a.firedAt)}.`;
+    color = "green";
+  } else if (campaign.status === "cancelled") {
+    text = "El envío automático se canceló antes de dispararse.";
+    color = "orange";
+  } else if (campaign.status !== "draft") {
+    text = "Se envió manualmente antes del envío automático.";
+    color = "gray";
+  } else if (a.dueAt) {
+    text = `El evento está en diferido: se enviará el ${fmtDateTime(a.dueAt)}.`;
+  } else {
+    text = `Se enviará ${wait} que el evento pase a diferido (grabación).`;
+  }
+  return (
+    <Card withBorder radius="md" p="sm">
+      <Group gap="xs" wrap="nowrap" align="flex-start">
+        <IconClockPlay size={18} color={`var(--mantine-color-${color}-6)`} style={{ flexShrink: 0, marginTop: 2 }} />
+        <Text size="sm">{text}</Text>
+      </Group>
+    </Card>
+  );
+}
 
 export default function WaCampaignDetail({ campaignId, onBack }: Props) {
   const [campaign, setCampaign] = useState<WaCampaign | null>(null);
@@ -276,23 +314,29 @@ export default function WaCampaignDetail({ campaignId, onBack }: Props) {
             <IconArrowLeft size={18} />
           </ActionIcon>
           <Title order={4}>{campaign.name}</Title>
-          <Badge color={STATUS_COLORS[campaign.status]} variant={campaign.status === "sending" ? "dot" : "light"}>
-            {STATUS_LABELS[campaign.status]}
-          </Badge>
+          {isScheduledWaCampaign(campaign) ? (
+            <Badge color="violet" variant="light">Programada</Badge>
+          ) : (
+            <Badge color={STATUS_COLORS[campaign.status]} variant={campaign.status === "sending" ? "dot" : "light"}>
+              {STATUS_LABELS[campaign.status]}
+            </Badge>
+          )}
         </Group>
         <Group gap="xs">
           {campaign.status === "draft" && (
             <Button size="sm" leftSection={<IconPlayerPlay size={14} />} onClick={handleSend} loading={actionLoading}>
-              Iniciar envío
+              {isScheduledWaCampaign(campaign) ? "Enviar ahora" : "Iniciar envío"}
             </Button>
           )}
-          {campaign.status === "sending" && (
+          {(campaign.status === "sending" || isScheduledWaCampaign(campaign)) && (
             <Button size="sm" color="orange" variant="light" leftSection={<IconX size={14} />} onClick={handleCancel} loading={actionLoading}>
-              Cancelar
+              {campaign.status === "sending" ? "Cancelar" : "Cancelar envío automático"}
             </Button>
           )}
         </Group>
       </Group>
+
+      <AutoSendCard campaign={campaign} />
 
       {/* Progress */}
       {stats.total > 0 && (
@@ -527,12 +571,15 @@ export default function WaCampaignDetail({ campaignId, onBack }: Props) {
               ? <Loader size={14} />
               : <Badge size="sm" variant="light" color="blue">{previewTotal.toLocaleString()} personas</Badge>
             }
-            <Text size="xs" c="dimmed">— asistentes con teléfono válido en esta organización</Text>
+            <Text size="xs" c="dimmed">
+              — {WA_AUDIENCE_LABELS[campaign.audience ?? "org_attendees"].toLowerCase()}, con teléfono válido
+              {campaign.audience === "event_no_show" && " (cifra de hoy: se recalcula al enviar)"}
+            </Text>
           </Group>
 
           {!previewLoading && previewTotal === 0 && (
             <Text size="sm" c="orange" py="sm">
-              No hay asistentes con teléfono registrado en esta organización.
+              No hay destinatarios con teléfono registrado para esta audiencia.
             </Text>
           )}
 

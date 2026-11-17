@@ -5,7 +5,10 @@ import {
 } from "@mantine/core";
 import { IconPlus, IconChevronRight, IconTrash } from "@tabler/icons-react";
 import { notifications } from "@mantine/notifications";
-import { listWaCampaigns, deleteWaCampaign, type WaCampaign, type WaCampaignStatus } from "../../../api/wa-campaign";
+import {
+  listWaCampaigns, deleteWaCampaign, isScheduledWaCampaign,
+  type WaCampaign, type WaCampaignStatus,
+} from "../../../api/wa-campaign";
 import { fetchEmailVariables, type AvailableVariable } from "../../../api/event-email";
 import CreateWaCampaignModal from "./CreateWaCampaignModal";
 
@@ -118,13 +121,17 @@ export default function WaCampaignList({ orgId, eventId, onSelect }: Props) {
                     <Text size="sm" fw={500}>{c.name}</Text>
                   </Table.Td>
                   <Table.Td>
-                    <Badge
-                      color={STATUS_COLORS[c.status]}
-                      variant={c.status === "sending" ? "dot" : "light"}
-                      size="sm"
-                    >
-                      {STATUS_LABELS[c.status]}
-                    </Badge>
+                    {isScheduledWaCampaign(c) ? (
+                      <Badge color="violet" variant="light" size="sm">Programada</Badge>
+                    ) : (
+                      <Badge
+                        color={STATUS_COLORS[c.status]}
+                        variant={c.status === "sending" ? "dot" : "light"}
+                        size="sm"
+                      >
+                        {STATUS_LABELS[c.status]}
+                      </Badge>
+                    )}
                   </Table.Td>
                   <Table.Td>
                     <Text size="sm">{c.stats.sent.toLocaleString()} / {c.stats.total.toLocaleString()}</Text>
