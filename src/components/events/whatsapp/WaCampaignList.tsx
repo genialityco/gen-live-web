@@ -1,13 +1,14 @@
 import { useState, useEffect, useCallback } from "react";
+import { Link, useParams } from "react-router-dom";
 import {
   Stack, Group, Button, Text, Badge, Table,
   Loader, Center, Alert, ActionIcon, Modal,
 } from "@mantine/core";
-import { IconPlus, IconChevronRight, IconTrash } from "@tabler/icons-react";
+import { IconPlus, IconChevronRight, IconTrash, IconRobot } from "@tabler/icons-react";
 import { notifications } from "@mantine/notifications";
 import {
-  listWaCampaigns, deleteWaCampaign, isScheduledWaCampaign,
-  type WaCampaign, type WaCampaignStatus,
+  listWaCampaigns, deleteWaCampaign, isScheduledWaCampaign, listWaAutoRules,
+  type WaCampaign, type WaCampaignStatus, type WaAutoRule,
 } from "../../../api/wa-campaign";
 import { fetchEmailVariables, type AvailableVariable } from "../../../api/event-email";
 import CreateWaCampaignModal from "./CreateWaCampaignModal";
@@ -41,6 +42,8 @@ export default function WaCampaignList({ orgId, eventId, onSelect }: Props) {
   const [deleteTarget, setDeleteTarget] = useState<WaCampaign | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [formFields, setFormFields] = useState<AvailableVariable[]>([]);
+  const [autoRules, setAutoRules] = useState<WaAutoRule[]>([]);
+  const { slug } = useParams<{ slug: string }>();
 
   const handleDeleteClick = (campaign: WaCampaign, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -68,11 +71,13 @@ export default function WaCampaignList({ orgId, eventId, onSelect }: Props) {
 
   const load = useCallback(async () => {
     try {
-      const [data, vars] = await Promise.all([
+      const [data, vars, rules] = await Promise.all([
         listWaCampaigns(orgId, eventId),
         fetchEmailVariables(orgId, eventId).catch(() => []),
+        listWaAutoRules(orgId).catch(() => []),
       ]);
       setCampaigns(data);
+      setAutoRules(rules.filter((r) => r.enabled));
       setFormFields(vars.filter((v) => v.section === "Formulario"));
     } catch {
       notifications.show({ title: "Error", message: "No se pudieron cargar las campañas", color: "red" });
@@ -96,6 +101,20 @@ export default function WaCampaignList({ orgId, eventId, onSelect }: Props) {
             Nueva campaña
           </Button>
         </Group>
+
+        {autoRules.length > 0 && (
+          <Alert color="grape" variant="light" icon={<IconRobot size={18} />}>
+            <Text size="sm">
+              La organización tiene {autoRules.length === 1 ? "una campaña automática activa" : `${autoRules.length} campañas automáticas activas`}:{" "}
+              {autoRules.map((r) => `«${r.name}»`).join(", ")}. Se programa sola en los eventos que
+              empiezan desde {new Date(Math.min(...autoRules.map((r) => new Date(r.appliesFrom).getTime()))).toLocaleDateString("es-CO")}
+              {" "}y aparece abajo con la etiqueta «Automática»; si no quieres enviarla en este evento, cancélala desde su detalle.{" "}
+              <Text component={Link} to={`/org/${slug}/admin/wa-automations`} size="sm" c="grape" fw={600}>
+                Administrar campañas automáticas →
+              </Text>
+            </Text>
+          </Alert>
+        )}
 
         {campaigns.length === 0 ? (
           <Alert color="gray" title="Sin campañas de WhatsApp">
