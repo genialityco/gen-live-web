@@ -76,6 +76,8 @@ export interface WaCampaign {
   /** Ausente en campañas anteriores: equivale a org_attendees */
   audience?: WaAudience;
   autoSend?: WaAutoSend | null;
+  /** Regla de la organización que la creó (null o ausente si se creó a mano) */
+  autoRuleId?: string | null;
   status: WaCampaignStatus;
   stats: WaCampaignStats;
   startedAt: string | null;
@@ -145,6 +147,27 @@ export const WA_AUDIENCE_LABELS: Record<WaAudience, string> = {
 export function isScheduledWaCampaign(c: WaCampaign): boolean {
   return c.status === 'draft' && !!c.autoSend && !c.autoSend.firedAt;
 }
+
+/**
+ * Regla de campaña automática de la organización: crea la campaña programada
+ * en cada evento que empiece desde `appliesFrom`.
+ */
+export interface WaAutoRule {
+  _id: string;
+  orgId: string;
+  name: string;
+  templateId: string;
+  audience: WaAudience;
+  delayMinutes: number;
+  utmParams: WaUtmParam[] | null;
+  appliesFrom: string;
+  enabled: boolean;
+  createdAt: string;
+}
+
+export type WaAutoRuleInput = Partial<
+  Pick<WaAutoRule, 'name' | 'templateId' | 'audience' | 'delayMinutes' | 'utmParams' | 'appliesFrom' | 'enabled'>
+>;
 
 // ─── Template API ─────────────────────────────────────────────────────────────
 
@@ -278,4 +301,25 @@ export async function backfillWaGeo(
 ): Promise<{ updated: number; pending: number }> {
   const res = await api.post(`/wa-campaign/${campaignId}/backfill-geo`);
   return res.data;
+}
+
+// ─── Reglas automáticas (por organización) ────────────────────────────────────
+
+export async function listWaAutoRules(orgId: string): Promise<WaAutoRule[]> {
+  const res = await api.get('/wa-campaign/auto-rules', { params: { orgId } });
+  return res.data;
+}
+
+export async function createWaAutoRule(orgId: string, data: WaAutoRuleInput): Promise<WaAutoRule> {
+  const res = await api.post('/wa-campaign/auto-rules', { orgId, ...data });
+  return res.data;
+}
+
+export async function updateWaAutoRule(id: string, data: WaAutoRuleInput): Promise<WaAutoRule> {
+  const res = await api.patch(`/wa-campaign/auto-rules/${id}`, data);
+  return res.data;
+}
+
+export async function deleteWaAutoRule(id: string): Promise<void> {
+  await api.delete(`/wa-campaign/auto-rules/${id}`);
 }

@@ -118,7 +118,12 @@ export default function WaCampaignList({ orgId, eventId, onSelect }: Props) {
               {campaigns.map((c) => (
                 <Table.Tr key={c._id} style={{ cursor: "pointer" }} onClick={() => onSelect(c._id)}>
                   <Table.Td>
-                    <Text size="sm" fw={500}>{c.name}</Text>
+                    <Group gap={6} wrap="nowrap">
+                      <Text size="sm" fw={500}>{c.name}</Text>
+                      {c.autoRuleId && (
+                        <Badge color="grape" variant="outline" size="xs">Automática</Badge>
+                      )}
+                    </Group>
                   </Table.Td>
                   <Table.Td>
                     {isScheduledWaCampaign(c) ? (
