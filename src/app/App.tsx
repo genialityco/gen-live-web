@@ -17,7 +17,7 @@ import { ref as r, onValue } from "firebase/database";
 
 // URL de emergencia a donde quieres mandar a TODOS
 const EMERGENCY_URL =
-  "https://gen-live-web.netlify.app/org/reddeexpertosdmace.com/event/respondiendo-desafio-diabete-2025";
+  "https://genlive.geniality.com.co/org/reddeexpertosdmace.com/event/respondiendo-desafio-diabete-2025";
 
 const CACHE_VERSION = "may2025";
 
