@@ -46,6 +46,7 @@ import {
 } from "../../api/livekit-service";
 import { providerInfo } from "../../pages/studio/streamProviders";
 import EventStreamForm from "./EventStreamForm";
+import { BunnyReplaySection } from "./BunnyReplaySection";
 import { StreamPlayer } from "./StreamPlayer";
 import { resolveStreams } from "./streamUtils";
 import { useEventEmergency } from "../../hooks/useEventEmergency";
@@ -763,7 +764,8 @@ export default function EventAdminControl({
                         <Title order={3}>Fuentes de video</Title>
                         <Text size="xs" c="dimmed">
                           Lo que se ve en repetición, en orden: ★ es la
-                          principal y, si falla, pasa a la siguiente.
+                          principal y, si falla, pasa a la siguiente. Si hay
+                          una fuente de Bunny, siempre es la principal.
                         </Text>
                       </div>
                       <Button
@@ -842,6 +844,13 @@ export default function EventAdminControl({
                         </Button>
                       )}
                     </Group>
+
+                    {/* Vimeo: copiar la grabación a Bunny (opcional, apagado por defecto) */}
+                    <BunnyReplaySection
+                      event={event}
+                      liveProvider={liveProvider}
+                      onEventUpdate={onEventUpdate}
+                    />
 
                     {/* Lista de grabaciones (solo Mux y Cloudflare las exponen) */}
                     {hasRecordings && (

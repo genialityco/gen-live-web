@@ -63,6 +63,7 @@ export type EventItem = {
   streams?: EventStream[];
   branding?: EventBrandingConfig; // Campo de branding del evento
   certificatesConfig?: EventCertificatesConfig; // Toggle de certificados de asistencia
+  bunnyReplayConfig?: { enabled: boolean }; // Copia de la grabación de Vimeo a Bunny (apagada por defecto)
   herdConfig?: EventHerdConfig; // Anuncios de manada sobre el video del asistente
   milestonesConfig?: EventMilestonesConfig; // Logros del asistente (felicitaciones al cumplir hitos)
   hidden?: boolean;
@@ -144,6 +145,65 @@ export async function updateEventCertificatesConfig(
     enabled,
   });
   return data;
+}
+
+/**
+ * Copia de la grabación del vivo (Vimeo) a Bunny: al terminar el evento, la
+ * plataforma sube la grabación a Bunny y la deja como fuente por defecto de
+ * la repetición (Vimeo queda de respaldo). Opcional por evento.
+ */
+export type VodMirrorJobStatus =
+  | "waiting_source"
+  | "importing"
+  | "encoding"
+  | "ready"
+  | "failed";
+
+export interface VodMirrorJob {
+  id: string;
+  sourceProvider: string;
+  sourceUrl: string;
+  sourceVideoId: string | null;
+  status: VodMirrorJobStatus;
+  detail: string | null;
+  lastError: string | null;
+  bunnyVideoId: string | null;
+  bunnyUrl: string | null;
+  applied: boolean;
+  readyAt: string | null;
+  updatedAt: string | null;
+}
+
+export interface VodMirrorStatus {
+  /** Activada en la configuración del evento */
+  enabled: boolean;
+  /** El servidor tiene credenciales de Vimeo y Bunny */
+  configured: boolean;
+  /** Fuentes actuales del evento (cambian cuando la copia queda lista) */
+  stream: EventItem["stream"] | null;
+  streams: EventStream[];
+  /** Más reciente primero */
+  jobs: VodMirrorJob[];
+}
+
+export async function updateEventBunnyReplayConfig(
+  eventId: string,
+  enabled: boolean
+) {
+  const { data } = await api.patch(`/events/${eventId}/bunny-replay-config`, {
+    enabled,
+  });
+  return data as EventItem;
+}
+
+export async function getEventVodMirror(eventId: string) {
+  const { data } = await api.get(`/events/${eventId}/vod-mirror`);
+  return data as VodMirrorStatus;
+}
+
+export async function retryEventVodMirror(eventId: string) {
+  const { data } = await api.post(`/events/${eventId}/vod-mirror/retry`);
+  return data as VodMirrorStatus;
 }
 
 export interface CertificatesBackfillResult {

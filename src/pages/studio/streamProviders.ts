@@ -55,7 +55,7 @@ export const STREAM_PROVIDERS: ProviderInfo[] = [
       "Pega https://vimeo.com/ID o https://player.vimeo.com/video/ID (se normaliza al guardar).",
     replayMode: "auto",
     replay:
-      "Vimeo guarda la grabación en el mismo video (si el evento tiene activado guardar la grabación). Solo cambia el estado del evento a Repetición.",
+      "Vimeo guarda la grabación en el mismo video (si el evento tiene activado guardar la grabación). Solo cambia el estado del evento a Repetición. Opcional: con «Usar Bunny para la repetición» activado, al terminar la grabación se copia a Bunny y pasa a ser la fuente principal.",
   },
   {
     id: "cloudflare",
