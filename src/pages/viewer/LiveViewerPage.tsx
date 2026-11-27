@@ -18,6 +18,8 @@ import {
 import { getPlayback } from "../../api/livekit-service";
 import { ViewerHlsPlayer } from "./ViewerHlsPlayer";
 import { VimeoPlayer } from "./VimeoPlayer";
+import { YouTubePlayer } from "./YouTubePlayer";
+import { isYouTubeUrl } from "../../utils/youtube";
 import { requestToJoin, subscribeJoinDecision } from "../../api/live-join-service";
 import { ControlBar, LiveKitRoom, RoomAudioRenderer } from "@livekit/components-react";
 import { LIVEKIT_WS_URL } from "../../core/livekitConfig";
@@ -176,6 +178,13 @@ export const LiveViewerPage: React.FC = () => {
                 src={playbackUrl}
                 onPlayingChange={(p) => reportPlayback(p, "live")}
               />
+            ) : isYouTubeUrl(playbackUrl) ? (
+              <div style={{ width: "100%", aspectRatio: "16/9" }}>
+                <YouTubePlayer
+                  src={playbackUrl}
+                  onPlayingChange={(p) => reportPlayback(p, "live")}
+                />
+              </div>
             ) : (
               <iframe
                 src={playbackUrl}

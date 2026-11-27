@@ -172,6 +172,14 @@ export const routes = [
         ),
       },
       {
+        path: "/org/:slug/admin/wa-automations",
+        element: (
+          <Layout>
+            <OrganizationAdmin />
+          </Layout>
+        ),
+      },
+      {
         path: "/org/:slug/admin/suppressed-emails",
         element: (
           <Layout>

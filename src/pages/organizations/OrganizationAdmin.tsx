@@ -11,6 +11,7 @@ import SuppressedEmailsView from "./SuppressedEmailsView";
 import AdminEngagementView from "./AdminEngagementView";
 import BrandingSettings from "../../components/organizations/BrandingSettings";
 import RegistrationFormBuilder from "../../components/organizations/RegistrationFormBuilder";
+import WaAutoRulesPanel from "../../components/events/whatsapp/WaAutoRulesPanel";
 
 export default function OrganizationAdmin() {
   const { slug } = useParams<{ slug: string }>();
@@ -72,6 +73,16 @@ export default function OrganizationAdmin() {
       return <BrandingSettings org={org} onUpdate={loadOrganizationData} />;
     } else if (path.endsWith("/suppressed-emails")) {
       return <SuppressedEmailsView orgId={org._id} />;
+    } else if (path.endsWith("/wa-automations")) {
+      return (
+        <WaAutoRulesPanel
+          orgId={org._id}
+          orgName={org.name}
+          formFields={(org.registrationForm?.fields ?? [])
+            .filter((f) => !f.hidden)
+            .map((f) => ({ key: `form.${f.id}`, label: f.label, section: "Formulario" }))}
+        />
+      );
     } else if (path.endsWith("/engagement")) {
       return <AdminEngagementView orgId={org._id} orgName={org.name} />;
     } else {

@@ -66,6 +66,12 @@ export default function AdminLayout({ children, org }: AdminLayoutProps) {
       description: "Personalizar formulario de inscripción",
     },
     {
+      label: "Campañas automáticas",
+      icon: "🤖",
+      href: `/org/${slug}/admin/wa-automations`,
+      description: "WhatsApp que se programa solo en cada evento",
+    },
+    {
       label: "Configuración",
       icon: "⚙️",
       href: `/org/${slug}/admin/settings`,

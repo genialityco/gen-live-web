@@ -76,6 +76,8 @@ import {
 import { ViewerHlsPlayer } from "../viewer/ViewerHlsPlayer";
 import { VodHlsPlayer } from "../viewer/VodHlsPlayer";
 import { VimeoPlayer } from "../viewer/VimeoPlayer";
+import { YouTubePlayer } from "../viewer/YouTubePlayer";
+import { isYouTubeUrl } from "../../utils/youtube";
 import { resolveStreams } from "../../components/events/streamUtils";
 import { AttendAnnouncementOverlay } from "../../components/studio/AnnouncementBanner";
 import { HerdOverlay } from "../../components/events/HerdOverlay";
@@ -1005,7 +1007,8 @@ export default function EventAttendGcore() {
 
   // Render unificado del reproductor según el tipo de fuente, reportando
   // reproducción real (playing) para las métricas. HLS .m3u8 → <video> nativo;
-  // Vimeo → SDK; otros embeds → iframe crudo (sin medición posible).
+  // Vimeo → SDK; YouTube → IFrame API; otros embeds → iframe crudo (sin
+  // medición posible).
   const isVimeoUrl = (url: string) => /vimeo\.com/i.test(url);
   // Cada reproductor va dentro de VideoNetworkGuard: si la red del asistente
   // bloquea el servidor del video (firewall, inspección SSL…), lo avisa.
@@ -1034,6 +1037,11 @@ export default function EventAttendGcore() {
     if (isVimeoUrl(url)) {
       return (
         <VimeoPlayer src={url} onPlayingChange={onPlayingChange} onError={onError} />
+      );
+    }
+    if (isYouTubeUrl(url)) {
+      return (
+        <YouTubePlayer src={url} onPlayingChange={onPlayingChange} onError={onError} />
       );
     }
     // Embed desconocido (cross-origin): no se puede medir reproducción.

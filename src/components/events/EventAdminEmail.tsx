@@ -9,7 +9,6 @@ import CampaignDetail from "./email/CampaignDetail";
 import WaTemplateManager from "./whatsapp/WaTemplateManager";
 import WaCampaignList from "./whatsapp/WaCampaignList";
 import WaCampaignDetail from "./whatsapp/WaCampaignDetail";
-import WaAutoRulesPanel from "./whatsapp/WaAutoRulesPanel";
 
 interface EventAdminEmailProps {
   org: Org;
@@ -112,7 +111,6 @@ export default function EventAdminEmail({ org, event }: EventAdminEmailProps) {
         <Tabs defaultValue="campaigns">
           <Tabs.List>
             <Tabs.Tab value="campaigns">Campañas</Tabs.Tab>
-            <Tabs.Tab value="auto">Automáticas</Tabs.Tab>
             <Tabs.Tab value="templates">Templates</Tabs.Tab>
           </Tabs.List>
 
@@ -129,10 +127,6 @@ export default function EventAdminEmail({ org, event }: EventAdminEmailProps) {
                 onSelect={setSelectedWaCampaignId}
               />
             )}
-          </Tabs.Panel>
-
-          <Tabs.Panel value="auto" pt="md">
-            <WaAutoRulesPanel orgId={org._id} orgName={org.name} eventId={event._id} />
           </Tabs.Panel>
 
           <Tabs.Panel value="templates" pt="md">

@@ -12,7 +12,7 @@ import {
   listApprovedWaTemplates, WA_AUDIENCE_LABELS,
   type WaAutoRule, type WaAudience, type WaTemplate,
 } from "../../../api/wa-campaign";
-import { fetchEmailVariables, type AvailableVariable } from "../../../api/event-email";
+import type { AvailableVariable } from "../../../api/event-email";
 import {
   buildUtmParams, defaultUtmRowsFor, makeRow, rowsFromUtmParams, type UtmRow,
 } from "./waUtm";
@@ -21,8 +21,8 @@ import UtmRowEditor from "./WaUtmRowEditor";
 interface Props {
   orgId: string;
   orgName: string;
-  /** Evento desde el que se abre (solo para cargar los campos del formulario) */
-  eventId: string;
+  /** Campos del formulario de registro de la organización (para los UTM) */
+  formFields: AvailableVariable[];
 }
 
 const todayIso = () => {
@@ -49,30 +49,27 @@ const formatDelay = (min: number) =>
  * programada en todos los eventos de la organización, y esa campaña se envía
  * cuando el evento pasa a diferido.
  */
-export default function WaAutoRulesPanel({ orgId, orgName, eventId }: Props) {
+export default function WaAutoRulesPanel({ orgId, orgName, formFields }: Props) {
   const [rules, setRules] = useState<WaAutoRule[]>([]);
   const [templates, setTemplates] = useState<WaTemplate[]>([]);
-  const [formFields, setFormFields] = useState<AvailableVariable[]>([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<WaAutoRule | "new" | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [r, t, vars] = await Promise.all([
+      const [r, t] = await Promise.all([
         listWaAutoRules(orgId),
         listApprovedWaTemplates().catch(() => []),
-        fetchEmailVariables(orgId, eventId).catch(() => []),
       ]);
       setRules(r);
       setTemplates(t);
-      setFormFields(vars.filter((v) => v.key.startsWith("form.")));
     } catch {
       notifications.show({ title: "Error", message: "No se pudieron cargar las reglas", color: "red" });
     } finally {
       setLoading(false);
     }
-  }, [orgId, eventId]);
+  }, [orgId]);
 
   useEffect(() => {
     void load();
@@ -116,8 +113,9 @@ export default function WaAutoRulesPanel({ orgId, orgName, eventId }: Props) {
           </Group>
           <Text size="sm" c="dimmed">
             Cada regla crea sola la campaña en todos los eventos de la organización que empiecen
-            desde la fecha indicada. La campaña aparece como «Programada» en cada evento y se envía
-            cuando el evento pasa a diferido. Se puede cancelar en un evento puntual desde su detalle.
+            desde la fecha indicada. La campaña aparece como «Programada» en la sección Comunicaciones → WhatsApp de cada
+            evento y se envía cuando el evento pasa a diferido. Si en un evento no se quiere enviar,
+            se cancela desde ahí.
           </Text>
         </Stack>
         <Button leftSection={<IconPlus size={16} />} onClick={() => setEditing("new")}>
